@@ -1,0 +1,85 @@
+{
+ "image": "eval/testset/synthetic_demo.jpg",
+ "dewarped_path": "mocks/page_mock_01_dewarped.jpg",
+ "width": 1700,
+ "height": 2200,
+ "source_snapshot_id": "snap_mock_20261024T055522_09afe6",
+ "quality": {
+  "ok": true,
+  "issues": [],
+  "blur_score": 210.5,
+  "glare_fraction": 0.01
+ },
+ "reviewed": true,
+ "note": "synthetic PIL page (T4), mirrors the demo page; replace with Henry's photos",
+ "lines": [
+  {
+   "id": "L0",
+   "order": 0,
+   "bbox": [
+    130.0,
+    150.0,
+    900.0,
+    90.0
+   ],
+   "status": "active",
+   "latex": "f(x)=x^{2}\\sin x",
+   "text": "Find f'(x) if f(x) = x^2 sin x",
+   "confidence_at_prelabel": 0.95,
+   "planted_error": false,
+   "planted_note": "",
+   "corrected_latex": ""
+  },
+  {
+   "id": "L1",
+   "order": 1,
+   "bbox": [
+    130.0,
+    320.0,
+    1100.0,
+    110.0
+   ],
+   "status": "active",
+   "latex": "f'(x)=2x\\cdot\\cos x",
+   "text": "f'(x) = 2x · cos x",
+   "confidence_at_prelabel": 0.91,
+   "planted_error": true,
+   "planted_note": "product rule: only differentiated the first factor",
+   "corrected_latex": "f'(x)=2x\\sin x+x^{2}\\cos x"
+  },
+  {
+   "id": "L2",
+   "order": 2,
+   "bbox": [
+    130.0,
+    460.0,
+    700.0,
+    100.0
+   ],
+   "status": "crossed_out",
+   "latex": "=2\\cos x",
+   "text": "= 2 cos x (crossed out)",
+   "confidence_at_prelabel": 0.62,
+   "planted_error": false,
+   "planted_note": "",
+   "corrected_latex": ""
+  },
+  {
+   "id": "L3",
+   "order": 3,
+   "bbox": [
+    130.0,
+    600.0,
+    1200.0,
+    110.0
+   ],
+   "status": "active",
+   "latex": "f'(0)=2\\cdot 0\\cdot\\cos 0=0",
+   "text": "f'(0) = 2·0·cos 0 = 0",
+   "confidence_at_prelabel": 0.84,
+   "planted_error": false,
+   "planted_note": "",
+   "corrected_latex": ""
+  }
+ ]
+}

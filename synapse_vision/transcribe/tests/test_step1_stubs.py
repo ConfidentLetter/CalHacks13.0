@@ -21,16 +21,18 @@ def test_signatures_match_contract():
 
 
 def test_build_page_twin_validates_against_schema():
-    twin = transcribe.build_page_twin("mocks/page_mock_01.jpg")
+    twin = transcribe.build_page_twin("mocks/page_mock_01.jpg")  # file absent: quality no_page, blank crops, no model calls
     schema = json.loads(SCHEMA_PATH.read_text())
     Draft202012Validator(schema).validate(twin)
     assert twin_errors(twin) == []
 
 
-def test_build_page_twin_fresh_stamps_and_verbatim_mistake():
+def test_mock_twin_backup_has_fresh_stamps_and_verbatim_mistake():
+    from transcribe.twin import mock_twin
+
     mock = load_mock_twin()
-    a = transcribe.build_page_twin("x.jpg")
-    b = transcribe.build_page_twin("x.jpg")
+    a = mock_twin("x.jpg")
+    b = mock_twin("x.jpg")
     assert a["snapshot_id"] != mock["snapshot_id"]
     assert a["snapshot_id"] != b["snapshot_id"]
     assert a["captured_at"] != mock["captured_at"]
@@ -39,16 +41,15 @@ def test_build_page_twin_fresh_stamps_and_verbatim_mistake():
     assert l1["latex"] == "f'(x)=2x\\cdot\\cos x"
 
 
-def test_transcribe_page_lines_have_no_temporal_fields_and_match_line_schema():
-    lines = transcribe.transcribe_page("mocks/page_mock_01_dewarped.jpg", {"regions": [], "lines": []})
-    assert lines, "stub must return mock-consistent lines"
-    schema = json.loads(SCHEMA_PATH.read_text())
-    line_schema = {**schema["properties"]["lines"]["items"], "$defs": schema["$defs"]}
-    line_schema["required"] = [k for k in line_schema["required"] if k not in ("first_seen", "last_changed")]
-    v = Draft202012Validator(line_schema)
-    for line in lines:
-        assert "first_seen" not in line and "last_changed" not in line
-        v.validate(line)
+def test_build_page_twin_on_missing_photo_never_raises():
+    twin = transcribe.build_page_twin("runtime/snapshots/does_not_exist.jpg")
+    assert twin_errors(twin) == []
+    assert twin["quality"]["ok"] is False
+    assert all(l["confidence"] <= 0.4 for l in twin["lines"])
+
+
+def test_transcribe_page_empty_layout_makes_no_lines_and_no_model_calls():
+    assert transcribe.transcribe_page("mocks/page_mock_01_dewarped.jpg", {"regions": [], "lines": []}) == []
 
 
 @pytest.mark.parametrize("latex", ["x^{2}", "f'(x)=2x\\cdot\\cos x", "\\frac{1}{2}"])

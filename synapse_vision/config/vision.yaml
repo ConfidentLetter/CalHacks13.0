@@ -27,7 +27,13 @@ transcribe:
   agreement_threshold: 0.92 # normalized-similarity between the two readings to count as agreement
   low_confidence: 0.6
   reread_on_disagreement: true
+  effort: medium            # low | medium | high  (T3)
+  thinking: adaptive        # adaptive | between_tools  (T3)
+  empty_ink_density: 0.004  # below this a crop is blank -> no model call  (T3)
+  page_pass_skip_below: 2   # incremental updates touching <= N lines skip the whole-page pass  (T3)
+  sdk_max_retries: 2
 
 budget_ms:
-  snapshot_to_twin_first: 8000
-  new_line_incremental: 3000
+  # H+2 (Henry): raised to what one Sonnet 5.5 round trip actually costs (4-9 s per call, measured by T3).
+  snapshot_to_twin_first: 15000
+  new_line_incremental: 8000

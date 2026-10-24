@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import warnings
 
-_EQ_SPLIT_RE = re.compile(r"=|\\le(?:q)?|\\ge(?:q)?|\\ne(?:q)?|<|>")
+_EQ_SPLIT_RE = re.compile(r"=|\\(?:le|ge|ne)q?(?![A-Za-z])|<|>")
 _PRIME_RE = re.compile(r"([A-Za-z])'+")
 
 
@@ -41,7 +41,7 @@ def parse_ok(latex: str) -> bool:
     """True if SymPy can parse it. Used for confidence only; a failed parse never triggers a 'fix'."""
     if not latex or not latex.strip():
         return False
-    sides = [p for p in _EQ_SPLIT_RE.split(latex) if p.strip()]
-    if not sides:
-        return False
+    sides = _EQ_SPLIT_RE.split(latex)
+    if not sides or any(not p.strip() for p in sides):
+        return False  # "x^{2}=" has an empty side: not parseable math
     return all(_parse_one(side) for side in sides)

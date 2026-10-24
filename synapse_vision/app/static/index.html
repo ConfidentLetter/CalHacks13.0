@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synapse Vision</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #111; --muted: #555; --line: #d0d0d0; --panel: #f4f5f7;
+    --green: #1a9a4a; --amber: #d98a00; --red: #d0342c; --blue: #1f5fbf; --new: #fff3b0;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 17px; }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 2px solid var(--fg); flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0 8px 0 0; letter-spacing: .02em; }
+  .chip { display: inline-block; padding: 3px 10px; border-radius: 999px; border: 1.5px solid var(--fg); font-size: 14px; font-weight: 600; background: #fff; }
+  .chip.warn { border-color: var(--amber); color: var(--amber); }
+  .chip.bad { border-color: var(--red); color: var(--red); }
+  .chip.ok { border-color: var(--green); color: var(--green); }
+  .chip.dim { border-color: var(--line); color: var(--muted); font-weight: 500; }
+  .spacer { flex: 1; }
+  button, label.btn { font: inherit; font-weight: 600; padding: 7px 14px; border: 2px solid var(--fg); background: #fff; border-radius: 6px; cursor: pointer; }
+  button:hover, label.btn:hover { background: var(--panel); }
+  button.on { background: var(--fg); color: #fff; }
+  button:disabled { opacity: .5; cursor: wait; }
+  #dot { width: 12px; height: 12px; border-radius: 50%; background: var(--red); display: inline-block; }
+  #dot.live { background: var(--green); }
+  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0; min-height: 0; }
+  #left { border-right: 2px solid var(--fg); overflow: auto; padding: 16px; background: #e9ebee; }
+  #page { position: relative; margin: 0 auto; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.25); width: 100%; max-width: 900px; }
+  #page img { display: block; width: 100%; height: auto; }
+  #page svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #page .placeholder { width: 100%; aspect-ratio: var(--aspect, 0.773); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 15px; }
+  svg rect.box { fill: transparent; stroke-width: 3; cursor: pointer; }
+  svg rect.box.c-green { stroke: var(--green); } svg rect.box.c-amber { stroke: var(--amber); } svg rect.box.c-red { stroke: var(--red); }
+  svg rect.box.crossed { fill: url(#hatch); }
+  svg rect.box.selected { stroke-width: 6; stroke: var(--blue); }
+  svg rect.box.new { animation: pulse 1.6s ease-out 1; }
+  svg rect.region { fill: none; stroke: #9aa; stroke-dasharray: 10 8; stroke-width: 2; }
+  svg text.num { font: 700 34px var(--font); fill: var(--fg); }
+  @keyframes pulse { 0% { fill: rgba(255,210,0,.55); } 100% { fill: transparent; } }
+  #right { display: flex; flex-direction: column; min-height: 0; }
+  #lines { flex: 1; overflow: auto; padding: 10px 14px; }
+  .line { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; padding: 10px 10px; border: 1.5px solid var(--line); border-radius: 8px; margin-bottom: 8px; cursor: pointer; background: #fff; }
+  .line:hover { border-color: var(--fg); }
+  .line.selected { border: 2.5px solid var(--blue); }
+  .line.new { animation: slidein .5s ease-out 1, glow 2.5s ease-out 1; }
+  @keyframes slidein { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes glow { 0%, 60% { background: var(--new); } 100% { background: #fff; } }
+  .line .num { font-weight: 700; font-size: 20px; text-align: center; color: var(--muted); }
+  .line .body { min-width: 0; overflow-x: auto; }
+  .line .tex { font-size: 24px; line-height: 1.3; }
+  .line .tex .katex { font-size: 1.05em; }
+  .line.crossed .tex { text-decoration: line-through; text-decoration-thickness: 3px; text-decoration-color: var(--red); opacity: .75; }
+  .line .raw { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); margin-top: 3px; white-space: pre-wrap; word-break: break-all; }
+  .raw u { text-decoration: underline wavy var(--red); text-decoration-skip-ink: none; color: var(--red); }
+  .line .meta { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+  .conf { font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 6px; color: #fff; font-size: 14px; }
+  .conf.c-green { background: var(--green); } .conf.c-amber { background: var(--amber); } .conf.c-red { background: var(--red); }
+  .status { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .status.crossed_out { color: var(--red); } .status.illegible { color: var(--amber); }
+  #detail { border-top: 2px solid var(--fg); background: var(--panel); padding: 12px 14px; max-height: 44%; overflow: auto; display: none; }
+  #detail.open { display: block; }
+  #detail h2 { margin: 0 0 8px; font-size: 16px; display: flex; justify-content: space-between; }
+  #detail h2 button { padding: 2px 10px; font-size: 13px; }
+  .crops { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .crops figure { margin: 0; background: #fff; border: 1.5px solid var(--line); border-radius: 6px; padding: 6px; }
+  .crops figcaption { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+  .crops img { max-width: 100%; display: block; }
+  .crops .none { color: var(--muted); font-size: 13px; padding: 10px 0; }
+  table.kv { border-collapse: collapse; width: 100%; font-size: 14px; }
+  table.kv td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.kv td:first-child { font-weight: 700; width: 130px; color: var(--muted); }
+  table.kv code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  #drawer { position: fixed; right: 0; bottom: 0; width: 460px; max-height: 60vh; overflow: auto; background: #fff; border: 2px solid var(--fg); border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; padding: 12px; display: none; z-index: 9; box-shadow: -4px -4px 16px rgba(0,0,0,.2); }
+  #drawer.open { display: block; }
+  #drawer h2 { font-size: 15px; margin: 0 0 8px; }
+  #drawer table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  #drawer th, #drawer td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  #drawer td.ms { text-align: right; font-weight: 700; }
+  #drawer tr.over td { color: var(--red); }
+  #drawer .log { font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre-wrap; color: var(--muted); margin-top: 8px; max-height: 160px; overflow: auto; }
+  #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--fg); color: #fff; padding: 10px 16px; border-radius: 8px; font-weight: 600; display: none; z-index: 10; max-width: 80vw; }
+  #toast.bad { background: var(--red); }
+  .hint { font-size: 12px; color: var(--muted); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } #left { border-right: 0; border-bottom: 2px solid var(--fg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Synapse Vision</h1>
+  <span id="dot" title="/events connection"></span>
+  <span class="chip" id="source">—</span>
+  <span id="quality"></span>
+  <span class="chip dim" id="snapinfo">no twin yet</span>
+  <span class="spacer"></span>
+  <button id="btn-snapshot">Snapshot</button>
+  <button id="btn-watch">Watch: off</button>
+  <label class="btn">Upload <input id="file" type="file" accept="image/*" hidden></label>
+  <span class="hint">L = latency</span>
+</header>
+<main>
+  <section id="left"><div id="page"><div class="placeholder">waiting for a page twin…</div></div></section>
+  <section id="right">
+    <div id="lines"></div>
+    <div id="detail"></div>
+  </section>
+</main>
+<aside id="drawer"><h2>Latency (ms) — red = over budget</h2><table><thead><tr><th>stage</th><th>last</th><th>median</th><th>n</th></tr></thead><tbody id="lat"></tbody></table><div class="log" id="statuslog"></div></aside>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const state = { twin: null, selected: null, newIds: new Set(), watch: false, budgets: {}, statusLog: [], seenSnapshots: new Set() };
+
+// ---------------------------------------------------------------- helpers
+const confClass = (c) => c >= 0.8 ? 'c-green' : c >= 0.6 ? 'c-amber' : 'c-red';
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const fileUrl = (p) => p ? '/files/' + String(p).replace(/^\/+/, '') : null;
+function toast(msg, bad) {
+  const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : ''; t.style.display = 'block';
+  clearTimeout(toast._h); toast._h = setTimeout(() => { t.style.display = 'none'; }, bad ? 6000 : 2500);
+}
+function renderTex(el, latex, text) {
+  if (latex && window.katex) {
+    try { katex.render(latex, el, { throwOnError: false, displayMode: false, strict: false }); return; } catch (e) { /* fall through */ }
+  }
+  el.textContent = latex || text || '';
+}
+// Raw LaTeX with uncertain spans underlined (offsets are into latex, or text if latex empty).
+function rawWithSpans(line) {
+  const src = line.latex || line.text || '';
+  const spans = (line.uncertain_spans || []).slice().sort((a, b) => a.start - b.start);
+  let out = '', pos = 0;
+  for (const sp of spans) {
+    const s = Math.max(pos, Math.min(sp.start, src.length)), e = Math.max(s, Math.min(sp.end, src.length));
+    out += esc(src.slice(pos, s)) + `<u title="alternatives: ${esc((sp.alternatives || []).join(' | '))}">${esc(src.slice(s, e))}</u>`;
+    pos = e;
+  }
+  return out + esc(src.slice(pos));
+}
+
+// ---------------------------------------------------------------- top bar
+function renderHeader(twin) {
+  const src = twin.source + (twin._fallback ? ' · MOCK' : '');
+  const s = $('#source'); s.textContent = src; s.className = 'chip' + (twin._fallback ? ' warn' : '');
+  s.title = twin._fallback || '';
+  const q = $('#quality'); q.innerHTML = '';
+  const issues = (twin.quality && twin.quality.issues) || [];
+  if (twin.quality && twin.quality.ok && !issues.length) q.innerHTML = '<span class="chip ok">quality ok</span>';
+  for (const i of issues) q.innerHTML += `<span class="chip bad">${esc(i.replace('_', ' '))}</span> `;
+  const lat = twin.latency_ms && twin.latency_ms.snapshot_to_twin;
+  const when = twin.captured_at ? new Date(twin.captured_at).toLocaleTimeString() : '';
+  $('#snapinfo').textContent = `${twin.snapshot_id} · ${when}` + (lat ? ` · ${Math.round(lat)} ms` : '') + ` · ${twin.lines.length} lines`;
+}
+
+// ---------------------------------------------------------------- page + boxes
+function renderPage(twin) {
+  const W = twin.image.width, H = twin.image.height;
+  const page = $('#page'); page.innerHTML = ''; page.style.setProperty('--aspect', (W / H).toFixed(4));
+  const url = fileUrl(twin.image.dewarped_path);
+  const img = document.createElement('img'); img.alt = 'dewarped page';
+  const ph = document.createElement('div'); ph.className = 'placeholder'; ph.textContent = 'dewarped image not available — boxes drawn on a blank page';
+  img.onerror = () => { img.replaceWith(ph); };
+  img.src = url || 'data:,';
+  page.appendChild(img);
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio', 'none');
+  svg.innerHTML = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="24" height="24" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="24" stroke="#d0342c" stroke-width="6" opacity=".55"/></pattern></defs>`;
+  for (const r of twin.regions || []) {
+    const [x, y, w, h] = r.bbox; const e = document.createElementNS(svgNS, 'rect');
+    e.setAttribute('x', x); e.setAttribute('y', y); e.setAttribute('width', w); e.setAttribute('height', h); e.setAttribute('class', 'region'); e.setAttribute('rx', 8);
+    svg.appendChild(e);
+  }
+  const lines = twin.lines.slice().sort((a, b) => a.order - b.order);
+  for (const l of lines) {
+    const [x, y, w, h] = l.bbox;
+    const e = document.createElementNS(svgNS, 'rect');
+    e.setAttribute('x', x); e.setAttribute('y', y); e.setAttribute('width', w); e.setAttribute('height', h); e.setAttribute('rx', 6);
+    const cls = ['box', confClass(l.confidence), l.status === 'crossed_out' ? 'crossed' : '', state.newIds.has(l.id) ? 'new' : '', state.selected === l.id ? 'selected' : ''];
+    e.setAttribute('class', cls.join(' ')); e.dataset.id = l.id;
+    e.addEventListener('click', () => select(l.id));
+    const t = document.createElementNS(svgNS, 'title'); t.textContent = `${l.id}  ${l.latex || l.text}  (${l.confidence.toFixed(2)})`; e.appendChild(t);
+    svg.appendChild(e);
+    const n = document.createElementNS(svgNS, 'text'); n.setAttribute('x', Math.max(8, x - 70)); n.setAttribute('y', y + h * 0.5 + 12); n.setAttribute('class', 'num'); n.textContent = l.order + 1;
+    svg.appendChild(n);
+  }
+  page.appendChild(svg);
+}
+
+// ---------------------------------------------------------------- transcription list
+function renderLines(twin) {
+  const box = $('#lines'); box.innerHTML = '';
+  for (const l of twin.lines.slice().sort((a, b) => a.order - b.order)) {
+    const d = document.createElement('div');
+    d.className = 'line' + (l.status === 'crossed_out' ? ' crossed' : '') + (state.newIds.has(l.id) ? ' new' : '') + (state.selected === l.id ? ' selected' : '');
+    d.dataset.id = l.id;
+    d.innerHTML = `<div class="num">${l.order + 1}</div><div class="body"><div class="tex"></div><div class="raw">${rawWithSpans(l)}</div></div>
+      <div class="meta"><span class="conf ${confClass(l.confidence)}">${l.confidence.toFixed(2)}</span><span class="status ${l.status}">${esc(l.status.replace('_', ' '))}</span>${l.parse_ok === false ? '<span class="status illegible">no parse</span>' : ''}</div>`;
+    renderTex(d.querySelector('.tex'), l.latex, l.text);
+    d.addEventListener('click', () => select(l.id));
+    box.appendChild(d);
+  }
+}
+
+// ---------------------------------------------------------------- detail panel
+function select(id) {
+  state.selected = state.selected === id ? null : id;
+  document.querySelectorAll('[data-id]').forEach((e) => e.classList.toggle('selected', e.dataset.id === state.selected));
+  const panel = $('#detail');
+  const l = state.twin && state.twin.lines.find((x) => x.id === state.selected);
+  if (!l) { panel.className = ''; panel.innerHTML = ''; return; }
+  const readings = l.readings || {};
+  const reread = l.reread || null;
+  const fig = (cap, p) => `<figure><figcaption>${cap}</figcaption>${p ? `<img src="${esc(fileUrl(p))}" alt="${cap}" onerror="this.outerHTML='<div class=none>missing: ${esc(p)}</div>'">` : '<div class="none">n/a</div>'}</figure>`;
+  const code = (v) => v == null ? '<em>n/a</em>' : `<code>${esc(typeof v === 'string' ? v : JSON.stringify(v))}</code>`;
+  const alt = (l.uncertain_spans || []).map((s) => `[${s.start},${s.end}) → ${(s.alternatives || []).join(' | ')}`).join('<br>') || '<em>none</em>';
+  panel.innerHTML = `<h2><span>${esc(l.id)} · order ${l.order + 1} · ${esc(l.kind)} · ${esc(l.status)}</span><button onclick="select(null)">close</button></h2>
+    <div class="crops">${fig('line crop', l.crop_path)}${fig('context crop (±1 line)', l.context_crop_path)}</div>
+    <table class="kv">
+      <tr><td>final latex</td><td>${code(l.latex)}</td></tr>
+      <tr><td>text</td><td>${esc(l.text)}</td></tr>
+      <tr><td>page pass</td><td>${code(readings.page_pass)}</td></tr>
+      <tr><td>line pass</td><td>${code(readings.line_pass)}</td></tr>
+      <tr><td>re-read</td><td>${reread ? `${reread.ran ? 'ran' : 'not run'}${reread.reason ? ' — ' + esc(reread.reason) : ''}${reread.result != null ? ' → ' + code(reread.result) : ''}` : '<em>n/a</em>'}</td></tr>
+      <tr><td>confidence</td><td><span class="conf ${confClass(l.confidence)}">${l.confidence.toFixed(2)}</span> &nbsp; parse_ok: ${l.parse_ok}</td></tr>
+      <tr><td>uncertain</td><td>${alt}</td></tr>
+      <tr><td>latency</td><td>${l.latency_ms != null ? Math.round(l.latency_ms) + ' ms' : '<em>n/a</em>'}</td></tr>
+      <tr><td>bbox</td><td>${code(l.bbox)} · region ${esc(l.region_id)}</td></tr>
+      <tr><td>seen</td><td>first ${esc(l.first_seen)}<br>changed ${esc(l.last_changed)}</td></tr>
+    </table>`;
+  panel.className = 'open';
+}
+window.select = select;
+
+// ---------------------------------------------------------------- twin ingest
+function showTwin(twin, fromEvents) {
+  if (!twin || !twin.lines) return;
+  const changes = twin.changes || {};
+  state.newIds = new Set(fromEvents && !state.seenSnapshots.has(twin.snapshot_id) ? [...(changes.added || []), ...(changes.edited || [])] : []);
+  state.seenSnapshots.add(twin.snapshot_id);
+  state.twin = twin;
+  if (state.selected && !twin.lines.some((l) => l.id === state.selected)) state.selected = null;
+  renderHeader(twin); renderPage(twin); renderLines(twin);
+  if (state.selected) select(state.selected), select(state.selected);
+  setTimeout(() => { state.newIds.clear(); }, 3000);
+}
+
+// ---------------------------------------------------------------- actions
+async function post(path, body, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(path, body === undefined ? { method: 'POST' } : { method: 'POST', body });
+    const j = await r.json();
+    if (!r.ok || j.type === 'status') { toast(`${j.stage || 'error'}: ${j.error || r.status}`, true); return null; }
+    return j;
+  } catch (e) { toast(String(e), true); return null; }
+  finally { if (btn) btn.disabled = false; }
+}
+$('#btn-snapshot').onclick = async () => { const t = await post('/snapshot', undefined, $('#btn-snapshot')); if (t && !wsLive) showTwin(t, true); };
+$('#file').onchange = async (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  const fd = new FormData(); fd.append('file', f, f.name);
+  toast('uploading ' + f.name + '…');
+  const t = await post('/upload', fd); if (t && !wsLive) showTwin(t, true);
+  ev.target.value = '';
+};
+function setWatchUI(on) { state.watch = !!on; const b = $('#btn-watch'); b.textContent = 'Watch: ' + (on ? 'on' : 'off'); b.classList.toggle('on', !!on); }
+$('#btn-watch').onclick = async () => {
+  const r = await fetch('/watch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ on: !state.watch }) });
+  const j = await r.json(); setWatchUI(j.on); if (j.last_error) toast(j.last_error, !j.on);
+};
+
+// ---------------------------------------------------------------- dev drawer (L)
+function budgetFor(stage) {
+  const b = state.budgets || {};
+  if (/snapshot_to_twin/.test(stage)) return b.snapshot_to_twin_first;
+  if (/^error\./.test(stage)) return undefined;
+  return b.new_line_incremental;
+}
+async function refreshDrawer() {
+  try {
+    const recs = (await (await fetch('/telemetry?limit=400')).json()).records;
+    const by = {};
+    for (const r of recs) { (by[r.stage] = by[r.stage] || []).push(r.ms); }
+    const rows = Object.keys(by).sort().map((stage) => {
+      const v = by[stage], last = v[v.length - 1], sorted = v.slice().sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)];
+      const budget = budgetFor(stage); const over = budget != null && last > budget;
+      return `<tr class="${over ? 'over' : ''}"><td>${esc(stage)}${budget != null ? ` <span class="hint">/ ${budget}</span>` : ''}</td><td class="ms">${Math.round(last)}</td><td class="ms">${Math.round(med)}</td><td>${v.length}</td></tr>`;
+    });
+    $('#lat').innerHTML = rows.join('') || '<tr><td colspan="4">no telemetry yet</td></tr>';
+  } catch (e) { $('#lat').innerHTML = `<tr><td colspan="4">${esc(e)}</td></tr>`; }
+  $('#statuslog').textContent = state.statusLog.slice(-12).join('\n');
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 'l' && !e.metaKey && !e.ctrlKey && document.activeElement.tagName !== 'INPUT') {
+    const d = $('#drawer'); d.classList.toggle('open'); if (d.classList.contains('open')) refreshDrawer();
+  }
+  if (e.key === 'Escape') select(null);
+});
+setInterval(() => { if ($('#drawer').classList.contains('open')) refreshDrawer(); }, 3000);
+
+// ---------------------------------------------------------------- /events
+let wsLive = false, ws = null, backoff = 500;
+function connect() {
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/events');
+  ws.onopen = () => { wsLive = true; backoff = 500; $('#dot').classList.add('live'); };
+  ws.onclose = () => { wsLive = false; $('#dot').classList.remove('live'); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 8000); };
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.type === 'hello') { setWatchUI(m.watch && m.watch.on); return; }
+    if (m.type === 'twin') { showTwin(m.twin, true); return; }
+    if (m.type === 'status') {
+      state.statusLog.push(`${new Date().toLocaleTimeString()} ${m.stage}${m.phase ? ' ' + m.phase : ''}${m.ms != null ? ' ' + Math.round(m.ms) + 'ms' : ''}${m.error ? ' ERROR ' + m.error : ''}`);
+      if (m.stage === 'watch' && m.on != null) setWatchUI(m.on);
+      if (m.error) toast(`${m.stage}: ${m.error}`, true);
+      else if (m.stage === 'pipeline' && m.phase === 'start') toast('recognising…');
+    }
+  };
+}
+
+// ---------------------------------------------------------------- boot
+(async function boot() {
+  try { const s = await (await fetch('/status')).json(); state.budgets = s.budget_ms || {}; setWatchUI(s.watch && s.watch.on); } catch (e) { /* server not up yet */ }
+  try { const r = await fetch('/twin/latest'); if (r.ok) showTwin(await r.json(), false); } catch (e) { /* none yet */ }
+  connect();
+  if (new URLSearchParams(location.search).get('watch') === '1' && !state.watch) {
+    try { const j = await (await fetch('/watch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ on: true }) })).json(); setWatchUI(j.on); } catch (e) { /* ignore */ }
+  }
+})();
+</script>
+</body>
+</html>

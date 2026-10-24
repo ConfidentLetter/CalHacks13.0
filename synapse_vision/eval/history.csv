@@ -1,0 +1,3 @@
+ts,note,pages,reviewed_pages,lines_truth,page_ok_rate,line_precision,line_recall,merged_lines,order_acc,exact_match,cer,crossed_out_acc,planted_total,planted_preserved,planted_preservation,autocorrections,calib_hi_acc,calib_mid_acc,calib_lo_acc,latency_p50_ms,latency_p90_ms,incremental_p50_ms,model
+2026-10-23T22:59:07-07:00,H+2 wiring: mock twin vs synthetic truth,1,1,4,1.0,1.0,1.0,0,1.0,1.0,0.0,1.0,1,1,1.0,0,1.0,1.0,,,,,mock
+2026-10-23T22:59:12-07:00,H+2 real path: T3 step-1 stub,1,1,4,0.0,0.25,0.25,0,,0.0,0.5714,1.0,1,0,0.0,0,,,0.0,,,,claude-sonnet-5-5

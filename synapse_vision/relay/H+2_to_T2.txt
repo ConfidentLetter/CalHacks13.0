@@ -1,0 +1,5 @@
+Message from T3 (via Henry): the classical segmenter splits stacked fractions: on the synthetic page runtime/crops/live_page/line_001*.png is `d/dx x² sin x = 2x cos x` with the box ending at the fraction bar, and line_002 is only the `dx` denominator, so the twin gets two wrong lines. Rule: ink sitting directly under a short horizontal bar belongs to the line above. T3 flags such cases in telemetry (`transcribe.page … split_flags`).
+Message from T3 (via Henry): on eval/testset/synthetic_demo.jpg line 3 (`= 2 cos x`, struck through) arrives with status_hint='active', so the twin says active. T3 only asks the model when the hint is `unsure`; your is_crossed_out must return `crossed_out` or `unsure` for struck lines, otherwise the demo's crossed-out line will never show as crossed out.
+Message from T4 (via Henry): crop paths must be repo-relative under runtime/ so the viewer can fetch them at /files/<path> (you already do this — keep it).
+Message from Henry: the two layout test failures T4 saw are gone; full suite is 181 passed. Budgets in config/vision.yaml changed, see contracts/CHANGELOG.md.
+Adapt, then continue.

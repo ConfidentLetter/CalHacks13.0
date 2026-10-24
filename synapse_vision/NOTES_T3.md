@@ -1,13 +1,25 @@
 # NOTES_T3 — Transcribe
 
-**Done:** Step 1 — all four T3 functions exist with contract signatures; `build_page_twin` returns the re-stamped mock twin, schema-validated (7 tests pass: `pytest transcribe/tests`).
-**Next:** Step 2 — verbatim system prompt (`transcribe/prompts.py`) + few-shot example bank (`transcribe/examples/`) with prompt caching.
-**Blocked:** nothing. app/config.py and app/telemetry.py don't exist yet → using local fallbacks in `transcribe/compat.py` (auto-switches when T4 lands them).
+**Done:** Steps 1–5 — real `transcribe_page` (page pass ∥ line pass, DP alignment, agreement → re-read at 3× zoom, verbatim guard + `runtime/debug/verbatim_guard.jsonl`, crossed-out yes/no on `unsure`, empty-crop guard, crop-hash cache), `normalize_latex`, `parse_ok` (SymPy), strict-JSON client with 1 retry, real `build_page_twin` (T1→T2→T3, stable ids, changes, first_seen/last_changed, page_id, bad-quality rule). 60 tests pass (`pytest transcribe/tests`, fake model). Live runs on synthetic crops: every planted mistake transcribed verbatim; unchanged page re-twins in 0.1 s from cache.
+**Next:** run on Henry's real pages as soon as `eval/testset/` has them; replace synthetic example crops with real ones; tune `agreement_threshold`; measure against T4's eval (exact match ≥ 85 %, planted-error preservation 100 %).
+**Blocked:** nothing hard. Latency: one model round trip is 4–9 s on claude-sonnet-5-5 regardless of effort/thinking settings, so `budget_ms.new_line_incremental: 3000` is not reachable with a model call; a one-line change costs one line-pass call (+ one re-read if it has a fraction). See "For Henry".
 
 ## For other terminals
-- T4: `from transcribe import build_page_twin, transcribe_page, normalize_latex, parse_ok` works now. `build_page_twin(path)` returns a schema-valid twin (mock content, fresh `snapshot_id`/`captured_at`). `transcribe.twin.mock_twin()` is the explicit SV_MOCK backup.
-- T4: lines in the final twin may carry extra keys beyond the schema (`crop_path`, `context_crop_path`, `readings`) so the viewer can show crops and both readings. Schema permits additional properties on lines.
-- T2: I consume `layout["lines"][i]` keys exactly as in interfaces.md: `bbox, crop_path, context_crop_path, status_hint, ink_density`. If `ink_density` is missing I compute my own.
+- **T2:** the classical segmenter splits stacked fractions: on my synthetic page `runtime/crops/live_page/line_001*.png` is `d/dx x² sin x = 2x cos x` with the box ending at the fraction bar, and `line_002` is just the `dx` denominator. The model then reads `\frac{d}{}` verbatim — which is the right behaviour for a bad crop, but the twin gets two wrong lines. Ink that sits directly under a short horizontal bar belongs to the line above. I flag such cases in telemetry (`transcribe.page … split_flags`).
+- **T4:** `build_page_twin` is real now. Lines carry extra keys beyond the schema for the viewer: `crop_path`, `context_crop_path`, `crop_hash`, `status_hint`, `ink_density`, and `readings` = `{line, page, reread, notes, cached}` (both raw readings + which path decided). `latency_ms` has `page, layout, transcribe, total`. Telemetry stages: `transcribe.page`, `transcribe.page_pass`, `transcribe.line_pass`, `transcribe.reread`, `transcribe.crossed_out`, `transcribe.build`, `transcribe.build.{page,layout,transcribe}`. Each model-call record has `cache_read`/`cache_write` token counts.
+- **T4 eval:** `runtime/debug/verbatim_guard.jsonl` records every line where the two readings disagreed and one was mathematically "nicer" (`nicer`, `reread_choice`, `final`, `chosen_is_nicer`). Count `chosen_is_nicer: true` as the risky cases.
+- **T1:** I call `capture.page.tile(dewarped_path)` for the page pass; if it raises or returns `[]` I send the whole page as one tile. On `eval/testset/synthetic_demo.jpg` (already flat, white background) `detect_and_dewarp` returns `quality.ok=False, issues=['no_page'], glare_fraction=0.99` — that caps every confidence in the twin at 0.4 by contract, so the demo twin will look "uncertain" until the quality gate accepts flat/synthetic pages (or Henry sets `SV_SOURCE`/a bypass for uploads that are already dewarped).
+- **T2:** on `eval/testset/synthetic_demo.jpg` line 3 (`= 2 cos x`, struck through) arrives with `status_hint='active'`, so the twin says `active`. I only ask the model about crossed-out when the hint is `unsure`; `crossed_out`/`unsure` from `is_crossed_out` is what makes the demo line show as crossed out.
+
+## For Henry
+- Optional config keys I read with code defaults (add to `config/vision.yaml` under `transcribe:` if you want to tune them): `effort: medium` (low|medium|high), `thinking: adaptive` (adaptive|between_tools), `empty_ink_density: 0.004` (below this a crop is treated as blank — no model call), `page_pass_skip_below: 2` (incremental updates touching ≤ N lines skip the whole-page pass), `sdk_max_retries: 2`.
+- Realistic budgets with Sonnet 5.5: first twin ≈ 10–18 s for 6 lines (page pass + line passes in parallel, then re-reads); incremental one-line change ≈ 5–10 s; unchanged page ≈ 0.1 s. If you want to try a faster model for the demo: `SV_MODEL=claude-haiku-5-5`.
+- The example bank (`transcribe/examples/*.png`, `bank.json`) is SYNTHETIC (OpenCV script font). Replace with real crops from your pages (same JSON outputs, exact) when they exist.
+- Structured outputs are on (`output_config.format`); the API prefix cache is per call kind (line/page/reread/crossed-out), so the first call of each kind after a restart pays a cache write.
 
 ## Log
-- H+0: read contracts, config, mock. Step 1 stubs + tests written.
+- H+0: read contracts, config, mock. Step 1 stubs + tests.
+- H+1.5: Step 2 prompt + bank + client; live smoke OK (mistake verbatim, blank → illegible, cache hit).
+- H+3: Step 3 `transcribe_page` live on a 6-line synthetic page: all verbatim, crossed-out detected, blank skipped. Fixed renderer superscript bug; mixed-prose lines now compared by `text` (models differ in how much prose they wrap in `\text{}`); prompt states "latex holds only the math on mixed lines".
+- H+4: live `build_page_twin` on `eval/testset/synthetic_demo.jpg`: 4/4 lines verbatim (`f(x)=x^2\sin x`, `f'(x)=2x\cdot\cos x`, `=2\cos x`, `f'(0)=2\cdot 0\cdot\cos 0=0`) in 8.1 s, no re-reads needed.
+- H+3.5: Steps 4–5. `build_page_twin` live through T1 stub + T2 classical: valid twin, cache makes the second snapshot 0.1 s. Effort low/medium and thinking on/off made no latency difference (round-trip bound).

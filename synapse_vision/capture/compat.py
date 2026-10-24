@@ -76,6 +76,21 @@ def timed(stage: str, **extra: Any) -> Iterator[dict]:
         log(stage, info["ms"], **extra)
 
 
+def repo_relative(path: str | Path) -> str:
+    """Repo-relative string when the file is inside the repo (T4's viewer serves those at /files/), else absolute."""
+    resolved = Path(path).resolve()
+    try:
+        return str(resolved.relative_to(REPO_ROOT.resolve()))
+    except ValueError:
+        return str(resolved)
+
+
+def absolute(path: str | Path) -> Path:
+    """Inverse of repo_relative: resolve a repo-relative or absolute path to an absolute one."""
+    p = Path(path)
+    return p if p.is_absolute() else (REPO_ROOT / p)
+
+
 def runtime_dir(sub: str) -> Path:
     path = RUNTIME_DIR / sub
     path.mkdir(parents=True, exist_ok=True)

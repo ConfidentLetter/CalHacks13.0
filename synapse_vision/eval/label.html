@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Label — Synapse Vision</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+  :root { --fg:#111; --muted:#555; --line:#d4d4d4; --panel:#f4f5f7; --red:#d0342c; --green:#1a9a4a; --blue:#1f5fbf; --amber:#d98a00; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color:var(--fg); display:grid; grid-template-columns: 200px minmax(0,1fr) 520px; grid-template-rows: 48px 1fr; height:100vh; }
+  header { grid-column: 1/4; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:2px solid var(--fg); }
+  header h1 { font-size:17px; margin:0 10px 0 0; }
+  button { font:inherit; font-weight:600; padding:5px 12px; border:2px solid var(--fg); background:#fff; border-radius:6px; cursor:pointer; }
+  button.primary { background:var(--fg); color:#fff; } button:disabled { opacity:.5; }
+  .spacer { flex:1; } .hint { color:var(--muted); font-size:12px; }
+  #pages { border-right:2px solid var(--fg); overflow:auto; }
+  #pages div { padding:8px 12px; border-bottom:1px solid var(--line); cursor:pointer; display:flex; justify-content:space-between; }
+  #pages div.sel { background:var(--panel); font-weight:700; }
+  #pages .b { font-size:11px; padding:1px 6px; border-radius:8px; color:#fff; background:var(--muted); } #pages .b.ok { background:var(--green); } #pages .b.p { background:var(--amber); }
+  #canvas { overflow:auto; background:#e9ebee; padding:14px; }
+  #page { position:relative; width:100%; max-width:1100px; margin:0 auto; background:#fff; box-shadow:0 2px 12px rgba(0,0,0,.25); }
+  #page img { display:block; width:100%; } #page svg { position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; }
+  svg rect.box { fill:rgba(31,95,191,.06); stroke:var(--blue); stroke-width:3; cursor:pointer; }
+  svg rect.box.sel { stroke:var(--red); stroke-width:5; fill:rgba(208,52,44,.08); }
+  svg rect.box.crossed { stroke:var(--amber); stroke-dasharray:14 8; }
+  svg rect.draft { fill:rgba(26,154,74,.15); stroke:var(--green); stroke-width:3; stroke-dasharray:8 6; }
+  svg text { font:700 30px sans-serif; fill:var(--blue); pointer-events:none; }
+  svg circle.h { fill:#fff; stroke:var(--red); stroke-width:3; cursor:nwse-resize; }
+  #editor { border-left:2px solid var(--fg); overflow:auto; padding:10px; background:var(--panel); }
+  .line { background:#fff; border:1.5px solid var(--line); border-radius:8px; padding:8px; margin-bottom:8px; }
+  .line.sel { border:2.5px solid var(--red); }
+  .line .row { display:flex; gap:6px; align-items:center; margin-bottom:5px; flex-wrap:wrap; }
+  .line .n { font-weight:700; width:26px; }
+  textarea, input[type=text], select { font: 14px ui-monospace, Menlo, monospace; padding:4px 6px; border:1.5px solid var(--line); border-radius:5px; }
+  textarea { width:100%; resize:vertical; min-height:36px; }
+  input[type=text] { flex:1; }
+  .preview { font-size:20px; min-height:26px; padding:4px 2px; overflow-x:auto; }
+  .preview .err { color:var(--red); font-size:13px; }
+  .small { font-size:12px; color:var(--muted); }
+  .planted { border-left:5px solid var(--amber); padding-left:8px; margin-top:4px; }
+  .x { color:var(--red); border-color:var(--red); padding:2px 8px; font-size:12px; }
+  label.cb { display:flex; align-items:center; gap:4px; font-weight:600; }
+  #toast { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); background:var(--fg); color:#fff; padding:8px 14px; border-radius:8px; display:none; font-weight:600; }
+  #toast.bad { background:var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Label</h1><span id="pname" class="hint">pick a page</span>
+  <span id="dirty" class="hint"></span>
+  <span class="spacer"></span>
+  <span class="hint">drag on the page = new line · drag a corner = resize · ⌘S save</span>
+  <button id="btn-prelabel">Re-prelabel</button>
+  <label class="cb"><input type="checkbox" id="reviewed"> reviewed</label>
+  <button id="btn-save" class="primary">Save</button>
+  <a href="/" class="hint">viewer</a>
+</header>
+<nav id="pages"></nav>
+<section id="canvas"><div id="page"><p class="hint" style="padding:20px">No page loaded. Put photos in eval/testset/&lt;n&gt;.jpg and run <code>python -m eval.prelabel</code>.</p></div></section>
+<section id="editor"></section>
+<div id="toast"></div>
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const st = { name: null, truth: null, sel: null, dirty: false, imgW: 0, imgH: 0 };
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m, bad) { const t = $('#toast'); t.textContent = m; t.className = bad ? 'bad' : ''; t.style.display = 'block'; clearTimeout(toast._h); toast._h = setTimeout(() => t.style.display = 'none', bad ? 5000 : 1800); }
+function setDirty(d) { st.dirty = d; $('#dirty').textContent = d ? '● unsaved' : ''; }
+function tex(el, latex) { el.innerHTML = ''; if (!latex) return; try { katex.render(latex, el, { throwOnError: true, strict: false }); } catch (e) { el.innerHTML = `<span class="err">${esc(e.message)}</span>`; } }
+
+async function loadPages() {
+  const j = await (await fetch('/label/api/pages')).json();
+  const nav = $('#pages'); nav.innerHTML = '';
+  for (const p of j.pages) {
+    const d = document.createElement('div'); d.className = p.name === st.name ? 'sel' : '';
+    d.innerHTML = `<span>${esc(p.name)}</span><span>${p.planted ? `<span class="b p">${p.planted}✎</span> ` : ''}<span class="b ${p.reviewed ? 'ok' : ''}">${p.has_truth ? (p.reviewed ? 'ok' : p.lines) : '—'}</span></span>`;
+    d.onclick = () => openPage(p.name); nav.appendChild(d);
+  }
+  if (!j.pages.length) nav.innerHTML = '<div class="hint">no photos in eval/testset/</div>';
+}
+async function openPage(name) {
+  if (st.dirty && !confirm('Discard unsaved changes?')) return;
+  const j = await (await fetch('/label/api/page/' + encodeURIComponent(name))).json();
+  if (j.error) return toast(j.error, true);
+  st.name = name; st.sel = null; setDirty(false);
+  st.truth = j.truth || { image: j.image_url.replace('/files/', ''), dewarped_path: '', width: 0, height: 0, reviewed: false, note: '', lines: [] };
+  $('#pname').textContent = name + (j.truth ? '' : ' (no truth yet — Re-prelabel or draw lines)');
+  $('#reviewed').checked = !!st.truth.reviewed;
+  renderPage(j.dewarped_url || j.image_url, !j.dewarped_url && j.truth);
+  renderEditor(); loadPages();
+}
+function renderPage(url, warn) {
+  const page = $('#page'); page.innerHTML = '';
+  const img = new Image(); img.src = url;
+  img.onload = () => {
+    st.imgW = st.truth.width || img.naturalWidth; st.imgH = st.truth.height || img.naturalHeight;
+    if (!st.truth.width) { st.truth.width = img.naturalWidth; st.truth.height = img.naturalHeight; }
+    drawBoxes();
+  };
+  img.onerror = () => { page.innerHTML = '<p class="hint" style="padding:20px">image failed to load: ' + esc(url) + '</p>'; };
+  page.appendChild(img);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); page.appendChild(svg);
+  if (warn) toast('dewarped image missing — showing the original; boxes may not align', true);
+  let draft = null;
+  const toPage = (ev) => { const r = svg.getBoundingClientRect(); return [ (ev.clientX - r.left) / r.width * st.imgW, (ev.clientY - r.top) / r.height * st.imgH ]; };
+  svg.addEventListener('pointerdown', (ev) => {
+    if (ev.target.tagName === 'rect' && ev.target.classList.contains('box')) { select(+ev.target.dataset.i); return; }
+    if (ev.target.tagName === 'circle') { draft = { resize: +ev.target.dataset.i }; svg.setPointerCapture(ev.pointerId); return; }
+    const [x, y] = toPage(ev); draft = { x0: x, y0: y, x, y }; svg.setPointerCapture(ev.pointerId);
+  });
+  svg.addEventListener('pointermove', (ev) => {
+    if (!draft) return; const [x, y] = toPage(ev);
+    if (draft.resize != null) { const b = st.truth.lines[draft.resize].bbox; b[2] = Math.max(10, x - b[0]); b[3] = Math.max(10, y - b[1]); setDirty(true); drawBoxes(); renderEditorLine(draft.resize); return; }
+    draft.x = x; draft.y = y; drawBoxes(draft);
+  });
+  svg.addEventListener('pointerup', () => {
+    if (!draft) return;
+    if (draft.resize == null) {
+      const w = Math.abs(draft.x - draft.x0), h = Math.abs(draft.y - draft.y0);
+      if (w > 15 && h > 10) {
+        const bbox = [Math.min(draft.x0, draft.x), Math.min(draft.y0, draft.y), w, h].map((v) => Math.round(v));
+        st.truth.lines.push({ id: 'T' + Date.now() % 100000, order: st.truth.lines.length, bbox, status: 'active', latex: '', text: '', planted_error: false, planted_note: '', corrected_latex: '' });
+        reorder(); setDirty(true); renderEditor(); select(st.truth.lines.length - 1);
+      }
+    }
+    draft = null; drawBoxes();
+  });
+}
+function reorder() { st.truth.lines.sort((a, b) => (a.bbox[1] + a.bbox[3] / 2) - (b.bbox[1] + b.bbox[3] / 2)); st.truth.lines.forEach((l, i) => l.order = i); }
+function drawBoxes(draft) {
+  const svg = $('#page svg'); if (!svg) return; svg.setAttribute('viewBox', `0 0 ${st.imgW} ${st.imgH}`); svg.setAttribute('preserveAspectRatio', 'none');
+  let h = '';
+  st.truth.lines.forEach((l, i) => {
+    const [x, y, w, hh] = l.bbox;
+    h += `<rect class="box ${i === st.sel ? 'sel' : ''} ${l.status === 'crossed_out' ? 'crossed' : ''}" data-i="${i}" x="${x}" y="${y}" width="${w}" height="${hh}" rx="5"/><text x="${Math.max(6, x - 60)}" y="${y + hh / 2 + 10}">${i + 1}</text>`;
+    if (i === st.sel) h += `<circle class="h" data-i="${i}" cx="${x + w}" cy="${y + hh}" r="14"/>`;
+  });
+  if (draft && draft.resize == null) h += `<rect class="draft" x="${Math.min(draft.x0, draft.x)}" y="${Math.min(draft.y0, draft.y)}" width="${Math.abs(draft.x - draft.x0)}" height="${Math.abs(draft.y - draft.y0)}"/>`;
+  svg.innerHTML = h;
+}
+function select(i) { st.sel = i; drawBoxes(); document.querySelectorAll('.line').forEach((e, k) => e.classList.toggle('sel', k === i)); const el = document.querySelectorAll('.line')[i]; if (el) el.scrollIntoView({ block: 'nearest' }); }
+function renderEditor() {
+  const ed = $('#editor'); ed.innerHTML = '';
+  if (!st.truth) return;
+  const note = document.createElement('div'); note.className = 'line'; note.innerHTML = `<div class="row"><span class="small">page note</span><input type="text" id="pnote" value="${esc(st.truth.note || '')}" placeholder="e.g. pencil, glare, fraction-heavy"></div>`;
+  note.querySelector('input').oninput = (e) => { st.truth.note = e.target.value; setDirty(true); }; ed.appendChild(note);
+  st.truth.lines.forEach((l, i) => { const d = document.createElement('div'); d.className = 'line' + (i === st.sel ? ' sel' : ''); d.dataset.i = i; ed.appendChild(d); renderEditorLine(i); });
+}
+function renderEditorLine(i) {
+  const l = st.truth.lines[i]; const d = document.querySelector(`.line[data-i="${i}"]`); if (!d) return;
+  d.innerHTML = `<div class="row"><span class="n">${i + 1}</span>
+      <select class="status"><option ${l.status==='active'?'selected':''}>active</option><option ${l.status==='crossed_out'?'selected':''}>crossed_out</option><option ${l.status==='illegible'?'selected':''}>illegible</option></select>
+      <span class="small">bbox ${l.bbox.map(Math.round).join(', ')}</span><span class="spacer"></span>
+      <label class="cb small"><input type="checkbox" class="planted" ${l.planted_error ? 'checked' : ''}> planted error</label>
+      <button class="x">delete</button></div>
+    <textarea class="latex" placeholder="verbatim LaTeX — exactly what is written, mistakes included">${esc(l.latex)}</textarea>
+    <div class="preview"></div>
+    <div class="row"><input type="text" class="text" value="${esc(l.text || '')}" placeholder="plain text (optional)"></div>
+    <div class="planted" style="display:${l.planted_error ? 'block' : 'none'}">
+      <div class="row"><input type="text" class="pnote" value="${esc(l.planted_note || '')}" placeholder="what the mistake is, e.g. product rule: forgot x^2 cos x term"></div>
+      <textarea class="corrected" placeholder="corrected LaTeX (what it SHOULD say) — used to catch autocorrection">${esc(l.corrected_latex || '')}</textarea>
+      <div class="preview cpreview"></div>
+    </div>`;
+  tex(d.querySelector('.preview'), l.latex); tex(d.querySelector('.cpreview'), l.corrected_latex);
+  d.onclick = (e) => { if (!e.target.closest('button')) select(i); };
+  d.querySelector('.latex').oninput = (e) => { l.latex = e.target.value; tex(d.querySelector('.preview'), l.latex); setDirty(true); };
+  d.querySelector('.corrected').oninput = (e) => { l.corrected_latex = e.target.value; tex(d.querySelector('.cpreview'), l.corrected_latex); setDirty(true); };
+  d.querySelector('.text').oninput = (e) => { l.text = e.target.value; setDirty(true); };
+  d.querySelector('.pnote').oninput = (e) => { l.planted_note = e.target.value; setDirty(true); };
+  d.querySelector('.status').onchange = (e) => { l.status = e.target.value; setDirty(true); drawBoxes(); };
+  d.querySelector('.planted').onchange = (e) => { l.planted_error = e.target.checked; d.querySelector('.planted + button, .planted'); d.querySelector('div.planted').style.display = l.planted_error ? 'block' : 'none'; setDirty(true); };
+  d.querySelector('.x').onclick = (e) => { e.stopPropagation(); st.truth.lines.splice(i, 1); reorder(); st.sel = null; setDirty(true); renderEditor(); drawBoxes(); };
+}
+async function save() {
+  if (!st.truth) return;
+  st.truth.reviewed = $('#reviewed').checked; reorder();
+  const r = await fetch('/label/api/page/' + encodeURIComponent(st.name), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ truth: st.truth }) });
+  const j = await r.json();
+  if (!r.ok) return toast((j.error || 'save failed') + (j.details ? ': ' + j.details.join('; ') : ''), true);
+  setDirty(false); toast('saved ' + j.saved); loadPages();
+}
+$('#btn-save').onclick = save;
+$('#reviewed').onchange = () => setDirty(true);
+$('#btn-prelabel').onclick = async () => {
+  if (!st.name) return; if (st.truth && st.truth.lines.length && !confirm('Re-run the model and overwrite this page\'s pre-label?')) return;
+  $('#btn-prelabel').disabled = true; toast('running pipeline…');
+  const r = await fetch(`/label/api/page/${encodeURIComponent(st.name)}/prelabel?force=1`, { method: 'POST' }); const j = await r.json();
+  $('#btn-prelabel').disabled = false;
+  if (!r.ok) return toast(j.error || 'prelabel failed', true);
+  setDirty(false); openPage(st.name);
+};
+document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } });
+window.addEventListener('beforeunload', (e) => { if (st.dirty) { e.preventDefault(); e.returnValue = ''; } });
+loadPages().then(() => { const first = document.querySelector('#pages div'); const q = new URLSearchParams(location.search).get('page'); if (q) openPage(q); else if (first && first.textContent !== 'no photos in eval/testset/') first.click(); });
+</script>
+</body>
+</html>

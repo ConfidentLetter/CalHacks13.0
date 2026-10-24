@@ -1,0 +1,58 @@
+[
+  {
+    "name": "ex_product_rule_mistake",
+    "image": "ex_product_rule_mistake.png",
+    "note": "Product-rule mistake: the derivative is wrong. Transcribed exactly as written, not fixed.",
+    "mistake": true,
+    "output": {"latex": "\\frac{d}{dx}x^{2}\\sin x=2x\\cos x", "text": "d/dx x^2 sin x = 2x cos x", "kind": "math", "illegible": false, "uncertain": []}
+  },
+  {
+    "name": "ex_distribution_mistake",
+    "image": "ex_distribution_mistake.png",
+    "note": "(x+3)^2 expanded wrongly. Transcribed exactly as written.",
+    "mistake": true,
+    "output": {"latex": "(x+3)^{2}=x^{2}+9", "text": "(x+3)^2 = x^2 + 9", "kind": "math", "illegible": false, "uncertain": []}
+  },
+  {
+    "name": "ex_chain_rule_mistake",
+    "image": "ex_chain_rule_mistake.png",
+    "note": "Chain-rule factor missing. Transcribed exactly as written.",
+    "mistake": true,
+    "output": {"latex": "\\frac{d}{dx}\\sin(x^{2})=\\cos(x^{2})", "text": "d/dx sin(x^2) = cos(x^2)", "kind": "math", "illegible": false, "uncertain": []}
+  },
+  {
+    "name": "ex_crossed_out",
+    "image": "ex_crossed_out.png",
+    "note": "Struck-through line: still transcribed verbatim; the strike is not mentioned.",
+    "mistake": false,
+    "output": {"latex": "=2\\cos x", "text": "= 2 cos x", "kind": "math", "illegible": false, "uncertain": []}
+  },
+  {
+    "name": "ex_ambiguous_1_l",
+    "image": "ex_ambiguous_1_l.png",
+    "note": "Ambiguous l / 1 / 7: best reading plus alternatives for that span.",
+    "mistake": false,
+    "output": {"latex": "2l+1=7", "text": "2l + 1 = 7", "kind": "math", "illegible": false, "uncertain": [{"span": "l", "alternatives": ["1"]}, {"span": "7", "alternatives": ["1"]}]}
+  },
+  {
+    "name": "ex_fraction",
+    "image": "ex_fraction.png",
+    "note": "Stacked fraction.",
+    "mistake": false,
+    "output": {"latex": "y=\\frac{x^{2}+1}{2x}", "text": "y = (x^2 + 1)/(2x)", "kind": "math", "illegible": false, "uncertain": []}
+  },
+  {
+    "name": "ex_text_line",
+    "image": "ex_text_line.png",
+    "note": "Prose with inline math: kind mixed.",
+    "mistake": false,
+    "output": {"latex": "f(x)=x^{2}\\sin x", "text": "Find f'(x) if f(x) = x^2 sin x", "kind": "mixed", "illegible": false, "uncertain": []}
+  },
+  {
+    "name": "ex_blank",
+    "image": "ex_blank.png",
+    "note": "Blank crop: empty strings, illegible true, nothing invented.",
+    "mistake": false,
+    "output": {"latex": "", "text": "", "kind": "text", "illegible": true, "uncertain": []}
+  }
+]
