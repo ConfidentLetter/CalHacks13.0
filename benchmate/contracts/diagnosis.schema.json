@@ -29,7 +29,7 @@
                 "items": {
                   "type": "object",
                   "required": ["part_id", "page"],
-                  "properties": {"part_id": {"type": "string"}, "page": {"type": "integer"}, "quote": {"type": "string", "maxLength": 200}}
+                  "properties": {"part_id": {"type": "string"}, "page": {"type": ["integer", "string"], "description": "PDF viewer page label as T4 search() returns it (string, e.g. \"22\"); integers accepted for legacy mocks"}, "quote": {"type": "string", "maxLength": 200}}
                 }
               }
             }
