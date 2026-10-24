@@ -1,0 +1,9 @@
+anthropic>=0.40
+jsonschema>=4.20
+PyYAML>=6.0
+numpy>=1.26
+opencv-python>=4.9
+sympy>=1.13
+antlr4-python3-runtime==4.11
+lark>=1.1
+pytest>=8

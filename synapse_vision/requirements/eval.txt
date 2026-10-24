@@ -1,0 +1,5 @@
+sympy>=1.12
+matplotlib>=3.8
+pillow>=10
+jsonschema>=4.21
+pytest>=8
