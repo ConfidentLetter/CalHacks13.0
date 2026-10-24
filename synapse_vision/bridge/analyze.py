@@ -95,8 +95,7 @@ async def analyze_request(body: Any, *, budget_s: float | None = None) -> dict:
     except asyncio.TimeoutError:
         judged = {"summary": "Analysis timed out while judging; the lines are shown as transcribed, unjudged.",
                   "topics": [], "hints": [], "analysisFailed": True,
-                  "steps": [{"id": l["id"], "label": tutor.label_of(l), "status": "unclear", "note": "",
-                             "confidence": l["confidence"], "lineStatus": l["status"]} for l in tutor.twin_lines(twin)]}
+                  "steps": [{**tutor.step_base(l), "status": "unclear", "note": ""} for l in tutor.twin_lines(twin)]}
     except Exception as exc:  # noqa: BLE001
         judged = {"summary": f"Analysis failed while judging ({type(exc).__name__}: {exc}).", "topics": [], "hints": [],
                   "analysisFailed": True, "steps": []}
@@ -106,6 +105,7 @@ async def analyze_request(body: Any, *, budget_s: float | None = None) -> dict:
         **{k: judged.get(k, v) for k, v in (("summary", ""), ("topics", []), ("steps", []), ("hints", []))},
         "imageUrl": file_url(image.get("original_path") or still.get("path")),
         "dewarpedUrl": file_url(image.get("dewarped_path")),
+        "imageSize": {"width": int(image.get("width") or 0), "height": int(image.get("height") or 0)},
         "quality": twin.get("quality"), "lineCount": len(twin.get("lines") or []),
         "latencyMs": {**(twin.get("latency_ms") or {}), "bridge_total": round((time.perf_counter() - t0) * 1000.0, 1)},
     }

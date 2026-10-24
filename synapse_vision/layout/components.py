@@ -32,8 +32,10 @@ SLIVER_MIN_ASPECT = 4.0         #     and stacked in one column with others (pri
 SLIVER_MIN_IN_COLUMN = 3        # column members needed anywhere on the page ...
 SLIVER_MIN_IN_MARGIN = 2        # ... or this many inside the outer page zones
 SLIVER_MARGIN_FRAC = 0.15
-COLUMN_MIN_PIECES = 5           # narrow pieces of any height stacked in one column ...
-COLUMN_MIN_SPAN_H = 3.0         # ... over at least this x glyph height are also a broken rule
+COLUMN_MIN_PIECES = 5           # narrow pieces of any height stacked in one tight column (x within
+COLUMN_MIN_SPAN_H = 3.0         # COLUMN_TOL_FRAC x glyph width) inside the margin zone, over at least
+COLUMN_TOL_FRAC = 0.15          # COLUMN_MIN_SPAN_H glyph heights, are also a broken rule; thin letters
+                                # (l, 1, i) stacked by chance in a paragraph scatter more than that
 ISOLATED_TINY_FRAC = 0.4        # a mark smaller than this x glyph size needs ink within ISOLATED_TINY_RADIUS glyphs
 ISOLATED_TINY_RADIUS = 1.2
 ISOLATED_MAX_FRAC = 0.8         # a component smaller than this x glyph size in both directions ...
@@ -166,16 +168,21 @@ def drop_rule_slivers(comps: list[Component], med_char_w: float, med_h: float, p
     narrow = [c for c in comps if c.w < SLIVER_MAX_W_FRAC * med_char_w and c.h >= c.w]
     if len(narrow) < SLIVER_MIN_IN_MARGIN:
         return comps
-    tol = 0.5 * med_char_w
+    tol, tight = 0.5 * med_char_w, max(3.0, COLUMN_TOL_FRAC * med_char_w)
     drop: set[int] = set()
     for c in narrow:
         column = [o for o in narrow if abs(o.cx - c.cx) <= tol]
         tall = [o for o in column if o.h >= SLIVER_MIN_H_FRAC * med_h and o.h >= SLIVER_MIN_ASPECT * o.w]
         in_margin = c.cx <= SLIVER_MARGIN_FRAC * page_w or c.cx >= (1 - SLIVER_MARGIN_FRAC) * page_w
-        span = max(o.y1 for o in column) - min(o.y for o in column)
-        if (len(tall) >= SLIVER_MIN_IN_COLUMN or (in_margin and len(tall) >= SLIVER_MIN_IN_MARGIN)
-                or (len(column) >= COLUMN_MIN_PIECES and span >= COLUMN_MIN_SPAN_H * med_h)):
+        if len(tall) >= SLIVER_MIN_IN_COLUMN or (in_margin and len(tall) >= SLIVER_MIN_IN_MARGIN):
             drop.update(id(o) for o in column)
+            continue
+        if not in_margin:
+            continue
+        aligned = [o for o in column if abs(o.cx - c.cx) <= tight]
+        span = max(o.y1 for o in aligned) - min(o.y for o in aligned)
+        if len(aligned) >= COLUMN_MIN_PIECES and span >= COLUMN_MIN_SPAN_H * med_h:
+            drop.update(id(o) for o in aligned)
     return [c for c in comps if id(c) not in drop]
 
 

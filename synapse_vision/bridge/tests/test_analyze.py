@@ -99,3 +99,33 @@ def test_stored_twin_validates_schema_after_analyze(client):
     client.post("/api/camera/analyze", json={"image": {"source": "webcam", "base64": TINY_JPEG_B64}})
     twin = store.latest()
     assert twin is not None and pipeline.validate(twin) == []
+
+
+def test_steps_carry_recognition_fields_for_the_inspector(client):
+    """H+9 relay (T6 UI): bbox, cropUrl, contextCropUrl, readings{page,line,reread,agree}, uncertainSpans, imageSize."""
+    r = client.post("/api/camera/analyze", json={"image": {"source": "webcam", "base64": TINY_JPEG_B64}})
+    body = r.json()
+    assert body["imageSize"] == {"width": 1700, "height": 2200}
+    step = body["steps"][1]
+    assert step["bbox"] == [130.0, 320.0, 1100.0, 110.0]
+    assert set(step["readings"]) >= {"page", "line", "reread", "agree"} and isinstance(step["readings"]["agree"], bool)
+    assert step["readings"]["line"] == PRODUCT_RULE_LINE  # mock twin has no two-pass readings: line = final latex
+    assert step["cropUrl"] is None and step["contextCropUrl"] is None  # mock has no crops
+    assert body["steps"][2]["uncertainSpans"] == [{"start": 1, "end": 2, "alternatives": ["2", "z"]}]
+    # T6 falls back to T4's /twin/{snapshotId} for the full twin: the id we return must resolve there
+    twin = client.get(f"/twin/{body['snapshotId']}")
+    assert twin.status_code == 200 and twin.json()["snapshot_id"] == body["snapshotId"]
+
+
+def test_readings_from_a_two_pass_line():
+    from bridge import tutor
+
+    line = {"id": "L1", "order": 1, "latex": "a+b", "text": "a + b", "status": "active", "confidence": 0.9,
+            "bbox": [1, 2, 3, 4], "crop_path": "runtime/crops/x/line_001.png", "context_crop_path": "runtime/crops/x/line_001_ctx.png",
+            "readings": {"line": {"latex": "a+b", "text": "a + b"}, "page": {"latex": "a+b", "text": "a+b"}, "reread": None, "notes": []}}
+    step = tutor.step_base(tutor.twin_lines({"lines": [line]})[0])
+    assert step["readings"] == {"page": "a+b", "line": "a+b", "reread": None, "agree": True, "notes": []}
+    assert step["cropUrl"] == "/files/runtime/crops/x/line_001.png" and step["contextCropUrl"].endswith("_ctx.png")
+    disagree = {**line, "readings": {"line": {"latex": "a+b"}, "page": {"latex": "a-b"}, "reread": {"latex": "a+b"}, "notes": ["disagree"]}}
+    step2 = tutor.step_base(tutor.twin_lines({"lines": [disagree]})[0])
+    assert step2["readings"]["agree"] is False and step2["readings"]["reread"] == "a+b" and step2["readings"]["page"] == "a-b"

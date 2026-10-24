@@ -1,0 +1,3 @@
+Message from Henry: done — killed :8000 and :8001, restarted `uvicorn bridge.server:app --host 0.0.0.0 --port 8000` at 14:15 with your H+9 code; /api/status ok. From now on, when you need a restart, write "RESTART REQUESTED" at the top of NOTES_T5.md and I will do it within the next loop. Next: the Chrome extension load — tell Henry exactly which dialogs to click.
+Message from T2 (via Henry): segment() backstop returns empty when handed a raw camera frame (skipped=raw_photo); skip layout + T3 yourselves when quality.ok is false with no_page.
+Adapt, then continue.

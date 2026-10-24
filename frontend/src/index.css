@@ -1,10 +1,19 @@
 @import 'tailwindcss';
+@import 'katex/dist/katex.min.css';
 
 /* Synapse stationery palette — cream canvas, paper surfaces, butter + sage accents, olive ink. */
 @theme {
   --font-sans: 'Nunito', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Fredoka', 'Nunito', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* T6: type scale for a projector at 3 m — body >= 15 px, small text 13 px. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6;
 
   --color-cream: #fff9ed;
   --color-paper: #f3ebd9;
@@ -17,6 +26,8 @@
   --color-olive: #494638;
   --color-honey: #8a6a12;
   --color-clay: #b4553c;
+  /* T6: warm ink red, used ONLY for a wrong line and crossed-out hatching (clay stays for system errors). */
+  --color-ink-red: #b23a2e;
 
   --animate-fade-up: fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-shimmer: shimmer 1.6s linear infinite;
@@ -57,6 +68,9 @@
   body {
     @apply bg-cream text-olive antialiased;
     min-height: 100dvh;
+    font-size: 15px; /* T6: readable from 3 m on a projector */
+    line-height: 1.6;
+    font-variant-numeric: tabular-nums; /* every number lines up */
     /* faint dotted-grid paper texture */
     background-image: radial-gradient(rgb(73 70 56 / 0.07) 0.8px, transparent 0.8px);
     background-size: 18px 18px;
@@ -122,6 +136,84 @@
     background-repeat: no-repeat;
     animation: var(--animate-shimmer);
   }
+  /* ---- T6: recognition view ---- */
+  /* Wider ruling for the line ledger (one line of handwriting per rule). */
+  .ruled-lg {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 47px,
+      rgb(164 186 141 / 0.5) 47px,
+      rgb(164 186 141 / 0.5) 48px
+    );
+  }
+  /* Diagonal ink-red hatch for a crossed-out line box. */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgb(178 58 46 / 0.35) 0,
+      rgb(178 58 46 / 0.35) 2px,
+      transparent 2px,
+      transparent 9px
+    );
+  }
+  /* A hand-struck line through transcribed text (text-decoration does not reach inside KaTeX). */
+  .struck {
+    position: relative;
+  }
+  .struck::after {
+    content: '';
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    top: 52%;
+    height: 2.5px;
+    background: var(--color-ink-red);
+    transform: rotate(-2.5deg);
+    pointer-events: none;
+  }
+  /* Skeleton ruled lines that "fill in" while the page is being read. */
+  .ink-fill {
+    @apply h-3 rounded-sm bg-olive/15;
+    transform-origin: left;
+    animation: ink-fill 1.8s ease-in-out infinite alternate;
+  }
+  @keyframes ink-fill {
+    from {
+      transform: scaleX(0.15);
+      opacity: 0.4;
+    }
+    to {
+      transform: scaleX(1);
+      opacity: 1;
+    }
+  }
+  /* Side sheet slide-in. */
+  .slide-in-right {
+    animation: slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(24px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  /* KaTeX inside the ledger: inherit the olive ink, a touch larger. */
+  .latex .katex {
+    font-size: 1.28em;
+    color: var(--color-olive);
+  }
+  .latex-sm .katex {
+    font-size: 1.05em;
+  }
+  .katex-display {
+    margin: 0;
+  }
+
   .input {
     @apply w-full rounded-sm border border-olive/30 bg-white px-3.5 py-2.5 text-sm text-olive placeholder:text-olive/45 transition outline-none focus:border-butter-deep focus:ring-4 focus:ring-butter/60;
   }

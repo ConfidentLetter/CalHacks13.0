@@ -5,6 +5,8 @@ import { Button } from '../components/ui/Button'
 import { StatusDot } from '../components/ui/Badge'
 import { ErrorState, Skeleton } from '../components/ui/Feedback'
 import { LiveVideo } from '../components/shared/LiveVideo'
+import { PageTwin } from '../components/recognition/PageTwin'
+import { inkRegion } from '../components/recognition/twinModel'
 import { useNow } from '../hooks/useInterval'
 import { cx, domainOf, formatClock, formatDuration, isToday, timeAgo } from '../utils/format'
 
@@ -33,10 +35,16 @@ function Eyebrow({ n, children, className }) {
 
 function Welcome() {
   const { askTutor } = useApp()
-  const { readings } = useStudyData()
+  const { readings, recogStats } = useStudyData()
   const [q, setQ] = useState('')
   const pages = readings.filter((r) => isToday(r.timestamp))
   const seconds = pages.reduce((a, r) => a + (r.durationSec || 0), 0)
+  const stats = [
+    ['lines read today', recogStats?.linesRead ?? 0],
+    ['errors caught', recogStats?.errorsCaught ?? 0],
+    ['pages today', pages.length],
+    ['active reading', formatDuration(seconds)],
+  ]
 
   const submit = (e) => {
     e.preventDefault()
@@ -57,15 +65,13 @@ function Welcome() {
         <p className="mt-4 max-w-md text-base text-olive/70">
           your notebook, the pages you read, and a tutor who’s seen both — kept together on one desk.
         </p>
-        <dl className="mt-6 flex gap-8">
-          <div>
-            <dt className="text-[11px] font-semibold tracking-wide text-olive/55 uppercase">pages today</dt>
-            <dd className="font-display text-3xl text-olive tabular-nums">{pages.length}</dd>
-          </div>
-          <div>
-            <dt className="text-[11px] font-semibold tracking-wide text-olive/55 uppercase">active reading</dt>
-            <dd className="font-display text-3xl text-olive tabular-nums">{formatDuration(seconds)}</dd>
-          </div>
+        <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-3">
+          {stats.map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-[11px] font-semibold tracking-wide text-olive/55 uppercase">{label}</dt>
+              <dd className="font-display text-3xl text-olive tabular-nums">{value}</dd>
+            </div>
+          ))}
         </dl>
       </div>
 
@@ -176,8 +182,9 @@ function StatusLedger() {
 
 function Notebook() {
   const { navigate } = useApp()
-  const { analysis, lastFrame } = useStudyData()
+  const { analysis, lastFrame, recognition } = useStudyData()
   const camera = useCamera()
+  const twinCounts = recognition?.counts
   return (
     <section className="relative">
       {/* second sheet underneath */}
@@ -188,37 +195,67 @@ function Notebook() {
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-olive/70 px-5 py-4">
           <div>
             <Eyebrow n="01">the notebook</Eyebrow>
-            <h3 className="mt-1 text-2xl text-olive">{camera.isLive ? 'live on your desk' : 'your page'}</h3>
+            <h3 className="mt-1 text-2xl text-olive">{recognition ? 'your page, read' : camera.isLive ? 'live on your desk' : 'your page'}</h3>
           </div>
           <span className="flex items-center gap-1.5 text-xs text-olive/60">
-            <StatusDot state={camera.isLive ? 'offline' : 'idle'} pulse={camera.isLive} />
-            {camera.isLive ? 'live camera on' : 'camera off'}
+            {recognition && twinCounts ? (
+              <>
+                <span className="tabular-nums">{twinCounts.total} lines</span>
+                {twinCounts.errors > 0 && (
+                  <span className="border border-ink-red bg-ink-red/10 px-1.5 font-bold text-ink-red tabular-nums">{twinCounts.errors} error{twinCounts.errors > 1 ? 's' : ''}</span>
+                )}
+                {twinCounts.crossed > 0 && <span className="tabular-nums">· {twinCounts.crossed} crossed out</span>}
+              </>
+            ) : (
+              <>
+                <StatusDot state={camera.isLive ? 'offline' : 'idle'} pulse={camera.isLive} />
+                {camera.isLive ? 'live camera on' : 'camera off'}
+              </>
+            )}
           </span>
         </header>
         <div className="grid gap-5 p-5 lg:grid-cols-[1.5fr_1fr]">
-          <div className="relative aspect-video overflow-hidden border border-olive/70 bg-olive">
-            {camera.isLive && camera.stream ? (
-              <LiveVideo stream={camera.stream} />
-            ) : (
-              <div className="grid size-full place-items-center p-6 text-center text-cream">
-                <div className="space-y-3">
-                  <p className="font-display text-lg">camera off</p>
-                  <Button variant="primary" onClick={() => navigate('notebook')}>
-                    Start the live camera
-                  </Button>
+          {recognition ? (
+            <button
+              type="button"
+              onClick={() => navigate('notebook')}
+              className="group relative block text-left"
+              aria-label="Open the page twin"
+            >
+              <PageTwin image={recognition.image} lines={recognition.lines} region={inkRegion(recognition.lines, recognition.image)} compact maxHeight={440} />
+              <span className="absolute top-2 left-2 border border-olive/40 bg-butter px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-olive uppercase">
+                page twin
+              </span>
+            </button>
+          ) : (
+            <div className="relative aspect-video overflow-hidden border border-olive/70 bg-olive">
+              {camera.isLive && camera.stream ? (
+                <LiveVideo stream={camera.stream} />
+              ) : (
+                <div className="grid size-full place-items-center p-6 text-center text-cream">
+                  <div className="space-y-3">
+                    <p className="font-display text-lg">camera off</p>
+                    <Button variant="primary" onClick={() => navigate('notebook')}>
+                      Start the live camera
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-4">
             <div className="ruled flex-1 border-l-2 border-clay/40 pl-4 text-sm leading-7 text-olive/80">
-              {analysis.data ? (
+              {recognition?.summary ? (
                 <>
                   <span className="font-semibold text-olive">
-                    notes on the still from {formatClock(analysis.frame?.capturedAt)} —{' '}
+                    notes on the page from {formatClock(recognition.capturedAt)} —{' '}
                   </span>
-                  {analysis.data.summary}
+                  {recognition.summary}
                 </>
+              ) : recognition ? (
+                `${recognition.counts.total} lines read from the page at ${formatClock(recognition.capturedAt)} — open the notebook to have Pip check them.`
+              ) : analysis.data ? (
+                analysis.data.summary
               ) : lastFrame ? (
                 `Pip last looked at a still from ${formatClock(lastFrame.capturedAt)}.`
               ) : (
@@ -226,7 +263,7 @@ function Notebook() {
               )}
             </div>
             <Button variant="primary" className="self-start" onClick={() => navigate('notebook')}>
-              {camera.isLive ? 'ask about this page' : 'open the camera'} <ArrowRight className="size-4" aria-hidden="true" />
+              {recognition ? 'see every line' : camera.isLive ? 'ask about this page' : 'open the camera'} <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </div>
         </div>

@@ -38,7 +38,7 @@ CROSSING_PROBE_PX = 4            # ... then look this far beyond it for other in
 FULL_CREDIT_CROSSINGS = 4
 MIN_CROSSINGS_FOR_STRIKE = 2     # fewer -> looks like a fraction bar / underline, confidence capped
 CAPPED_CONF = 0.35
-SOLID_BAND_SPAN = 0.9            # a full-width stroke through ONE unbroken band of ink (a short bold word whose
+SOLID_BAND_SPAN = 0.6            # a long stroke through ONE unbroken band of ink (a short bold word whose
 SOLID_BAND_MAX_GAP_ROWS = 1      # letters touch) counts as crossed even with a single crossing run; a fraction
                                  # shows empty rows between numerator, bar and denominator
 ZIGZAG_MIN_SEGMENTS = 6

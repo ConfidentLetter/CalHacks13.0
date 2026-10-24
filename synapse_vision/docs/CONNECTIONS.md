@@ -115,7 +115,7 @@ yet, bridge builds it · `defer` not for the demo.
 | `GET /api/camera/stream` | 10 s to first frame | `capture.source._webcam().read()` (singleton), `wait_for_stable`'s 5 fps preview loop (not reusable as-is) | MJPEG `multipart/x-mixed-replace` endpoint; a frame grabber that doesn't fight T4 for the camera | `bridge/camera.py:FrameGrabber` — one thread, lock around `Webcam.read()`, ~5 fps, latest JPEG in memory; installs itself as `pipeline.set_frame_provider` so `/snapshot` and `/api/camera/capture` take stills from the same handle; only runs while a stream client is connected; Pi source → proxy `pi_url` preview | new |
 | `GET /api/camera/latest[?fresh=true]` | 10 s (polled 10 s) | `app.bridge_api.latest_snapshot()` (latest analysed twin), `latest_frame_path()` (newest still), T4 `/files/` | snapshot object `{id, imageUrl, capturedAt, deviceId}`; `null` 200 when none; `fresh=true` = grab a still | `bridge/api.py:camera_latest` — bridge still index first, else latest twin, else newest file; `fresh` grabs one still (no pipeline) | direct |
 | `POST /api/camera/capture` | 20 s | T4 `POST /snapshot` runs the *whole* pipeline (17 s+, would exceed 20 s under load and double-run analysis); T1 `get_snapshot` / frame provider take a still in ≤1 s | still-only capture with an id the frontend can hand back to analyze | `bridge/api.py:camera_capture` — one still via FrameGrabber (or `capture.get_snapshot`), registered in the bridge still index as `still_<ts>_<rand>` → path; returns the snapshot object. **Deliberate deviation**: does *not* wrap `/snapshot` (see § 4.6) | direct |
-| `POST /api/camera/analyze` | 60 s | `app.server.analyze(path, source)` → `transcribe.build_page_twin` (real chain; stores + broadcasts on `/events`); `transcribe.low_confidence` | accept `image.base64` **and** `image.snapshotId`; write `runtime/uploads/<id>.jpg`; judging layer (status/note/summary/hints) | `bridge/analyze.py` — decode → file → `server.analyze` → `bridge/tutor.py:judge_twin` (ONE Claude call with verbatim lines + crossed-out flags + confidences; labels copied verbatim from the twin, never from the model); fallbacks: crossed_out→`unclear` "crossed out", conf < 0.6→`unclear`, `_error`/no lines→`steps=[]`, summary says analysis failed; 60 s budget, never 500 | compose |
+| `POST /api/camera/analyze` | 60 s | `app.server.analyze(path, source)` → `transcribe.build_page_twin` (real chain; stores + broadcasts on `/events`); `transcribe.low_confidence`; T3's per-line extras `bbox`, `crop_path`, `context_crop_path`, `readings`, `uncertain_spans` | accept `image.base64` **and** `image.snapshotId`; write `runtime/uploads/<id>.jpg`; judging layer (status/note/summary/hints); H+9: per-step `bbox`, `cropUrl`, `contextCropUrl`, `readings{page,line,reread,agree,notes}`, `uncertainSpans` + top-level `imageSize` for T6's inspector | `bridge/analyze.py` — decode → file → `server.analyze` → `bridge/tutor.py:judge_twin` (ONE Claude call with verbatim lines + crossed-out flags + confidences; labels copied verbatim from the twin, never from the model); fallbacks: crossed_out→`unclear` "crossed out", conf < 0.6→`unclear`, `_error`/no lines→`steps=[]`, summary says analysis failed; 60 s budget, never 500 | compose |
 | `POST /api/reading` | 10 s (ext. 4 s) | nothing (vision never stored reading) | JSON file store, upsert by id, newest first | `bridge/store.py:ReadingStore` → `runtime/reading/records.json` (thread lock, atomic write); returns the stored record | new |
 | `POST /api/reading/screenshot` | 10 s | nothing | store JPEG + sidecar record; ≥1 MB body | `bridge/store.py:save_screenshot` → `runtime/reading/shots/<id>.jpg` + `<id>.json`; 2xx `{stored: id}`; idempotent | new |
 | `GET /api/reading/history?limit=` | 10 s (polled 15 s) | nothing | `{items:[{id,title,url,durationSec,timestamp,excerpt,favicon}]}` newest first | `bridge/api.py:reading_history` from ReadingStore; `excerpt` = stored `text` or "" | new |
@@ -212,6 +212,8 @@ to T4's server on :8000, so nothing had to stop; dashboard `npm run dev` on :517
 | T4 routes through the bridge | `/twin/latest`, `/status`, `/upload`, `/files/...` all 200 in tests and live; the twin stored by analyze validates against `page_twin.schema.json` (test). |
 | 3 MB JSON body | accepted (handler reached; rejected only as "not a JPEG"), no 413. |
 
+| H+9 inspector fields (in-process, real chain, synthetic page) | 200 in 8.9 s; `imageSize` 1700×2200; every step has `bbox`, `cropUrl`/`contextCropUrl` that `/files/` serves (200), `readings.page`/`line` verbatim with `agree: true`, `uncertainSpans`; `GET /twin/{snapshotId}` → 200. `runtime/debug/bridge/h9_analyze_response.json`. **Not yet on the live :8000** — that process predates the change and needs Henry to restart it (kill was denied to the terminal). |
+
 What did not work / caveats:
 - The Chrome **extension** was not loaded unpacked in this pass (needs Henry's Chrome profile and a site approval); its
   endpoints were exercised with the exact payloads from `background.js` via curl/tests instead. Load `../extension/`
@@ -221,6 +223,25 @@ What did not work / caveats:
 - The in-UI hardware Analyze left the live preview toggled off afterwards (frontend behaviour or my click — to confirm).
 - Voice TTS is not built (`replyAudioUrl: null`), as agreed.
 
+### H+9 addition — analyze step shape (for T6's notebook inspector)
+
+```json
+{ "snapshotId": "snap_…", "analyzedAt": "…", "summary": "…", "topics": [], "hints": [],
+  "imageUrl": "/files/runtime/uploads/still_….jpg", "dewarpedUrl": "/files/runtime/dewarped/still_…_dewarped.jpg",
+  "imageSize": {"width": 1700, "height": 2200},
+  "steps": [ { "id": "L1", "label": "f'(x)=2x\\cdot\\cos x", "status": "error", "note": "…",
+               "confidence": 0.92, "lineStatus": "active",
+               "bbox": [128.0, 342.0, 522.0, 71.0],
+               "cropUrl": "/files/runtime/crops/still_…_dewarped/line_001.png",
+               "contextCropUrl": "/files/runtime/crops/still_…_dewarped/line_001_ctx.png",
+               "readings": {"page": "f'(x)=2x\\cdot\\cos x", "line": "f'(x)=2x\\cdot\\cos x", "reread": null, "agree": true, "notes": []},
+               "uncertainSpans": [] } ] }
+```
+`label` stays the verbatim twin `latex` (or `text`); `readings.*` are the raw per-pass strings (`null` = pass did not run,
+`""` = pass said illegible); `agree` uses T3's rule (`transcribe.compare.readings_agree`). The full twin is at
+`GET /twin/{snapshotId}`.
+
 ## Change log
+- H+9 (T5): analyze steps gained `bbox`, `cropUrl`, `contextCropUrl`, `readings`, `uncertainSpans`; top-level `imageSize` (relay from Henry for T6). Bridge serves :8000 since H+8.
 - H+7 (T5): bridge built and verified live on :8001 (§ 5); gap 19 added; hand-off to :8000 requested in NOTES_T5.
 - H+6 (T5): first version — module analysis, data flow, 13-endpoint mapping, 18 gaps/decisions.

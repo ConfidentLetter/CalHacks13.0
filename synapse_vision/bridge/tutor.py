@@ -81,18 +81,73 @@ CHAT_SCHEMA = {
 # ---------------------------------------------------------------------- twin → prompt lines
 
 def twin_lines(twin: dict | None) -> list[dict]:
-    """Lines in reading order, only the fields the judge needs (verbatim latex/text untouched)."""
+    """Lines in reading order: the fields the judge needs (verbatim latex/text untouched) plus T3's
+    recognition extras (bbox, crops, both readings) that the UI's inspector shows per step."""
     if not twin:
         return []
     lines = sorted(twin.get("lines") or [], key=lambda l: (int(l.get("order", 0)), str(l.get("id"))))
     return [{"id": str(l.get("id")), "latex": l.get("latex") or "", "text": l.get("text") or "",
              "status": l.get("status") or "active", "confidence": float(l.get("confidence") or 0.0),
-             "uncertain_spans": list(l.get("uncertain_spans") or []), "parse_ok": bool(l.get("parse_ok", True))}
+             "uncertain_spans": list(l.get("uncertain_spans") or []), "parse_ok": bool(l.get("parse_ok", True)),
+             "bbox": _bbox(l.get("bbox")), "crop_path": l.get("crop_path"), "context_crop_path": l.get("context_crop_path"),
+             "readings": _readings(l)}
             for l in lines]
 
 
 def label_of(line: dict) -> str:
     return line.get("latex") or line.get("text") or ""
+
+
+def _bbox(value: Any) -> list[float] | None:
+    try:
+        box = [float(v) for v in value]
+    except (TypeError, ValueError):
+        return None
+    return box if len(box) == 4 else None
+
+
+def _reading_text(reading: Any) -> str | None:
+    """One reading as the string the UI shows: verbatim latex, else verbatim text; None when absent."""
+    if not isinstance(reading, dict):
+        return None
+    if reading.get("illegible") and not (reading.get("latex") or reading.get("text")):
+        return ""
+    return reading.get("latex") or reading.get("text") or ""
+
+
+def _readings(line: dict) -> dict:
+    """{page, line, reread, agree} from T3's per-line `readings` ({line, page, reread, notes, cached})."""
+    raw = line.get("readings") if isinstance(line.get("readings"), dict) else {}
+    line_r, page_r, reread_r = raw.get("line"), raw.get("page"), raw.get("reread")
+    if reread_r is None and isinstance(line.get("reread"), dict):
+        reread_r = line["reread"].get("result") if isinstance(line["reread"].get("result"), dict) else None
+    notes = [str(n) for n in (raw.get("notes") or [])]
+    if isinstance(line_r, dict) and isinstance(page_r, dict):
+        agree = _readings_agree(line_r, page_r) and not any(n in ("disagree", "near_disagree") for n in notes)
+    else:
+        agree = False
+    return {"page": _reading_text(page_r), "line": _reading_text(line_r) if line_r is not None else (line.get("latex") or line.get("text") or None),
+            "reread": _reading_text(reread_r), "agree": bool(agree), "notes": notes}
+
+
+def _readings_agree(a: dict, b: dict) -> bool:
+    try:
+        from transcribe.compare import readings_agree  # T3's own agreement rule (normalized latex identical)
+
+        return bool(readings_agree(a, b))
+    except Exception:  # noqa: BLE001 - T3 helper missing or changed: plain comparison
+        return (a.get("latex") or a.get("text") or "") == (b.get("latex") or b.get("text") or "")
+
+
+def step_base(line: dict) -> dict:
+    """The recognition half of a step (everything except status/note), from a `twin_lines` entry."""
+    from bridge.compat import file_url
+
+    return {"id": line["id"], "label": label_of(line), "confidence": line["confidence"], "lineStatus": line["status"],
+            "bbox": line.get("bbox"), "cropUrl": file_url(line.get("crop_path")),
+            "contextCropUrl": file_url(line.get("context_crop_path")), "readings": line.get("readings") or
+            {"page": None, "line": None, "reread": None, "agree": False, "notes": []},
+            "uncertainSpans": list(line.get("uncertain_spans") or [])}
 
 
 def prefilled(line: dict) -> tuple[str, str] | None:
@@ -152,8 +207,7 @@ def judge_twin(twin: dict) -> dict:
             note = str(verdicts[l["id"]].get("note") or "")[:MAX_NOTE_CHARS]
         else:
             status, note = "unclear", "" if result.get("analysisFailed") else "not judged"
-        steps.append({"id": l["id"], "label": label_of(l), "status": status, "note": note,
-                      "confidence": l["confidence"], "lineStatus": l["status"]})
+        steps.append({**step_base(l), "status": status, "note": note})
     return {**result, "steps": steps}
 
 

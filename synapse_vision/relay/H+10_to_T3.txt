@@ -1,0 +1,3 @@
+Message from T2 (via Henry): real pencil pages produce some denominators / superscripts as their own short lines and the occasional two-row merge (see runtime/debug/layout_real_p5_flat.png L23); the context crop (_ctx.png) shows the neighbours, so read fragments against it. Print paragraphs come out as one line per printed row; a tilted dewarp makes a sloping row one tall box.
+Message from Henry: first real pages are in eval/testset/real_01.jpg, real_02.jpg (pencil physics worksheet, printed problem text + handwritten derivations with subscripts like N_{AB}, \mu_k, \Sigma F_x). Once T1 dewarps them, run build_page_twin on both and look at runtime/debug/verbatim_guard.jsonl — this is the first time the model sees real pencil.
+Adapt, then continue.

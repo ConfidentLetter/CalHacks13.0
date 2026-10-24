@@ -119,7 +119,7 @@ async function call(endpoint, realFn) {
 
 // ---- response normalization -------------------------------------------------
 
-function resolveUrl(url) {
+export function resolveUrl(url) {
   if (!url) return null
   if (/^(https?:|data:|blob:)/.test(url)) return url
   return `${runtime.baseUrl}${url.startsWith('/') ? '' : '/'}${url}`
@@ -209,6 +209,22 @@ export function analyzeFrame(frame) {
   return call('POST /api/camera/analyze', () =>
     http('POST', '/api/camera/analyze', { image: frameBody(frame) }, { timeoutMs: 60_000 }),
   )
+}
+
+// ---- page twins (T4 routes served through the bridge, same origin) ----------
+
+/** GET /twin/:id — the full page twin: lines with bbox/crops/readings, image size, changes. */
+export function getTwin(snapshotId) {
+  return call('GET /twin/:id', () => http('GET', `/twin/${encodeURIComponent(snapshotId)}`))
+}
+
+/**
+ * GET /twin/latest — newest stored twin. In real mode before any snapshot the server returns the mock twin
+ * flagged `_fallback`; that is never shown as the student's work, so it resolves to `null` here.
+ */
+export async function getLatestTwin() {
+  const res = await call('GET /twin/latest', () => http('GET', '/twin/latest'))
+  return { ...res, data: res.data?._fallback ? null : res.data }
 }
 
 /** POST /api/reading — save a reading record (the extension posts here too). */

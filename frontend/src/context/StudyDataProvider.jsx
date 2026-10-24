@@ -4,11 +4,31 @@ import * as api from '../services/api'
 import { bridge, startBridge } from '../services/extensionBridge'
 import { useExtensionBridge } from '../hooks/useConnection'
 import { useInterval } from '../hooks/useInterval'
+import { buildRecognition } from '../components/recognition/twinModel'
+import { useTwin } from '../components/recognition/useTwin'
 
 const STATUS_POLL_MS = 10_000
 const READING_POLL_MS = 15_000
 const ACTIVITY_KEY = 'synapse.activity.v2'
 const NEW_HIGHLIGHT_MS = 8_000
+const ANALYSIS_KEY = 'synapse.analysis.v1' // last judged result (small JSON, no image data) so a reload keeps the twin judged
+const RECOG_STATS_KEY = 'synapse.recognition.stats.v1' // { day, linesRead, errorsCaught }
+
+function loadJson(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) ?? fallback
+  } catch {
+    return fallback
+  }
+}
+function saveJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+const todayKey = () => new Date().toDateString()
 
 function loadActivity() {
   try {
@@ -52,25 +72,76 @@ export function StudyDataProvider({ children }) {
 
   // ---- notebook analysis -----------------------------------------------------
   // Stills are grabbed from the live camera (CameraProvider) only when the student asks.
-  const [analysis, setAnalysis] = useState({ data: null, frame: null, loading: false, error: null })
+  const [analysis, setAnalysis] = useState(() => ({
+    data: loadJson(ANALYSIS_KEY, null),
+    frame: null,
+    loading: false,
+    startedAt: null,
+    error: null,
+  }))
   // The most recent still the AI actually looked at (from Analyze or a tutor question).
   const [lastFrame, setLastFrame] = useState(null)
+  // Recognition counters for the dashboard stat row (today only).
+  const [recogStats, setRecogStats] = useState(() => {
+    const saved = loadJson(RECOG_STATS_KEY, null)
+    return saved?.day === todayKey() ? saved : { day: todayKey(), linesRead: 0, errorsCaught: 0 }
+  })
 
   const analyze = useCallback(
     async (frame) => {
       setLastFrame(frame)
-      setAnalysis({ data: null, frame, loading: true, error: null })
+      setAnalysis((prev) => ({ ...prev, frame, loading: true, startedAt: Date.now(), error: null }))
       try {
         const { data } = await api.analyzeFrame(frame)
-        setAnalysis({ data, frame, loading: false, error: null })
+        setAnalysis({ data, frame, loading: false, startedAt: null, error: null })
+        saveJson(ANALYSIS_KEY, data)
         const issues = (data.steps || []).filter((s) => s.status === 'error').length
-        logEvent('analysis', 'Notebook page analyzed', issues ? `${issues} issue${issues > 1 ? 's' : ''} found` : 'No issues found')
+        const read = (data.steps || []).length
+        setRecogStats((prev) => {
+          const base = prev.day === todayKey() ? prev : { day: todayKey(), linesRead: 0, errorsCaught: 0 }
+          const next = { ...base, linesRead: base.linesRead + read, errorsCaught: base.errorsCaught + issues }
+          saveJson(RECOG_STATS_KEY, next)
+          return next
+        })
+        logEvent(
+          'analysis',
+          'Notebook page read',
+          `${read} line${read === 1 ? '' : 's'} · ${issues ? `${issues} error${issues > 1 ? 's' : ''} caught` : 'no errors'}`,
+        )
       } catch (err) {
-        setAnalysis({ data: null, frame, loading: false, error: err.message })
+        // keep the previous result on screen under the error
+        setAnalysis((prev) => ({ ...prev, frame, loading: false, startedAt: null, error: err.message }))
       }
     },
     [logEvent],
   )
+
+  // ---- page twin (recognition detail) ---------------------------------------
+  // On load, the newest stored twin (so the notebook and dashboard are never empty when one exists);
+  // after Analyze, the twin for that snapshot. Mock/fallback twins are never shown as the student's work.
+  const [latestTwin, setLatestTwin] = useState(null)
+  const refreshLatestTwin = useCallback(async () => {
+    try {
+      const { data } = await api.getLatestTwin()
+      setLatestTwin(data)
+      return data
+    } catch {
+      setLatestTwin(null)
+      return null
+    }
+  }, [])
+
+  const activeSnapshotId = analysis.data?.snapshotId || latestTwin?.snapshot_id || null
+  const { twin: activeTwin } = useTwin(activeSnapshotId, latestTwin)
+
+  const recognition = useMemo(() => {
+    if (!activeSnapshotId) return null
+    const twin = activeTwin && activeTwin.snapshot_id === activeSnapshotId ? activeTwin : null
+    // a restored result only counts if it belongs to the twin on screen
+    const result = analysis.data && analysis.data.snapshotId === activeSnapshotId ? analysis.data : null
+    if (!result && analysis.data && analysis.frame) return buildRecognition({ result: analysis.data, twin: null })
+    return buildRecognition({ result, twin })
+  }, [activeSnapshotId, activeTwin, analysis.data, analysis.frame])
 
   // ---- reading history ------------------------------------------------------
   const [remote, setRemote] = useState({ items: [], loading: true, error: null })
@@ -153,7 +224,8 @@ export function StudyDataProvider({ children }) {
     setRemote((r) => ({ ...r, loading: true }))
     refreshStatus()
     refreshReadings()
-  }, [settings.apiBaseUrl, refreshStatus, refreshReadings])
+    refreshLatestTwin()
+  }, [settings.apiBaseUrl, refreshStatus, refreshReadings, refreshLatestTwin])
 
   // Extension ↔ dashboard preference sync. When the extension reports its state, adopt
   // its tracking switch and any sites approved from the popup; then push dashboard edits.
@@ -215,6 +287,9 @@ export function StudyDataProvider({ children }) {
     refreshStatus,
     analysis,
     analyze,
+    recognition,
+    recogStats,
+    refreshLatestTwin,
     lastFrame,
     setLastFrame,
     readings,

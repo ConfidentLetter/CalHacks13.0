@@ -6,7 +6,7 @@ import { Logo } from './Sidebar'
 
 const SUBTITLES = {
   dashboard: 'everything from today, in one place',
-  notebook: 'snapshots from the overhead camera, checked step by step',
+  notebook: 'one still, every line boxed and read exactly as written',
   reading: 'pages you actually sat with, on sites you approved',
   tutor: 'let’s work through it together',
   settings: 'camera, tracking, privacy, and where the backend lives',
@@ -33,8 +33,8 @@ export function Topbar({ onMenu }) {
           <Logo />
         </div>
         <div className="hidden min-w-0 lg:block">
-          <h1 className="text-lg font-semibold tracking-tight text-olive">{item?.label}</h1>
-          <p className="truncate text-xs text-olive/65">{SUBTITLES[route]}</p>
+          <h1 className="text-[1.75rem] leading-tight text-olive">{item?.label}</h1>
+          <p className="truncate text-[13px] text-olive/65">{SUBTITLES[route]}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <span className="hidden items-center gap-2 rounded-sm border border-olive/20 bg-white px-2.5 py-1 text-xs text-olive/80 sm:inline-flex">
@@ -48,7 +48,7 @@ export function Topbar({ onMenu }) {
         </div>
       </div>
       <div className="px-4 pb-3 sm:px-6 lg:hidden">
-        <h1 className="text-base font-semibold text-olive">{item?.label}</h1>
+        <h1 className="text-xl text-olive">{item?.label}</h1>
         <p className="text-xs text-olive/65">{SUBTITLES[route]}</p>
       </div>
     </header>

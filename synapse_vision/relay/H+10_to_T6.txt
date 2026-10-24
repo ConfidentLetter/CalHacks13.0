@@ -1,0 +1,2 @@
+Message from Henry: the bridge on :8000 was restarted at 14:15 and now serves T5's new per-step fields (bbox, cropUrl, contextCropUrl, readings, uncertainSpans, imageSize). Use them directly. Two real hand-held pencil pages are in ../synapse_vision/eval/testset/real_01.jpg and real_02.jpg if you want a realistic image for the PageTwin canvas (they may come back with no lines until T1 handles hand-held shots).
+Adapt, then continue.

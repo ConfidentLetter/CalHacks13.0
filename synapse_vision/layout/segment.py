@@ -50,17 +50,24 @@ def segment_mock(dewarped_path: str) -> dict:
 
 
 RAW_PHOTO_SIZE_FACTOR = 1.25  # an image this much larger than T1's output long side is an undewarped camera frame
+OUTPUT_SIDE_TOLERANCE = 0.03  # T1 output (dewarped or flat upload) has long side == page.output_long_side within this
 
 
 def is_raw_photo(dewarped_path: str) -> bool:
     """T1 passes the untouched camera frame through when it finds no page (quality.ok=False, 'no_page').
-    Its real outputs have long side ``page.output_long_side``; a far larger image is such a frame and
-    segmenting it only produces illegible scraps for T3 to spend model calls on."""
+    Its real outputs are portrait with long side ``page.output_long_side`` (flat uploads keep their
+    orientation but are rescaled to that long side).  A far larger image, or a landscape one of any
+    other size (a 1920x1080 webcam frame), is such a frame; segmenting it only produces illegible
+    scraps for T3 to spend model calls on."""
     img = cv2.imread(str(dewarped_path), cv2.IMREAD_REDUCED_GRAYSCALE_8) if Path(dewarped_path).exists() else None
     if img is None:
         return False
-    long_side = 8 * max(img.shape[:2])
-    return long_side > RAW_PHOTO_SIZE_FACTOR * float(config_get("page.output_long_side", 2200))
+    h, w = (8 * v for v in img.shape[:2])
+    target = float(config_get("page.output_long_side", 2200))
+    long_side = max(h, w)
+    if long_side > RAW_PHOTO_SIZE_FACTOR * target:
+        return True
+    return w > h and abs(long_side - target) > OUTPUT_SIDE_TOLERANCE * target
 
 
 def _segment_guarded(dewarped_path: str, info: dict) -> dict:
