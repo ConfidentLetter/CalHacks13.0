@@ -8,7 +8,9 @@ import numpy as np
 
 from layout._compat import REPO_ROOT, config_get, timed
 from layout.binarize import binarize_page, to_gray
-from layout.components import (drop_faint_components, drop_texture_specks, find_components_with_labels, fuse_fractions, ink_mask,
+from layout.components import (drop_faint_components, drop_isolated_specks, drop_rule_slivers, drop_texture_specks,
+                               find_components_with_labels,
+                               fuse_fractions, ink_mask,
                                median_component_size, speck_area, split_tall_components)
 from layout.crops import snapshot_id_from_path, write_all_crops
 from layout.crossed_out import is_crossed_out
@@ -54,7 +56,8 @@ def detect_lines(img: np.ndarray, gray: np.ndarray | None = None) -> tuple[list[
         comps, labels = find_components_with_labels(binary)
         comps = drop_faint_components(comps, gray, binary)
         med_char_w, med_comp_h = median_component_size(comps)
-        comps = drop_texture_specks(comps, med_char_w, med_comp_h)
+        comps = drop_rule_slivers(drop_texture_specks(comps, med_char_w, med_comp_h), med_char_w, med_comp_h, W)
+        comps = drop_isolated_specks(comps, med_char_w, med_comp_h)
         comps, tall = split_tall_components(comps, med_comp_h)
         clean = ink_mask(labels, comps)   # bleed-through, texture and drawings no longer confuse the fraction probes
         comps = fuse_fractions(comps, clean, med_char_w, med_comp_h, W)

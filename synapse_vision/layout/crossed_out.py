@@ -38,6 +38,9 @@ CROSSING_PROBE_PX = 4            # ... then look this far beyond it for other in
 FULL_CREDIT_CROSSINGS = 4
 MIN_CROSSINGS_FOR_STRIKE = 2     # fewer -> looks like a fraction bar / underline, confidence capped
 CAPPED_CONF = 0.35
+SOLID_BAND_SPAN = 0.9            # a full-width stroke through ONE unbroken band of ink (a short bold word whose
+SOLID_BAND_MAX_GAP_ROWS = 1      # letters touch) counts as crossed even with a single crossing run; a fraction
+                                 # shows empty rows between numerator, bar and denominator
 ZIGZAG_MIN_SEGMENTS = 6
 ZIGZAG_ANGLE_DEG = (20.0, 75.0)
 ZIGZAG_MIN_SPAN_FRAC = 0.6
@@ -193,11 +196,25 @@ def _straight_strike_conf(ink: np.ndarray, skel: np.ndarray, bbox: tuple[int, in
             continue
         span_term = min(1.0, (span - MIN_SPAN_FRAC) / (FULL_SPAN_FRAC - MIN_SPAN_FRAC))
         crossings = _crossings(ink, stroke, thickness)
+        if crossings == 1 and span >= SOLID_BAND_SPAN and _solid_band(ink, stroke, bbox):
+            crossings = MIN_CROSSINGS_FOR_STRIKE
         conf = CONF_BASE + CONF_SPAN * span_term + CONF_CROSS * min(1.0, crossings / FULL_CREDIT_CROSSINGS)
         if crossings < MIN_CROSSINGS_FOR_STRIKE or _continuity(ink, pieces, thickness) < STRIKE_MIN_CONTINUITY:
             conf = min(conf, CAPPED_CONF)  # fraction bar, underline, or a chain of letter bars
         best = max(best, conf)
     return best
+
+
+def _solid_band(ink: np.ndarray, stroke: tuple[int, int, int, int], bbox: tuple[int, int, int, int]) -> bool:
+    """True when the rows of the ink bbox above the stroke's span form one unbroken band (letters), not
+    numerator / bar / denominator separated by empty rows."""
+    x, y, w, h = bbox
+    rows = (ink[y:y + h, max(x, stroke[0]):min(x + w, stroke[2]) + 1] > 0).any(axis=1)
+    idx = np.flatnonzero(rows)
+    if len(idx) < 2:
+        return False
+    gaps = np.diff(idx) - 1
+    return int(gaps.max()) <= SOLID_BAND_MAX_GAP_ROWS
 
 
 def _band_coverage(ink: np.ndarray, bbox: tuple[int, int, int, int], x_range: tuple[int, int] | None = None) -> float:

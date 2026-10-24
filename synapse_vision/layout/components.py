@@ -26,6 +26,19 @@ TEXTURE_RADIUS_GLYPHS = 1.5     # ... and with at least TEXTURE_MIN_NEIGHBOURS s
 TEXTURE_MIN_NEIGHBOURS = 5      #     halftone texture of a printed figure, not an i-dot or a decimal point
 TEXTURE_MIN_Y_SPREAD = 0.4      # ... and those neighbours are spread vertically by this x glyph height (text rows are flat)
 TEXTURE_MAX_DROP_FRAC = 0.5     # never drop more than this share of all components as texture (bad glyph estimate)
+SLIVER_MAX_W_FRAC = 0.6         # a rule remnant: narrower than this x glyph width ...
+SLIVER_MIN_H_FRAC = 1.5         # ... taller than this x glyph height, at least SLIVER_MIN_ASPECT times taller than wide,
+SLIVER_MIN_ASPECT = 4.0         #     and stacked in one column with others (printed margin line the dewarp left in pieces)
+SLIVER_MIN_IN_COLUMN = 3        # column members needed anywhere on the page ...
+SLIVER_MIN_IN_MARGIN = 2        # ... or this many inside the outer page zones
+SLIVER_MARGIN_FRAC = 0.15
+COLUMN_MIN_PIECES = 5           # narrow pieces of any height stacked in one column ...
+COLUMN_MIN_SPAN_H = 3.0         # ... over at least this x glyph height are also a broken rule
+ISOLATED_TINY_FRAC = 0.4        # a mark smaller than this x glyph size needs ink within ISOLATED_TINY_RADIUS glyphs
+ISOLATED_TINY_RADIUS = 1.2
+ISOLATED_MAX_FRAC = 0.8         # a component smaller than this x glyph size in both directions ...
+ISOLATED_RADIUS_GLYPHS = 2.5    # ... with no other component within this many glyphs is a stray mark (rule crossing,
+                                #     dust, dewarp speck); real dots and commas sit next to writing
 GLYPH_MAX_ASPECT = 4.0          # wider than this x its height is not a glyph (rule, bar, chained letters)
 GLYPH_MIN_H_FRAC = 0.4          # glyph candidates are at least this x the typical component height (not dots)
 GLYPH_MIN_H_PX = 5              # and at least this tall in pixels (rule remnants are 1-3 px)
@@ -143,6 +156,47 @@ def drop_texture_specks(comps: list[Component], med_char_w: float, med_h: float)
     if len(texture) > TEXTURE_MAX_DROP_FRAC * len(comps):
         return comps
     return [c for i, c in enumerate(comps) if i not in texture]
+
+
+def drop_rule_slivers(comps: list[Component], med_char_w: float, med_h: float, page_w: int) -> list[Component]:
+    """Remove pieces of a printed vertical rule (notebook margin line) that survived rule removal: narrow
+    pieces lined up in one column.  Tall slivers need three in a column (two inside the page margins);
+    pieces of any height need five spanning several line heights.  Big parentheses are thin and tall too
+    but never line up like that."""
+    narrow = [c for c in comps if c.w < SLIVER_MAX_W_FRAC * med_char_w and c.h >= c.w]
+    if len(narrow) < SLIVER_MIN_IN_MARGIN:
+        return comps
+    tol = 0.5 * med_char_w
+    drop: set[int] = set()
+    for c in narrow:
+        column = [o for o in narrow if abs(o.cx - c.cx) <= tol]
+        tall = [o for o in column if o.h >= SLIVER_MIN_H_FRAC * med_h and o.h >= SLIVER_MIN_ASPECT * o.w]
+        in_margin = c.cx <= SLIVER_MARGIN_FRAC * page_w or c.cx >= (1 - SLIVER_MARGIN_FRAC) * page_w
+        span = max(o.y1 for o in column) - min(o.y for o in column)
+        if (len(tall) >= SLIVER_MIN_IN_COLUMN or (in_margin and len(tall) >= SLIVER_MIN_IN_MARGIN)
+                or (len(column) >= COLUMN_MIN_PIECES and span >= COLUMN_MIN_SPAN_H * med_h)):
+            drop.update(id(o) for o in column)
+    return [c for c in comps if id(c) not in drop]
+
+
+def drop_isolated_specks(comps: list[Component], med_char_w: float, med_h: float) -> list[Component]:
+    """Remove lone marks far from any other ink (remnants of printed rule crossings, dust)."""
+    if len(comps) < 2:
+        return comps
+    pts = np.array([(c.cx, c.cy) for c in comps], dtype=np.float32)
+    radius = ISOLATED_RADIUS_GLYPHS * max(med_char_w, med_h)
+    small = np.array([c.w < ISOLATED_MAX_FRAC * med_char_w and c.h < ISOLATED_MAX_FRAC * med_h for c in comps])
+    tiny = np.array([c.w < ISOLATED_TINY_FRAC * med_char_w and c.h < ISOLATED_TINY_FRAC * med_h for c in comps])
+    if small.all():
+        return comps
+    anchors = pts[~small]   # a mark counts as writing only when glyph-sized ink is nearby (two stray dots do not)
+    tiny_radius = ISOLATED_TINY_RADIUS * max(med_char_w, med_h)
+    keep = []
+    for i, c in enumerate(comps):
+        limit = tiny_radius if tiny[i] else radius
+        if not small[i] or ((anchors - pts[i]) ** 2).sum(1).min() <= limit * limit:
+            keep.append(c)
+    return keep
 
 
 def split_tall_components(comps: list[Component], med_h: float) -> tuple[list[Component], list[Component]]:

@@ -49,11 +49,28 @@ def segment_mock(dewarped_path: str) -> dict:
     return _assemble(img, snapshot_id_from_path(dewarped_path), mock_regions(), mock_line_specs())
 
 
+RAW_PHOTO_SIZE_FACTOR = 1.25  # an image this much larger than T1's output long side is an undewarped camera frame
+
+
+def is_raw_photo(dewarped_path: str) -> bool:
+    """T1 passes the untouched camera frame through when it finds no page (quality.ok=False, 'no_page').
+    Its real outputs have long side ``page.output_long_side``; a far larger image is such a frame and
+    segmenting it only produces illegible scraps for T3 to spend model calls on."""
+    img = cv2.imread(str(dewarped_path), cv2.IMREAD_REDUCED_GRAYSCALE_8) if Path(dewarped_path).exists() else None
+    if img is None:
+        return False
+    long_side = 8 * max(img.shape[:2])
+    return long_side > RAW_PHOTO_SIZE_FACTOR * float(config_get("page.output_long_side", 2200))
+
+
 def _segment_guarded(dewarped_path: str, info: dict) -> dict:
     """Run the classical segmenter; never raise (the demo must not go dark on one bad frame)."""
     try:
         if info.get("method") == "mock":
             return segment_mock(dewarped_path)
+        if is_raw_photo(dewarped_path):
+            info["skipped"] = "raw_photo"
+            return {"regions": [], "lines": []}
         from layout.classical import segment_classical
 
         return segment_classical(dewarped_path)

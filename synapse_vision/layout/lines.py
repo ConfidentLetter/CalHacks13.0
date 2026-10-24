@@ -189,6 +189,8 @@ def merge_fragments(lines: list[Line], med_line_h: float, med_char_w: float, med
     while changed:
         changed = False
         for frag in sorted(lines, key=lambda l: l.width):
+            if frag not in lines:
+                continue
             fb = frag.bbox
             candidates = [
                 (_y_gap(fb, host.bbox), host)
@@ -200,7 +202,6 @@ def merge_fragments(lines: list[Line], med_line_h: float, med_char_w: float, med
                 host.comps = sorted(host.comps + frag.comps, key=lambda c: c.cx)
                 lines = [l for l in lines if l is not frag]
                 changed = True
-                break
     return lines
 
 
@@ -209,6 +210,8 @@ def _absorbs(host: Line, frag: Line, med_line_h: float, med_char_w: float, glyph
     host beside it and either overlaps it vertically or is a small mark sitting just above/below.
     The host height is measured locally so a sloping row never swallows the next row's glyphs."""
     fb = frag.bbox
+    if _x_gap(fb, host.bbox) > FRAGMENT_MAX_X_GAP_CHARS * med_char_w or _y_gap(fb, host.bbox) > med_line_h:
+        return False  # cheap bbox screen before the local measurement (every fragment visits every line)
     hb = _local_bbox(host, fb, FRAGMENT_LOCAL_CHARS * med_char_w)
     if hb[3] < FRAGMENT_HOST_MIN_RATIO * frag.height or _x_gap(fb, hb) > FRAGMENT_MAX_X_GAP_CHARS * med_char_w:
         return False
@@ -223,7 +226,7 @@ def _stacked(host: Line, frag: Line, med_char_w: float, glyph_h: float) -> bool:
     """A narrow group riding on its host (a tall exponent, a limit): inside the host's x-range, touching it,
     and not making it much taller.  A piece of the next row is wide or leaves a gap."""
     fb, hb_full = frag.bbox, host.bbox
-    if fb[2] > STACK_MAX_WIDTH_FRAC * hb_full[2]:
+    if fb[2] > STACK_MAX_WIDTH_FRAC * hb_full[2] or _y_gap(fb, hb_full) > 0:
         return False
     if fb[0] < hb_full[0] - med_char_w or fb[0] + fb[2] > hb_full[0] + hb_full[2] + med_char_w:
         return False
