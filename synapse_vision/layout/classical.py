@@ -8,7 +8,7 @@ import numpy as np
 
 from layout._compat import REPO_ROOT, config_get, timed
 from layout.binarize import binarize_page, to_gray
-from layout.components import drop_faint_components, find_components, fuse_fractions, median_component_size, speck_area
+from layout.components import drop_faint_components, find_components, fuse_fractions, median_component_size, speck_area, split_tall_components
 from layout.crops import snapshot_id_from_path, write_all_crops
 from layout.crossed_out import is_crossed_out
 from layout.debug import write_debug_overlay
@@ -51,17 +51,18 @@ def detect_lines(img: np.ndarray, gray: np.ndarray | None = None) -> tuple[list[
     with timed("layout.components") as info:
         comps = drop_faint_components(find_components(binary), gray, binary)
         med_char_w, med_comp_h = median_component_size(comps)
+        comps, tall = split_tall_components(comps, med_comp_h)
         comps = fuse_fractions(comps, binary, med_char_w, med_comp_h, W)
-        info["n_components"] = len(comps)
+        info["n_components"], info["n_tall"] = len(comps), len(tall)
     with timed("layout.group") as info:
-        lines = group_into_lines(comps, med_char_w)
+        lines = group_into_lines(comps, med_char_w, med_comp_h)
         med_line_h = max(median_line_height(lines), float(config_get("layout.min_line_height_px", 28)))
         lines = merge_fragments(lines, med_line_h, med_char_w)
         lines = split_columns(lines, med_line_h, med_char_w, W)
         lines = merge_duplicates(lines)
         lines = drop_noise_lines(lines, speck_area(binary.shape), float(config_get("layout.min_line_height_px", 28)))
         info["n_lines"] = len(lines)
-    return order_and_regionize(lines, med_char_w, med_line_h, W)
+    return order_and_regionize(lines, med_char_w, med_line_h, W, drawings=[t.bbox for t in tall])
 
 
 def segment_classical(dewarped_path: str) -> dict:

@@ -73,6 +73,11 @@ async def _run_pipeline(snapshot_path: str, source: str) -> dict:
         return twin
 
 
+async def analyze(snapshot_path: str, source: str = "upload") -> dict:
+    """Public entry for embedders (T5 bridge): still → twin, stored and broadcast on /events. Raises PipelineError."""
+    return await _run_pipeline(snapshot_path, source)
+
+
 async def _guarded(stage: str, coro):
     """Run a handler body; on failure broadcast a status message and return HTTP 500 instead of dying."""
     try:

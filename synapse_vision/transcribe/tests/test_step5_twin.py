@@ -1,4 +1,6 @@
 """Step 5: build_page_twin assembles a valid twin with stable ids and change events."""
+from pathlib import Path
+
 import pytest
 
 import transcribe.twin as twin_mod
@@ -124,3 +126,37 @@ def test_twin_latency_and_repo_relative_paths(fake_pipeline):
     assert twin["latency_ms"]["snapshot_to_twin"] == twin["latency_ms"]["total"] >= 0
     assert twin["image"]["original_path"] == "runtime/snapshots/upload_x.jpg"
     assert twin["image"]["dewarped_path"] == "runtime/snapshots/upload_x.jpg"
+
+
+@pytest.mark.parametrize("broken", ["_detect", "_segment", "transcribe_page", "match_to_previous"])
+def test_build_page_twin_never_raises(fake_pipeline, monkeypatch, broken):
+    def boom(*a, **k):
+        raise RuntimeError("boom in " + broken)
+
+    monkeypatch.setattr(twin_mod, broken, boom)
+    twin = twin_mod.build_page_twin("runtime/uploads/still.jpg", {"page_id": "page_keep", "lines": []})
+    assert twin_errors(twin) == []
+    assert twin["quality"]["ok"] is False and twin["lines"] == [] and "boom" in twin["_error"]
+    assert twin["page_id"] == "page_keep" and twin["latency_ms"]["snapshot_to_twin"] >= 0
+
+
+def test_absolute_and_relative_paths_both_work(fake_pipeline, tmp_path, monkeypatch):
+    import cv2
+    import numpy as np
+
+    seen = []
+    monkeypatch.setattr(twin_mod, "_detect", lambda p: (seen.append(p), {"dewarped_path": p, "width": 0, "height": 0,
+                                                                        "homography": twin_mod.IDENTITY,
+                                                                        "quality": {"ok": True, "issues": []}})[1])
+    uploads = twin_mod.REPO_ROOT / "runtime" / "uploads"
+    uploads.mkdir(parents=True, exist_ok=True)
+    img = uploads / "t3_test_still.jpg"
+    cv2.imwrite(str(img), np.full((300, 400, 3), 250, np.uint8))
+    try:
+        for given in (str(img), "runtime/uploads/t3_test_still.jpg"):
+            twin = twin_mod.build_page_twin(given)
+            assert twin_errors(twin) == [] and twin["image"]["original_path"] == "runtime/uploads/t3_test_still.jpg"
+            assert (twin["image"]["width"], twin["image"]["height"]) == (400, 300)
+        assert all(Path(p).is_absolute() for p in seen), "T1 always receives an absolute path"
+    finally:
+        img.unlink(missing_ok=True)

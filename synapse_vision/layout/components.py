@@ -15,7 +15,11 @@ SPECK_AREA_PER_PIXEL = 4e-6     # speck threshold = this x page area (≈15 px o
 SPECK_AREA_MIN = 6
 GIANT_FRAC = 0.9                # components this big are borders, not ink
 EDGE_BAND_FRAC = 0.02           # ink lying entirely within this outer band of the page is a dewarp border artifact
-FAINT_CONTRAST_FRAC = 0.5       # components lighter than this x the page's strong-ink contrast are bleed-through
+FAINT_CONTRAST_FRAC = 0.25      # components lighter than this x the page's strong-ink contrast are bleed-through
+FAINT_KEEP_ABS = 60             # ... and never drop anything with at least this much contrast (light pencil)
+TALL_COMP_FRAC = 5.0            # a component taller than this x the typical glyph height is drawing, not writing
+BAR_FLANK_FRAC = 0.75           # flank width (x bar width) checked beside a fraction stack ...
+BAR_FLANK_MAX_RATIO = 0.5       # ... ink there must be below this fraction of the stack's ink (else it is a text line)
 STRONG_INK_PERCENTILE = 90      # "strong ink" contrast = this percentile over components (bleed may outnumber ink)
 BAR_MIN_LEN_CHARS = 1.0         # a bar is a horizontal run at least this many char widths long
 BAR_MIN_LEN_PX = 12
@@ -93,18 +97,31 @@ def drop_faint_components(comps: list[Component], gray: np.ndarray, binary: np.n
     background = float(np.median(gray))
     contrasts = np.array([component_contrast(c, gray, binary, background) for c in comps])
     strong = float(np.percentile(contrasts, STRONG_INK_PERCENTILE))
-    keep = contrasts >= FAINT_CONTRAST_FRAC * strong
+    keep = (contrasts >= FAINT_CONTRAST_FRAC * strong) | (contrasts >= FAINT_KEEP_ABS)
     return [c for c, k in zip(comps, keep) if k]
 
 
+def split_tall_components(comps: list[Component], med_h: float) -> tuple[list[Component], list[Component]]:
+    """(writing-sized components, tall drawing components such as free-body diagrams and big circled answers)."""
+    limit = TALL_COMP_FRAC * med_h
+    return [c for c in comps if c.h <= limit], [c for c in comps if c.h > limit]
+
+
+def _area_weighted_median(values: np.ndarray, weights: np.ndarray) -> float:
+    order = np.argsort(values)
+    cum = np.cumsum(weights[order])
+    return float(values[order][np.searchsorted(cum, 0.5 * cum[-1])])
+
+
 def median_component_size(comps: list[Component]) -> tuple[float, float]:
-    """(median width, median height) of non-trivial components."""
+    """Typical glyph (width, height): medians weighted by ink area, so specks, dashes, grid pieces and
+    a paragraph of small print cannot outvote the handwriting that carries most of the ink."""
     if not comps:
         return 10.0, 10.0
     hs = np.array([c.h for c in comps], dtype=float)
     ws = np.array([c.w for c in comps], dtype=float)
-    big = hs >= np.percentile(hs, 40)
-    return float(np.median(ws[big])), float(np.median(hs[big]))
+    areas = np.array([c.area for c in comps], dtype=float)
+    return _area_weighted_median(ws, areas), _area_weighted_median(hs, areas)
 
 
 def union(comps: list[Component]) -> Component:
@@ -142,14 +159,20 @@ def _ink_rows(binary: np.ndarray, x0: int, x1: int, y0: int, y1: int) -> int:
 
 
 def _is_fraction_bar(bar: Component, binary: np.ndarray, med_h: float) -> bool:
-    """Ink directly above AND below the bar, inside the bar's own x-span."""
+    """Ink directly above AND below the bar inside its x-span, and little ink beside that stack
+    (a hyphen between two text lines has ink above and below too, but the flanks are full of text)."""
     reach = max(4, int(BAR_PROBE_FRAC * med_h))
     inset = int(0.1 * bar.w)
     x0, x1 = bar.x + inset, bar.x1 - inset
     need = BAR_MIN_STACK_INK * bar.w
     above = _ink_rows(binary, x0, x1, bar.y - reach, bar.y - 1)
     below = _ink_rows(binary, x0, x1, bar.y1 + 1, bar.y1 + reach)
-    return above >= need and below >= need
+    if above < need or below < need:
+        return False
+    flank = max(4, int(BAR_FLANK_FRAC * bar.w))
+    beside = (_ink_rows(binary, bar.x - flank, bar.x, bar.y - reach, bar.y1 + reach)
+              + _ink_rows(binary, bar.x1, bar.x1 + flank, bar.y - reach, bar.y1 + reach))
+    return beside <= BAR_FLANK_MAX_RATIO * (above + below)
 
 
 def _in_stack(bar: Component, c: Component, med_h: float) -> bool:

@@ -92,8 +92,30 @@ def _repo_relative(p: Path) -> str:
         return str(p.resolve())
 
 
+_frame_provider = None  # optional callable () -> snapshot path, installed by a process that owns the camera (T5 bridge)
+
+
+def set_frame_provider(fn) -> None:
+    """Let another module (T5's MJPEG streamer) supply stills so the camera is never opened twice.
+
+    `fn()` must return a repo-relative or absolute image path (a fresh full-resolution still), or raise.
+    Pass None to go back to capture.get_snapshot.
+    """
+    global _frame_provider
+    _frame_provider = fn
+
+
 def take_snapshot(source: str | None) -> str:
-    """T1 capture.get_snapshot, timed. Raises PipelineError('capture', ...)."""
+    """A fresh still: the installed frame provider if any, else T1 capture.get_snapshot. Raises PipelineError('capture', ...)."""
+    if _frame_provider is not None:
+        with telemetry.timed("capture.snapshot", source="frame_provider"):
+            try:
+                path = _frame_provider()
+            except Exception as exc:  # noqa: BLE001
+                raise PipelineError("capture", f"frame provider failed: {type(exc).__name__}: {exc}") from exc
+        if not path:
+            raise PipelineError("capture", "frame provider returned no frame")
+        return str(path)
     try:
         from capture.source import get_snapshot
     except Exception as exc:  # noqa: BLE001 - module missing or half-written

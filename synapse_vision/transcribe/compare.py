@@ -1,6 +1,7 @@
 """Compare two readings of the same line; build uncertain spans; compute confidence."""
 from __future__ import annotations
 
+import re
 from difflib import SequenceMatcher
 
 from transcribe.align import latex_key, reading_similarity, readings_equal
@@ -21,6 +22,44 @@ UNPLACED_UNCERTAIN_PENALTY = 0.03
 def readings_agree(a: dict, b: dict) -> bool:
     """Exact agreement after normalization. A single digit/sign difference is a disagreement."""
     return readings_equal(a, b)
+
+
+_SQUASH_DROP = re.compile(r"\\(?:cdot|times|,|;|!|quad|qquad|left|right|text|mathrm|displaystyle)|[{}$\s]")
+_SQUASH_CMD = re.compile(r"\\([A-Za-z]+)")
+
+
+def squash(s: str) -> str:
+    """Rough plain form shared by latex and prose: commands → their name, no braces/spaces, lower-case.
+    '\\frac' and '^' survive; this is only used to test whether math text sits inside the prose text."""
+    s = s.replace("\u00b7", "").replace("\u2212", "-").replace("\u2032", "'")
+    s = _SQUASH_DROP.sub("", s)
+    s = _SQUASH_CMD.sub(lambda m: m.group(1), s)
+    s = re.sub(r"[·*]", "", s)
+    return s.lower()
+
+
+def latex_in_text(reading: dict) -> bool | None:
+    """For a prose+math line: does the extracted latex appear contiguously inside the verbatim text?
+    None when there is nothing to check (no latex or no text)."""
+    latex, text = (reading.get("latex") or "").strip(), (reading.get("text") or "").strip()
+    if not latex or not text:
+        return None
+    return squash(latex) in squash(text)
+
+
+def text_consistent_choice(line_r: dict, page_r: dict) -> str | None:
+    """Both readings transcribe the same prose but extracted different math from it: the disagreement is
+    about extraction, not ink. Return 'A'/'B' when exactly one extraction is consistent with the prose."""
+    if (line_r.get("text") or "").split() != (page_r.get("text") or "").split():
+        return None
+    if same_latex(line_r, page_r):
+        return None
+    a, b = latex_in_text(line_r), latex_in_text(page_r)
+    if a is True and b is False:
+        return "A"
+    if b is True and a is False:
+        return "B"
+    return None
 
 
 def same_latex(a: dict, b: dict) -> bool:

@@ -9,6 +9,15 @@
 - **T4 (reply to H+2 relay):** done — `latency_ms.snapshot_to_twin` is set in the twin (equals `latency_ms.total`); incremental reads log under stage `transcribe.incremental` (`new_lines`, `rereads`, `page_pass`); every line now carries `crop_path`, `context_crop_path`, `readings`, `reread` (top-level, with `zoom_path` and `candidates` A/B) and `latency_ms` (`page_pass`, `line_pass`, `reread`, `crossed_out` per call). All paths are repo-relative (`runtime/crops/...`, `runtime/debug/zoom/...`).
 - **T1 (reply H+5):** confirmed — `synthetic_demo.jpg` now gives `quality.ok=True, issues=[]`; no confidence cap; demo twin lines at 0.92 except the flagged one.
 - **T4 (reply H+5, prime misread):** root cause found in `eval/runs/20261024T125407/synthetic_demo_mat.twin.json`: both passes said `kind=mixed` with identical `text`, so my mixed-line comparison (text only) called `f(x)=x^{\wedge}2\sin x` vs `f'(x)=x^2\sin x` an agreement and skipped the re-read. Fixed: whenever either reading has latex, the normalized latex must be identical to count as agreement; otherwise re-read + diff spans; the page reading gets at most 0.72 unless its latex is identical to the line pass; if the re-read answers "neither" with a reading that matches neither candidate, the line pass is kept at 0.55 with every differing span flagged (live: the re-read had dropped the `=`). Regression tests cover the exact H+5 case. Please re-run `eval/run_eval.py` (expect L0 = `f(x)=x^{\wedge}2\sin x` or `x^2`, confidence 0.55–0.78, flagged span on the prime).
+- **T5 (H+6):** `transcribe.build_page_twin(path, previous_twin=None)` accepts repo-relative or absolute paths (T1 always gets an absolute path; the twin's `image.*_path` fields are repo-relative, e.g. `runtime/uploads/<id>.jpg`). It never raises: on any failure it returns a schema-valid twin with `quality.ok=False`, `issues=["no_page"]`, `lines=[]`, and `_error="<Stage>: <message>"` (tests cover T1/T2/T3/matching each blowing up). Pass the previous twin back as `previous_twin` to get stable ids + the crop cache. Measured on a 4-line page, 1600 px JPEG under `runtime/uploads/` (every number is wall time of one `build_page_twin` call):
+
+  | state | quiet API (most of today) | slow API (last 2 h) |
+  |---|---|---|
+  | fresh page, 4 lines | 8–9 s | 39–52 s |
+  | one new/changed line (previous_twin given) | 4.5 s | 8.5 s |
+  | unchanged page | 0.1–0.3 s | 0.3 s |
+
+  Per model call the SDK timeout is 60 s (`transcribe.call_timeout_s`), so a single hung call can hold a snapshot for up to 60 s before that line degrades; your 60 s analyze timeout is the right order, and the twin is still valid when I return late. Keep `/api/camera/analyze` callers aware that the first snapshot of a page is the expensive one.
 - **T4 eval:** `runtime/debug/verbatim_guard.jsonl` records every line where the two readings disagreed and one was mathematically "nicer" (`nicer`, `reread_choice`, `final`, `chosen_is_nicer`). Count `chosen_is_nicer: true` as the risky cases.
 - **T1:** I call `capture.page.tile(dewarped_path)` for the page pass; if it raises or returns `[]` I send the whole page as one tile.
 
@@ -22,6 +31,7 @@
 - Structured outputs are on (`output_config.format`); the API prefix cache is per call kind (line/page/reread/crossed-out), so the first call of each kind after a restart pays a cache write.
 
 ## Log
+- H+7: T5 relay — `build_page_twin` never raises (`_error` twin), path normalization, latency table for T5; mixed-line rule: when both passes agree on the prose but extract different math, the extraction that occurs contiguously in the prose wins without a re-read (the zoomed re-read was guessing on prose lines). 85 tests.
 - H+6: H+5 relay adapted — strict latex agreement (prime misread), three-way re-read rule, `parse_ok` on continuation lines, SDK timeout, test + NOTES cleanup; 79 tests / 224 repo-wide. Live demo page correct but 51 s under current API latency.
 - H+5: H+2 relay from T4/Henry adapted — per-line `latency_ms` + `reread`, `transcribe.incremental` stage, `snapshot_to_twin`. 72 tests.
 - H+4.5: code review pass — fixed: agreement is now exact after normalization (a single digit/sign difference always re-reads and flags the span; similarity threshold only picks the fallback confidence), failed model calls are never cached and never overwrite a good previous reading, `\left`/`\leq` no longer break `parse_ok`, bigger max_tokens under adaptive thinking (tiny calls were truncating), page reading used when a line pass fails, kind-mismatch comparison, new-page decision before any carry-over, SymPy under a 3 s timeout, oversized tiles downscaled, malformed T2 lines tolerated, zoom crops go to `runtime/debug/zoom/`. 70 tests.

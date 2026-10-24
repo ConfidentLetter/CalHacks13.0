@@ -22,6 +22,7 @@ class Plan:
     agree: bool
     needs_reread: bool
     near: bool = False
+    forced: str | None = None  # 'A'/'B' decided without a re-read (prose-consistency rule)
     notes: list[str] = field(default_factory=list)
 
 
@@ -30,11 +31,14 @@ def plan(line_r: dict | None, page_r: dict | None, *, threshold: float, tall: bo
         return Plan(line_r, page_r, agree=False, needs_reread=False, notes=["single_pass"])
     agree = compare.readings_agree(line_r, page_r)
     near = (not agree) and compare.readings_near(line_r, page_r, threshold)
-    needs = (not agree) or has_fraction(line_r, page_r) or tall
+    forced = None if agree else compare.text_consistent_choice(line_r, page_r)
+    needs = ((not agree) and forced is None) or has_fraction(line_r, page_r) or tall
     notes = [] if agree else (["near_disagree"] if near else ["disagree"])
+    if forced:
+        notes.append(f"prose_consistency_{forced}")
     if agree and needs:
         notes.append("fraction_or_tall_recheck")
-    return Plan(line_r, page_r, agree=agree, needs_reread=needs, notes=notes, near=near)
+    return Plan(line_r, page_r, agree=agree, needs_reread=needs, notes=notes, near=near, forced=forced)
 
 
 def _is_blank(r: dict) -> bool:
@@ -55,6 +59,13 @@ def finalize(p: Plan, rr: dict | None, *, context: list[str], order: int, qualit
         return _result(only, conf, spans, p, rr, quality_issues, small_crop, unplaced=unplaced)
 
     other_latex = page_r.get("latex") or ""
+    if p.forced and not p.needs_reread:
+        final = line_r if p.forced == "A" else page_r
+        conf = compare.CONF_REREAD_PICKED_LINE if p.forced == "A" else compare.CONF_REREAD_PICKED_PAGE
+        mspans, unplaced = compare.model_spans(final)
+        other = page_r if p.forced == "A" else line_r
+        spans = compare.merge_spans(mspans, compare.diff_spans(final.get("latex") or "", other.get("latex") or ""))
+        return _result(final, conf, spans, p, rr, quality_issues, small_crop, unplaced=unplaced, notes=list(p.notes))
     if not p.needs_reread:
         s1, u1 = compare.model_spans(line_r)
         s2, _ = compare.model_spans(page_r)

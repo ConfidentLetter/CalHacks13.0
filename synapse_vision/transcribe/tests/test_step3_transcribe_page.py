@@ -263,3 +263,19 @@ def test_reread_neither_cannot_outvote_both_passes(fake):
     fake.reread_own = {"latex": "f'(x)=x^{2}\\sin x", "text": "", "kind": "mixed", "illegible": False, "uncertain": []}
     line = _run(fake)[NAMES.index("ex_text_line")]
     assert line["latex"] == "f'(x)=x^{2}\\sin x" and "reread_neither_matches_B" in line["readings"]["notes"]
+
+
+def test_mixed_line_extraction_disagreement_is_settled_by_the_prose(fake):
+    """Both passes transcribe 'Find f'(x) if f(x) = x^2 sin x'; only f(x)=x^2 sin x occurs contiguously in it."""
+    from transcribe import compare
+
+    a = {"latex": "f(x)=x^{2}\\sin x", "text": "Find f'(x) if f(x) = x^2 sin x", "kind": "mixed", "illegible": False, "uncertain": []}
+    b = {**a, "latex": "f'(x)=x^{2}\\sin x"}
+    assert compare.text_consistent_choice(a, b) == "A" and compare.text_consistent_choice(b, a) == "B"
+    assert compare.text_consistent_choice(a, {**a, "text": "different prose"}) is None
+    fake.page_override[TEXT_LINE] = b
+    fake.reread_choice = "B"  # a zoomed re-read would have guessed wrong; it must not be consulted
+    line = _run(fake)[NAMES.index("ex_text_line")]
+    assert line["latex"] == "f(x)=x^{2}\\sin x" and 0.7 <= line["confidence"] <= 0.8
+    assert "prose_consistency_A" in line["readings"]["notes"] and TEXT_LINE not in {x[0] for x in fake.reread_args}
+    assert any(s["alternatives"] == ["'"] for s in line["uncertain_spans"])

@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from transcribe.compat import REPO_ROOT, Timer, cfg, log
-from transcribe.ids import new_snapshot_id, now_iso
+from transcribe.ids import new_page_id, new_snapshot_id, now_iso
 from transcribe.ink import resolve
 from transcribe.matching import match_to_previous
 from transcribe.page import transcribe_page
@@ -76,11 +76,42 @@ def _rel(path: str) -> str:
 
 def build_page_twin(snapshot_path: str, previous_twin: dict | None = None) -> dict:
     """Full pipeline: T1 detect_and_dewarp -> T2 segment -> transcribe_page -> match lines to previous_twin
-    (stable ids, changes.added/edited/removed/crossed_out, first_seen/last_changed) -> validate against page_twin.schema.json."""
+    (stable ids, changes.added/edited/removed/crossed_out, first_seen/last_changed) -> validate against page_twin.schema.json.
+
+    Accepts a repo-relative or absolute path. Never raises: any failure yields a schema-valid twin with
+    quality.ok=False, no lines, and `_error` naming the stage (T5/T4 serve it instead of a 500)."""
     t0 = time.perf_counter()
+    try:
+        return _build(str(resolve(str(snapshot_path))), snapshot_path, previous_twin, t0)
+    except Exception as exc:  # noqa: BLE001 - the pipeline must never take the server down
+        log("transcribe.build", (time.perf_counter() - t0) * 1000.0, error=f"{type(exc).__name__}: {exc}")
+        return _error_twin(str(snapshot_path), previous_twin, f"{type(exc).__name__}: {exc}", t0)
+
+
+def _error_twin(snapshot_path: str, previous_twin: dict | None, error: str, t0: float) -> dict:
+    w, h = _image_size(snapshot_path)
+    ms = round((time.perf_counter() - t0) * 1000.0, 1)
+    twin = {
+        "page_id": (previous_twin or {}).get("page_id") or new_page_id(),
+        "snapshot_id": new_snapshot_id(),
+        "captured_at": now_iso(),
+        "source": _source_for(snapshot_path),
+        "image": {"original_path": _rel(snapshot_path), "dewarped_path": _rel(snapshot_path),
+                  "width": w, "height": h, "homography": IDENTITY},
+        "quality": {"ok": False, "issues": ["no_page"], "blur_score": 0.0, "glare_fraction": 0.0},
+        "regions": [],
+        "lines": [],
+        "changes": {"added": [], "edited": [], "removed": [], "crossed_out": []},
+        "latency_ms": {"total": ms, "snapshot_to_twin": ms},
+        "_error": error,
+    }
+    return validate_twin(twin)
+
+
+def _build(abs_path: str, snapshot_path: str, previous_twin: dict | None, t0: float) -> dict:
     latency: dict[str, float] = {}
     with Timer("transcribe.build.page") as t:
-        page = _detect(snapshot_path)
+        page = _detect(abs_path)
     latency["page"] = round(t.ms, 1)
     quality = page["quality"]
     with Timer("transcribe.build.layout") as t:

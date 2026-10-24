@@ -72,14 +72,20 @@ def _region(rid: int, rtype: str, lines: list[Line]) -> dict:
     return {"id": f"R{rid}", "type": rtype, "bbox": [xs0, ys0, xs1 - xs0, ys1 - ys0]}
 
 
-def order_and_regionize(lines: list[Line], med_char_w: float, med_line_h: float, page_w: int) -> tuple[list[dict], list[dict]]:
-    """Returns (regions, ordered line specs [{bbox, region_id}])."""
+def _bbox_region(rid: int, rtype: str, bbox: list[int]) -> dict:
+    return {"id": f"R{rid}", "type": rtype, "bbox": [int(v) for v in bbox]}
+
+
+def order_and_regionize(lines: list[Line], med_char_w: float, med_line_h: float, page_w: int,
+                        drawings: list[list[int]] | None = None) -> tuple[list[dict], list[dict]]:
+    """Returns (regions, ordered line specs [{bbox, region_id}]). ``drawings`` = bboxes of tall non-text components."""
     diagrams = [l for l in lines if l.height > DIAGRAM_MIN_HEIGHT_LINES * med_line_h]
     text_lines = [l for l in lines if l not in diagrams]
+    diagram_boxes = [d.bbox for d in diagrams] + list(drawings or [])
     regions: list[dict] = []
     specs: list[dict] = []
     if not text_lines:
-        regions.extend(_region(i, "diagram", [d]) for i, d in enumerate(diagrams))
+        regions.extend(_bbox_region(i, "diagram", b) for i, b in enumerate(diagram_boxes))
         return regions, specs
 
     columns = cluster_columns(text_lines, med_char_w)
@@ -97,5 +103,5 @@ def order_and_regionize(lines: list[Line], med_char_w: float, med_line_h: float,
             rtype = "margin" if _is_margin(col, main, page_w) else "work"
             regions.append(_region(len(regions), rtype, col.lines))
             specs.extend({"bbox": l.bbox, "region_id": regions[-1]["id"]} for l in col.lines)
-    regions.extend(_region(len(regions) + i, "diagram", [d]) for i, d in enumerate(diagrams))
+    regions.extend(_bbox_region(len(regions) + i, "diagram", b) for i, b in enumerate(diagram_boxes))
     return regions, specs

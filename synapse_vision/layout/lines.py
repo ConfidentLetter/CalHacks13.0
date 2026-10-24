@@ -13,19 +13,20 @@ import numpy as np
 from layout.components import Component, union
 
 ATTACH_MIN_OVERLAP = 0.40      # of the smaller height
-ATTACH_MAX_GAP_CHARS = 3.0     # horizontal gap (in median char widths) to still attach
+ATTACH_MAX_GAP_CHARS = 3.0     # horizontal gap (in median char widths) to still attach ...
+ATTACH_MAX_GAP_BANDS = 1.5     # ... or in multiples of the line's own band height (big handwriting on a page of small print)
+BAND_MAX_COMP_H_FRAC = 2.0     # components taller than this x glyph height never define a band (fractions, arrows)
 BAND_MEMORY = 6                # components that define the running band
 FRAGMENT_MAX_HEIGHT_FRAC = 0.6 # of median line height
 FRAGMENT_MERGE_GAP_FRAC = 0.6  # vertical gap (of median line height) to merge a fragment
 FRAGMENT_MAX_X_GAP_CHARS = 1.0 # fragment may sit this far beside its line horizontally
-STACK_MAX_WIDTH_FRAC = 0.6     # a stacked piece is at most this wide relative to its host ...
-STACK_MERGE_GAP_FRAC = 0.25    # ... and at most this far (of median line height) above/below it
 SPLIT_GAP_CHARS = 3.0          # horizontal whitespace that may split a line ...
 SPLIT_MIN_DY_FRAC = 0.5        # ... when baselines differ by this much (of line height)
 MARGIN_ZONE_FRAC = 0.2         # outer page zones where a gapped part is a margin note
 MIN_LINE_AREA_SPECKS = 3       # single-component lines below this many specks are noise
 MIN_LINE_HEIGHT_FRAC = 0.25    # a line thinner than this x layout.min_line_height_px is a rule/underline remnant
-DUPLICATE_MIN_Y_OVERLAP = 0.5  # x-overlapping lines sharing this much height are duplicates
+DUPLICATE_MIN_Y_OVERLAP = 0.5  # x-overlapping lines sharing this much height are duplicates ...
+DUPLICATE_MAX_HEIGHT_RATIO = 2 # ... when they are the same kind of line (a tall blob never swallows a line)
 
 
 class Line:
@@ -61,10 +62,13 @@ class Line:
     def x1(self) -> int:
         return self.bbox[0] + self.bbox[2]
 
+    band_max_h: float = float("inf")  # components taller than this do not define the band (set per page)
+
     @property
     def band(self) -> tuple[int, int]:
         recent = self.comps[-BAND_MEMORY:]
-        return min(c.y for c in recent), max(c.y1 for c in recent)
+        typical = [c for c in recent if c.h <= self.band_max_h] or recent
+        return min(c.y for c in typical), max(c.y1 for c in typical)
 
     @property
     def height(self) -> int:
@@ -84,18 +88,21 @@ def _overlap_fraction(c: Component, band: tuple[int, int]) -> float:
     return _overlap_px(c, band) / smaller
 
 
-def group_into_lines(comps: list[Component], med_char_w: float) -> list[Line]:
+def group_into_lines(comps: list[Component], med_char_w: float, med_comp_h: float | None = None) -> list[Line]:
     lines: list[Line] = []
-    max_gap = ATTACH_MAX_GAP_CHARS * med_char_w
+    if med_comp_h is not None:
+        Line.band_max_h = BAND_MAX_COMP_H_FRAC * med_comp_h
     for c in sorted(comps, key=lambda c: c.cx):
         best, best_px = None, 0
         for line in lines:
+            band = line.band
+            max_gap = max(ATTACH_MAX_GAP_CHARS * med_char_w, ATTACH_MAX_GAP_BANDS * (band[1] - band[0]))
             if c.x - line.x1 > max_gap:
                 continue
             # eligible when the overlap is a decent share of the smaller height; ranked by
             # absolute overlap so a tiny band (an apostrophe, a dot) cannot win every glyph
-            px = _overlap_px(c, line.band)
-            if _overlap_fraction(c, line.band) >= ATTACH_MIN_OVERLAP and px > best_px:
+            px = _overlap_px(c, band)
+            if _overlap_fraction(c, band) >= ATTACH_MIN_OVERLAP and px > best_px:
                 best, best_px = line, px
         if best is None:
             lines.append(Line([c]))
@@ -141,13 +148,15 @@ def merge_fragments(lines: list[Line], med_line_h: float, med_char_w: float) -> 
 
 
 def _absorbs(host: Line, frag: Line, med_line_h: float, med_char_w: float) -> bool:
+    """A fragment (exponent, subscript, dot, underline) is much shorter than its host and sits on or
+    beside it. Real lines overlap vertically by a few px and tight print lines differ by 1-2 px in
+    height, so both tests are relative to the host's OWN height, never to the page median."""
     hb, fb = host.bbox, frag.bbox
     x_gap, y_gap = _x_gap(fb, hb), _y_gap(fb, hb)
-    short_piece = (frag.height < FRAGMENT_MAX_HEIGHT_FRAC * med_line_h and host.height > frag.height
-                   and x_gap <= FRAGMENT_MAX_X_GAP_CHARS * med_char_w and y_gap < FRAGMENT_MERGE_GAP_FRAC * med_line_h)
-    inside = fb[0] >= hb[0] - med_char_w and fb[0] + fb[2] <= hb[0] + hb[2] + med_char_w
-    stacked_piece = (frag.width <= STACK_MAX_WIDTH_FRAC * host.width and inside and y_gap < STACK_MERGE_GAP_FRAC * med_line_h)
-    return short_piece or stacked_piece
+    scale = min(float(host.height), med_line_h)  # small print and big handwriting share one page
+    return (frag.height < FRAGMENT_MAX_HEIGHT_FRAC * host.height
+            and x_gap <= FRAGMENT_MAX_X_GAP_CHARS * med_char_w
+            and y_gap < FRAGMENT_MERGE_GAP_FRAC * scale)
 
 
 def _in_margin_zone(bbox: list[int], page_w: int) -> bool:
@@ -188,7 +197,8 @@ def merge_duplicates(lines: list[Line]) -> list[Line]:
             for b in lines[i + 1:]:
                 ab, bb = a.bbox, b.bbox
                 y_ov = min(ab[1] + ab[3], bb[1] + bb[3]) - max(ab[1], bb[1])
-                if _x_gap(ab, bb) < 0 and y_ov >= DUPLICATE_MIN_Y_OVERLAP * min(ab[3], bb[3]):
+                same_scale = max(ab[3], bb[3]) <= DUPLICATE_MAX_HEIGHT_RATIO * max(1, min(ab[3], bb[3]))
+                if _x_gap(ab, bb) < 0 and same_scale and y_ov >= DUPLICATE_MIN_Y_OVERLAP * min(ab[3], bb[3]):
                     a.comps = sorted(a.comps + b.comps, key=lambda c: c.cx)
                     lines = [l for l in lines if l is not b]
                     merged = True

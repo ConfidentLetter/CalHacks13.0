@@ -90,3 +90,18 @@ SV_MOCK=1 uvicorn app.server:app --host 0.0.0.0 --port 8000      # mock
 uvicorn app.server:app --host 0.0.0.0 --port 8000                 # real
 python -m app.server --watch                                      # real + auto-snapshot on scene settle
 ```
+
+## Embedding the app (T5 bridge)
+
+`app.server` imports without side effects: no camera is opened, no model is loaded, no port is bound (`pytest app/tests/test_bridge_api.py` checks this). Extend it instead of forking it:
+
+```python
+from app.server import app as vision_app, analyze     # analyze(path, source) -> twin; stores + broadcasts on /events
+from app import bridge_api, pipeline
+bridge_api.latest_twin()        # dict | None — same object as GET /twin/latest
+bridge_api.latest_snapshot()    # {snapshot_id, captured_at, source, path, dewarped_path, image_url, quality, line_count, mock}
+bridge_api.latest_frame_path()  # newest still under runtime/snapshots/, analysed or not
+pipeline.set_frame_provider(fn) # fn() -> image path; then POST /snapshot uses YOUR frames instead of opening the camera
+```
+
+Camera ownership: T4's server never keeps the camera open — each `POST /snapshot` calls `capture.get_snapshot`, which opens and releases the device, and the watch loop calls `capture.wait_for_stable` the same way. If the bridge streams MJPEG and holds the device, install a frame provider so `/snapshot` and the watch loop read your latest still instead of fighting for the device.

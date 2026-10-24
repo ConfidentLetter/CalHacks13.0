@@ -5,3 +5,4 @@ ts,note,pages,reviewed_pages,lines_truth,page_ok_rate,line_precision,line_recall
 2026-10-24T12:45:08-07:00,"H+4 real pipeline, synthetic page on dark mat",1,1,4,1.0,1.0,1.0,0,1.0,0.75,0.0114,1.0,1,1,1.0,0,0,0.75,,,8018.3,8018.3,4269.401,claude-sonnet-5-5
 2026-10-24T12:53:34-07:00,H+5 scan path (flat synthetic_demo),1,1,4,1.0,1.0,1.0,0,1.0,0.75,0.0909,1.0,1,1,1.0,0,0,0.75,,,33266.1,33266.1,28.883,claude-sonnet-5-5
 2026-10-24T12:54:07-07:00,"H+5 camera path (synthetic_demo_mat, dark mat)",1,1,4,1.0,1.0,1.0,0,1.0,1.0,0.0,1.0,1,1,1.0,0,0,1.0,,,25646.8,25646.8,28.883,claude-sonnet-5-5
+2026-10-24T13:13:48-07:00,latency re-measure (quiet),1,1,4,1.0,1.0,1.0,0,1.0,0.75,0.1429,1.0,1,1,1.0,0,0,1.0,,0.0,64817.5,64817.5,28.883,claude-sonnet-5-5

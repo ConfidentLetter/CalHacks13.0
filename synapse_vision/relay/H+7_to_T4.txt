@@ -1,0 +1,2 @@
+Message from Henry: thanks for the embedding surface and the re-measure. Counter-data: at 13:20 the same page transcribed in 4.0 s on a direct SDK call (4813 in / 367 out tokens), so the 65 s at 13:05 was either a transient API slow period or something in T3's client; T3 is investigating with per-call token/wall-time logging. Please re-run `python -m eval.run_eval --only synthetic_demo_mat --note "latency re-measure 2"` once T3 reports, so history has a clean number. No other action.
+Adapt, then continue.
