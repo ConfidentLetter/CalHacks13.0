@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Synapse</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img src="icons/icon32.png" alt="" width="28" height="28" />
+        <div>
+          <p class="brand-name">Synapse</p>
+          <p class="brand-sub">reading tracker</p>
+        </div>
+      </div>
+      <span class="conn" id="conn" role="status">
+        <span class="dot idle" id="conn-dot"></span><span id="conn-text">Checking…</span>
+      </span>
+    </header>
+
+    <!-- First-run consent -->
+    <section class="card consent" id="consent" hidden>
+      <h2>before you start</h2>
+      <ul>
+        <li>Only sites <strong>you approve</strong> are tracked.</li>
+        <li>A page is saved after ~30s of <strong>active</strong> reading (tab visible, focused, you’re interacting).</li>
+        <li>Passwords, form fields, messages and login/checkout pages are <strong>never</strong> read.</li>
+        <li>Page text stays on this device unless you turn on text sharing.</li>
+      </ul>
+      <button class="btn primary block" id="consent-btn" type="button">I understand — enable tracking</button>
+    </section>
+
+    <main id="main">
+      <!-- Current site -->
+      <section class="card">
+        <div class="site">
+          <img id="site-icon" class="favicon" alt="" width="32" height="32" />
+          <div class="site-text">
+            <p class="site-title" id="site-title">—</p>
+            <p class="site-host" id="site-host"></p>
+          </div>
+        </div>
+        <p class="site-status" id="site-status"></p>
+        <button class="btn secondary block" id="site-action" type="button" hidden></button>
+      </section>
+
+      <!-- Timer -->
+      <section class="card timer" aria-live="polite">
+        <div class="timer-row">
+          <div>
+            <p class="label">Active reading</p>
+            <p class="time" id="timer">0:00</p>
+          </div>
+          <span class="pill" id="timer-state">Not tracking</span>
+        </div>
+        <div class="bar" role="progressbar" aria-label="Progress to saving this page" aria-valuemin="0" aria-valuemax="100" id="bar">
+          <span id="bar-fill"></span>
+        </div>
+        <p class="hint" id="timer-hint"></p>
+      </section>
+
+      <!-- Page snapshots -->
+      <section class="card shots" aria-live="polite">
+        <div class="shots-head">
+          <div>
+            <p class="label">page snapshots</p>
+            <p class="shots-status" id="shots-status">off</p>
+          </div>
+          <button class="btn secondary" id="shots-toggle" type="button">Turn on</button>
+        </div>
+        <img id="shot-thumb" class="shot-thumb" alt="Latest page snapshot" hidden />
+        <div class="shots-foot">
+          <span id="shots-count">0 stored on this device</span>
+          <button class="link" id="shots-delete" type="button">Delete snapshots</button>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button class="btn primary" id="toggle-tracking" type="button">Pause tracking</button>
+        <button class="btn secondary" id="save-page" type="button">Save Current Page</button>
+        <button class="btn ghost span2" id="open-dashboard" type="button">Open Dashboard ↗</button>
+      </div>
+
+      <p class="message" id="message" role="status"></p>
+
+      <footer class="stats">
+        <span id="stats">0 saved · 0 pending</span>
+        <button class="link" id="sync-now" type="button">Sync now</button>
+      </footer>
+
+      <details class="card settings">
+        <summary>Settings &amp; privacy</summary>
+        <label class="row">
+          <span>
+            <strong>Share page text with backend</strong>
+            <small>Off: only title, URL, and time are uploaded.</small>
+          </span>
+          <input type="checkbox" id="share-text" />
+        </label>
+        <label class="field">
+          <span>Save a page after <strong id="min-reading-value">5s</strong> of active reading</span>
+          <input type="range" id="min-reading" min="1" max="10" step="1" value="5" />
+        </label>
+        <label class="field">
+          <span>Snapshot every</span>
+          <select id="shot-interval">
+            <option value="10">10 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </label>
+        <label class="row">
+          <span>
+            <strong>Upload snapshots to backend</strong>
+            <small>Off: snapshots stay on this device (last 20 kept).</small>
+          </span>
+          <input type="checkbox" id="upload-shots" />
+        </label>
+        <label class="field">
+          <span>Backend URL</span>
+          <input type="url" id="backend-url" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Dashboard URL</span>
+          <input type="url" id="dashboard-url" spellcheck="false" />
+        </label>
+        <div class="field">
+          <span>Allowed websites — only these are ever tracked</span>
+          <ul id="site-list" class="site-list"></ul>
+          <form id="add-site-form" class="add-site">
+            <label for="add-site" class="sr-only">Add a website</label>
+            <input id="add-site" type="text" placeholder="notion.so or https://…" spellcheck="false" autocomplete="off" />
+            <button class="btn secondary" type="submit">Allow</button>
+          </form>
+          <small class="scope-note">Each entry covers that domain and its subdomains (e.g. canva.com → www.canva.com).</small>
+          <button class="btn ghost quick-add" id="add-canvas" type="button">+ Canvas (instructure.com)</button>
+        </div>
+        <p class="note">
+          <strong>PDFs:</strong> Chrome’s built-in PDF viewer doesn’t let extensions read the document text. For PDFs,
+          Synapse records only the title, URL, and reading time. Snapshots only capture the tab you’re looking at —
+          Chrome doesn’t let extensions photograph background tabs. Grade, inbox, profile, and quiz-taking pages are never
+          captured. Local <code>file://</code> PDFs also need “Allow access to
+          file URLs” in chrome://extensions.
+        </p>
+        <button class="btn danger block" id="delete-all" type="button">Delete all stored data</button>
+      </details>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
