@@ -92,11 +92,12 @@ async def _guarded(stage: str, coro):
 async def twin_latest():
     twin = store.latest()
     if twin is None:
+        twin = pipeline.mock_twin()
         if pipeline.is_mock():
-            twin = pipeline.mock_twin()
             store.save(twin)
         else:
-            return JSONResponse(events.status("store", error="no twin yet — POST /snapshot or /upload", ok=False), 404)
+            # Real mode before the first snapshot: keep the hand-off alive with the mock, clearly flagged (not stored).
+            twin["_fallback"] = "no real twin yet — POST /snapshot or /upload; serving mock"
     return twin
 
 

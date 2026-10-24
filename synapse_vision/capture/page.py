@@ -95,10 +95,11 @@ def detect_and_dewarp(snapshot_path: str) -> dict:
                 info["ok"] = False
                 return _result(repo_relative(snapshot_path), frame.shape[1], frame.shape[0], IDENTITY, quality,
                                detection={"method": det.method, "quad": None})
+            flat = det.method == "flat"
             with timed("capture.dewarp"):
-                dw = dewarp(frame, det.quad)
+                dw = dewarp(frame, det.quad, flat=flat)
             with timed("capture.quality"):
-                quality = assess(frame, dw.quad, dw.raw_gray, dw.gray)
+                quality = assess(frame, dw.quad, dw.raw_gray, dw.gray, flat=flat)
             color_path, gray_path = _save_outputs(stem, dw)
         except Exception as exc:  # noqa: BLE001 - contract: never raise
             log("capture.page_error", (time.perf_counter() - t0) * 1000, error=f"{type(exc).__name__}: {exc}")

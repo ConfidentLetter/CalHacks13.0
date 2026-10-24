@@ -1,6 +1,6 @@
 # HANDOFF — 给接手的 AI（GPT / Claude / 人）
 
-> 最后更新：2026-10-24 03:15 PT（Cal Hacks 13.0 现场，H+4；凌晨额度耗尽暂停过一段）。由 Henry 的 Claude Code integrator 会话维护。
+> 最后更新：2026-10-24 12:45 PT（Cal Hacks 13.0 现场，H+5）。由 Henry 的 Claude Code integrator 会话维护。
 > 读完这份文件 + `prompts/RUNSHEET.md` + `head -5 NOTES_T*.md`，你就能接着当 integrator。
 
 ## 项目一句话
@@ -21,7 +21,7 @@ Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「p
 | T1 | Steps 1–4 全完成（检测/去畸变/质量门/tiling，合成 100/100） | Step 5 在真实照片上调参 |
 | T2 | Steps 1–4 全完成（行分割 + 划掉检测，合成 49/52 命中、0 误报） | Step 6 真实页调参 |
 
-全量 `pytest -q`：206 通过（T4 有 1 个写死预算值的测试需改成读 config）。
+全量 `pytest -q`：214 通过，1 失败（T3 test_step5_twin 对 T1 平页尺寸写死 600，已传话）（T4 有 1 个写死预算值的测试需改成读 config）。
 
 ## 已做的整合者决策
 - `budget_ms` 提到首次 15 s / 增量 8 s（Sonnet 5.5 单次往返 4–9 s，旧值不可达）。
@@ -30,9 +30,9 @@ Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「p
 - `eval/runs/` git-ignore。模型保持 `claude-sonnet-5-5`；演示嫌慢再试 haiku。
 
 ## 已知问题 / 待传话（见 relay/H+2_*.txt）
-- T1：平整白纸（无深色垫）被判 `no_page`、glare 0.99 → 全页置信度封顶 0.4。必须接受已展平页面。
+- T1：平页问题已修（method=flat，局部眩光）。合成演示页端到端：行召回 100 %、划掉 100 %、故意错误保留 100 %、逐行精确 75 %（题目行被 page pass 多加了一个撇号，已传话给 T3）。/upload 17 s 超 15 s 预算，T3 在查。
 - T2：叠式分数切行问题已做分数融合；划掉检测 H+4 已完成（status_hint 现在会给 crossed_out）。
-- T4：latency 抽屉阈值要读 config；test_config 写死 8000。
+- T4：已修；服务器已切真实模式 http://10.0.6.238:8000（无真实 twin 前 /twin/latest 返回带 _fallback 的 mock）。
 
 ## 还没做的（硬件/人工，瓶颈）
 - 相机支架 35–45 cm 垂直俯拍，深色桌垫，台灯前侧斜照，纸压平（`hardware/README.md`）。

@@ -1,6 +1,6 @@
 # NOTES_T2 — Layout
 
-**Done:** Steps 1–4. Step 4 — `is_crossed_out`: Otsu crop ink (faint printed rules dropped), Zhang-Suen skeleton, Hough strokes chained by collinearity, scored by span / glyph crossings / continuity (letter-bar chains and fraction bars capped at 0.35), plus zig-zag detector (alternating diagonals + full middle-band coverage). Synth crops (40 pages): struck 49/52 flagged ≥0.6, clean 280/280 < 0.4 (0 false, 0 unsure). `segment` now emits `status_hint` = crossed_out / unsure / active; synthetic demo page → `[active, active, crossed_out, active]`. 48 tests pass (`pytest layout/tests`, ~7 s).
+**Done:** Steps 1–4. Step 4 — `is_crossed_out`: Otsu crop ink (faint printed rules dropped), Zhang-Suen skeleton, Hough strokes chained by collinearity, scored by span / glyph crossings / continuity (letter-bar chains and fraction bars capped at 0.35), plus zig-zag detector (alternating diagonals + full middle-band coverage). Synth crops (40 pages): struck 49/52 flagged ≥0.6, clean 280/280 < 0.4 (0 false, 0 unsure). `segment` now emits `status_hint` = crossed_out / unsure / active; synthetic demo page → `[active, active, crossed_out, active]`. 49 tests pass (`pytest layout/tests`, ~7 s).
 **Next:** Step 6 on Henry's real pages the moment `eval/testset/*.jpg` + truth exist (pencil contrast, back-bleed, graph paper); Step 5 (doctr) only if classical misses on real pages.
 **Blocked:** nothing.
 
@@ -9,6 +9,13 @@
 - T3: `status_hint` is real now — `crossed_out` when the classical strike score ≥ `layout.crossed_out_min_conf` (0.6), `unsure` when 0.4 ≤ score < threshold (ask the model yes/no), else `active`. `is_crossed_out(crop_path)` returns `(bool, score)` and works on any crop (upscaled or not). Your `d/dx` split report is fixed: stacked fractions (bar with ink above AND below) are fused before line grouping.
 - T4: `layout.method` accepts `classical` (default) or `mock`. Telemetry stages: `layout.segment` (total), `layout.binarize`, `layout.components`, `layout.group`, `layout.crops`, `layout.crossed_out`, `layout.is_crossed_out` (per crop). Whole page ≈ 120–160 ms. `segment` never raises: on an internal error it logs `error=` in telemetry and returns `{regions: [], lines: []}`. Debug picture per snapshot: `runtime/debug/layout_<snapshot>.png`.
 - All: thresholds I needed beyond `config/vision.yaml` are named constants at the top of each `layout/*.py` module (documented inline). Henry can promote any of them into `layout:` in the config and I will read them via `config_get` — tell me which.
+
+## Replies to relays (H+1…H+3)
+- T3 (fractions split): fixed in Step 3 — bars with ink above AND below are fused with numerator/denominator before line grouping; a stacked `d/dx` is one component. Stack height capped at 3.5 × glyph height so two tight lines never fuse.
+- T3 (struck line arrived `active`): fixed in Step 4 — `eval/testset/synthetic_demo.jpg` now gives `[active, active, crossed_out, active]` (verified at H+4 after review fixes).
+- T4: crop paths are repo-relative under `runtime/crops/` — unchanged.
+- T1: `segment` now looks for `<stem>_gray.png` next to the dewarped colour page and uses it for the ink mask; crops still come from the colour page. Caution found on `runtime/dewarped/demo_dewarped_gray.png`: CLAHE turns faint printed rules into dark *dashes* (JPEG + dewarp break them), which produced 82 phantom 3-px 'lines' — fixed by bridging dashes before rule acceptance and by dropping any line thinner than 0.25 × `layout.min_line_height_px`. That page now gives 3 lines, struck line flagged. Both gray sources are exact on 16 synthetic photos.
+- Review (python-reviewer, H+4): no severe findings; fixed its six items — one bad crop can no longer empty the page (`status_hint` falls back to `unsure`), context crops stay inside the same region, line bboxes are cached (dense 4-up page with 43 lines: 169 ms), Hough segment orientation normalised, stale `line_*.png` cleared per snapshot, mock branch guarded.
 
 ## For Henry (demo page)
 - Leave a visibly larger gap (≈1.5 line heights) between the problem statement and the first work line: that gap is what makes the first line a `problem` region. Lines inside the work should keep normal spacing.

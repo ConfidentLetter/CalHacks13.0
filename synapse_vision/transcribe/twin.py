@@ -97,6 +97,7 @@ def build_page_twin(snapshot_path: str, previous_twin: dict | None = None) -> di
     if width == 0 or height == 0:
         width, height = _image_size(page["dewarped_path"])
     latency["total"] = round((time.perf_counter() - t0) * 1000.0, 1)
+    latency["snapshot_to_twin"] = latency["total"]
     twin = {
         "page_id": matched.page_id,
         "snapshot_id": new_snapshot_id(),

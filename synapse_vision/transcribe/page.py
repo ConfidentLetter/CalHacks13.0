@@ -10,13 +10,14 @@ Phases (model calls run in a thread pool of `transcribe.max_parallel`):
 """
 from __future__ import annotations
 
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from statistics import median
 
 from transcribe import decide
 from transcribe.align import align
-from transcribe.compat import Timer, cfg
+from transcribe.compat import Timer, cfg, log
 from transcribe.ink import crop_hash, ink_density, is_empty
 from transcribe.lines import make_line
 from transcribe.matching import iou
@@ -79,6 +80,12 @@ def _attach_cache(prepped: list[Prepped], previous_twin: dict | None) -> None:
         p.cached = next((q for q in prev if q["crop_hash"] == p.hash and iou(q["bbox"], p.line["bbox"]) >= CACHE_MIN_IOU), None)
 
 
+def _timed(fn, *args):
+    """Run fn(*args) and return (result, elapsed_ms) — per-call latency for the viewer's detail panel."""
+    t0 = time.perf_counter()
+    return fn(*args), round((time.perf_counter() - t0) * 1000.0, 1)
+
+
 def _region_for(line: dict, regions: list[dict]) -> str:
     if line.get("region_id"):
         return str(line["region_id"])
@@ -118,11 +125,15 @@ def transcribe_page(dewarped_path: str, layout: dict, previous_twin: dict | None
 
         skip_page = bool(previous_twin) and len(to_model) <= int(cfg("transcribe.page_pass_skip_below", PAGE_PASS_SKIP_BELOW))
         with ThreadPoolExecutor(max_workers=max_parallel) as ex:
-            page_future = ex.submit(page_pass, get_tiles(dewarped_path)) if to_model and not skip_page else None
-            line_futures = {p.i: ex.submit(line_pass, p.line) for p in to_model}
-            crossed_futures = {p.i: ex.submit(ask_crossed_out, p.line["crop_path"]) for p in unsure}
-            page_readings = (page_future.result() if page_future else None) or []
-            line_readings = {i: f.result() for i, f in line_futures.items()}
+            page_future = ex.submit(_timed, page_pass, get_tiles(dewarped_path)) if to_model and not skip_page else None
+            line_futures = {p.i: ex.submit(_timed, line_pass, p.line) for p in to_model}
+            crossed_futures = {p.i: ex.submit(_timed, ask_crossed_out, p.line["crop_path"]) for p in unsure}
+            page_readings, page_ms = page_future.result() if page_future else (None, 0.0)
+            page_readings = page_readings or []
+            timings: dict[int, dict] = {p.i: {"page_pass": page_ms} for p in to_model}
+            line_readings = {}
+            for i, f in line_futures.items():
+                line_readings[i], timings[i]["line_pass"] = f.result()
 
             ordered = [p.i for p in to_model]
             alignment = align(page_readings, [line_readings[i] or {} for i in ordered])
@@ -130,28 +141,37 @@ def transcribe_page(dewarped_path: str, layout: dict, previous_twin: dict | None
                         for i, k in zip(ordered, alignment.page_index_for_line)}
             plans = {i: decide.plan(line_readings[i], page_for[i], threshold=threshold,
                                     tall=next(p.tall for p in to_model if p.i == i)) for i in ordered}
-            reread_futures = {i: ex.submit(reread, prepped[i].line["crop_path"], pl.line_r, pl.page_r)
+            reread_futures = {i: ex.submit(_timed, reread, prepped[i].line["crop_path"], pl.line_r, pl.page_r)
                               for i, pl in plans.items() if pl.needs_reread}
-            rereads = {i: f.result() for i, f in reread_futures.items()}
-            crossed = {i: f.result() for i, f in crossed_futures.items()}
+            rereads, crossed = {}, {}
+            for i, f in reread_futures.items():
+                rereads[i], timings[i]["reread"] = f.result()
+            for i, f in crossed_futures.items():
+                crossed[i], ms = f.result()
+                timings.setdefault(i, {})["crossed_out"] = ms
 
         out: list[dict] = []
         context: list[str] = []
         for p in prepped:
-            out.append(_build(p, plans.get(p.i), rereads.get(p.i), crossed.get(p.i), regions, context, issues, quality))
+            out.append(_build(p, plans.get(p.i), rereads.get(p.i), crossed.get(p.i), regions, context, issues, quality,
+                              timings.get(p.i, {})))
             if out[-1]["latex"]:
                 context.append(out[-1]["latex"])
         timer.extra.update(lines=len(lines), modeled=len(to_model), cached=sum(1 for p in prepped if p.cached),
                            empty=sum(1 for p in prepped if p.empty), rereads=len(rereads), page_pass=not skip_page,
                            split_flags=len(alignment.covers_split) if to_model else 0)
-        return out
+    if previous_twin is not None and to_model:
+        # T4's latency panel: time to read the lines that changed since the last snapshot.
+        log("transcribe.incremental", timer.ms, new_lines=len(to_model), rereads=len(rereads), page_pass=not skip_page)
+    return out
 
 
-def _build(p: Prepped, pl, rr, crossed_answer, regions, context, issues, quality) -> dict:
+def _build(p: Prepped, pl, rr, crossed_answer, regions, context, issues, quality, timings: dict) -> dict:
     line, hint = p.line, line_hint(p.line)
     common = {"region_id": _region_for(line, regions), "order": int(line.get("order", p.i)), "bbox": line["bbox"]}
     extra = {"crop_hash": p.hash, "crop_path": line.get("crop_path"), "context_crop_path": line.get("context_crop_path"),
-             "status_hint": hint, "ink_density": round(p.density, 4)}
+             "status_hint": hint, "ink_density": round(p.density, 4), "latency_ms": dict(timings),
+             "reread": rr}
     if p.cached is not None:
         q = p.cached
         status = q["status"] if hint == "unsure" else _status(hint, None, q["status"] == "illegible")

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from transcribe.client import ModelResponseError, ask_json
-from transcribe.compat import log
+from transcribe.compat import REPO_ROOT, log
 from transcribe.examples import image_block
 from transcribe.ink import resolve, zoomed_copy
 from transcribe.prompts import (CROSSED_OUT_PROMPT, LINE_PASS_PROMPT, LINE_PASS_PROMPT_NO_CONTEXT,
@@ -77,10 +77,18 @@ def reread(crop_path: str, a: dict, b: dict) -> dict | None:
     def _call():
         zoom = zoomed_copy(crop_path, 3.0)
         prompt = REREAD_PROMPT.format(a=_candidate(a), b=_candidate(b))
-        return ask_json([image_block(zoom), {"type": "text", "text": prompt}], REREAD_SCHEMA,
-                        stage="transcribe.reread", max_tokens=LINE_MAX_TOKENS)
+        out = ask_json([image_block(zoom), {"type": "text", "text": prompt}], REREAD_SCHEMA,
+                       stage="transcribe.reread", max_tokens=LINE_MAX_TOKENS)
+        return {**out, "zoom_path": _repo_rel(zoom), "candidates": {"A": _candidate(a), "B": _candidate(b)}}
 
     return _safe("transcribe.reread", _call)
+
+
+def _repo_rel(p: Path) -> str:
+    try:
+        return str(Path(p).resolve().relative_to(REPO_ROOT.resolve()))
+    except ValueError:
+        return str(p)
 
 
 def _candidate(r: dict) -> str:

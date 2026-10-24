@@ -198,3 +198,20 @@ def test_malformed_t2_lines_do_not_crash(fake):
     layout["lines"].append("garbage")
     lines = transcribe_page("page.png", layout)
     assert len(lines) == len(NAMES) + 1 and lines[-1]["status"] == "illegible"
+
+
+def test_viewer_fields_per_line_and_incremental_stage(fake, monkeypatch):
+    import transcribe.page as page_mod
+
+    logged = []
+    monkeypatch.setattr(page_mod, "log", lambda stage, ms, **kw: logged.append((stage, ms, kw)))
+    first = _run(fake)
+    pr = first[NAMES.index("ex_product_rule_mistake")]
+    assert pr["crop_path"] == PRODUCT and pr["context_crop_path"] == PRODUCT
+    assert set(pr["latency_ms"]) >= {"page_pass", "line_pass", "reread"} and pr["reread"]["choice"] == "A"
+    assert not any("incremental" in s for s, _, _ in logged), "first snapshot is not incremental"
+    previous = {"lines": [{**l, "first_seen": "t", "last_changed": "t", "id": f"L{i}"} for i, l in enumerate(first)]}
+    previous["lines"][NAMES.index("ex_ambiguous_1_l")]["crop_hash"] = "changed"
+    _run(fake, previous=previous)
+    inc = [(s, kw) for s, _, kw in logged if "incremental" in s]
+    assert len(inc) == 1 and inc[0][1]["new_lines"] == 1

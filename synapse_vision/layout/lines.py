@@ -24,6 +24,7 @@ SPLIT_GAP_CHARS = 3.0          # horizontal whitespace that may split a line ...
 SPLIT_MIN_DY_FRAC = 0.5        # ... when baselines differ by this much (of line height)
 MARGIN_ZONE_FRAC = 0.2         # outer page zones where a gapped part is a margin note
 MIN_LINE_AREA_SPECKS = 3       # single-component lines below this many specks are noise
+MIN_LINE_HEIGHT_FRAC = 0.25    # a line thinner than this x layout.min_line_height_px is a rule/underline remnant
 DUPLICATE_MIN_Y_OVERLAP = 0.5  # x-overlapping lines sharing this much height are duplicates
 
 
@@ -197,5 +198,10 @@ def merge_duplicates(lines: list[Line]) -> list[Line]:
     return lines
 
 
-def drop_noise_lines(lines: list[Line], speck: int) -> list[Line]:
-    return [l for l in lines if not (len(l.comps) == 1 and l.comps[0].area < MIN_LINE_AREA_SPECKS * speck)]
+def drop_noise_lines(lines: list[Line], speck: int, min_line_h: float) -> list[Line]:
+    """Drop specks and anything far too thin to be handwriting (rule remnants, stray underlines)."""
+    return [
+        l for l in lines
+        if not (len(l.comps) == 1 and l.comps[0].area < MIN_LINE_AREA_SPECKS * speck)
+        and l.height >= MIN_LINE_HEIGHT_FRAC * min_line_h
+    ]

@@ -8,9 +8,16 @@ from app import config
 
 
 def test_reads_real_config_values():
+    """Henry tunes config/vision.yaml live, so expectations come from the file itself, not constants."""
+    import yaml
+
+    raw = yaml.safe_load(config.path().read_text())
+    assert config.get("capture.source") == raw["capture"]["source"]
     assert config.get("capture.source") in {"pi", "webcam", "upload"}
-    assert config.get("budget_ms.snapshot_to_twin_first") == 8000
-    assert config.get("transcribe.low_confidence") == pytest.approx(0.6)
+    assert config.get("budget_ms.snapshot_to_twin_first") == raw["budget_ms"]["snapshot_to_twin_first"]
+    assert isinstance(config.get("budget_ms.snapshot_to_twin_first"), int) and config.get("budget_ms.snapshot_to_twin_first") > 0
+    assert config.get("transcribe.low_confidence") == pytest.approx(raw["transcribe"]["low_confidence"])
+    assert 0 < config.get("transcribe.low_confidence") < 1
 
 
 def test_missing_key_returns_default():

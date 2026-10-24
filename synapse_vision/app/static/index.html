@@ -84,6 +84,12 @@
   #drawer td.ms { text-align: right; font-weight: 700; }
   #drawer tr.over td { color: var(--red); }
   #drawer .log { font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre-wrap; color: var(--muted); margin-top: 8px; max-height: 160px; overflow: auto; }
+  #debugstrip { display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 auto 12px; max-width: 900px; }
+  #debugstrip.open { display: grid; }
+  #debugstrip figure { margin: 0; background: #fff; border: 1.5px solid var(--line); padding: 6px; }
+  #debugstrip figcaption { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  #debugstrip img { width: 100%; display: block; }
+  .card { padding: 14px; border: 2px dashed var(--amber); border-radius: 8px; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
   #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--fg); color: #fff; padding: 10px 16px; border-radius: 8px; font-weight: 600; display: none; z-index: 10; max-width: 80vw; }
   #toast.bad { background: var(--red); }
   .hint { font-size: 12px; color: var(--muted); }
@@ -101,10 +107,11 @@
   <button id="btn-snapshot">Snapshot</button>
   <button id="btn-watch">Watch: off</button>
   <label class="btn">Upload <input id="file" type="file" accept="image/*" hidden></label>
+  <button id="btn-debug" title="T1 page-detection panel and T2 layout picture">Debug</button>
   <span class="hint">L = latency</span>
 </header>
 <main>
-  <section id="left"><div id="page"><div class="placeholder">waiting for a page twin…</div></div></section>
+  <section id="left"><div id="debugstrip"></div><div id="page"><div class="placeholder">waiting for a page twin…</div></div></section>
   <section id="right">
     <div id="lines"></div>
     <div id="detail"></div>
@@ -119,6 +126,8 @@ const $ = (s) => document.querySelector(s);
 const state = { twin: null, selected: null, newIds: new Set(), watch: false, budgets: {}, statusLog: [], seenSnapshots: new Set() };
 
 // ---------------------------------------------------------------- helpers
+const WARN_ISSUES = new Set(['glare', 'too_dark', 'skew_extreme']);  // T1: ok stays true for these
+const HARD_ISSUES = new Set(['no_page', 'partial_page', 'blur', 'hand_in_frame']);
 const confClass = (c) => c >= 0.8 ? 'c-green' : c >= 0.6 ? 'c-amber' : 'c-red';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const fileUrl = (p) => p ? '/files/' + String(p).replace(/^\/+/, '') : null;
@@ -153,13 +162,29 @@ function renderHeader(twin) {
   const q = $('#quality'); q.innerHTML = '';
   const issues = (twin.quality && twin.quality.issues) || [];
   if (twin.quality && twin.quality.ok && !issues.length) q.innerHTML = '<span class="chip ok">quality ok</span>';
-  for (const i of issues) q.innerHTML += `<span class="chip bad">${esc(i.replace('_', ' '))}</span> `;
-  const lat = twin.latency_ms && twin.latency_ms.snapshot_to_twin;
+  if (twin.quality && !twin.quality.ok) q.innerHTML += '<span class="chip bad">quality: not ok</span> ';
+  for (const i of issues) q.innerHTML += `<span class="chip ${WARN_ISSUES.has(i) ? 'warn' : 'bad'}">${esc(i.replace('_', ' '))}</span> `;
+  const lat = twin.latency_ms && (twin.latency_ms.snapshot_to_twin || twin.latency_ms.total);
   const when = twin.captured_at ? new Date(twin.captured_at).toLocaleTimeString() : '';
   $('#snapinfo').textContent = `${twin.snapshot_id} · ${when}` + (lat ? ` · ${Math.round(lat)} ms` : '') + ` · ${twin.lines.length} lines`;
 }
 
 // ---------------------------------------------------------------- page + boxes
+function stem(p) { const b = String(p || '').split('/').pop(); return b.replace(/\.[^.]+$/, ''); }
+function renderDebug(twin) {
+  const strip = $('#debugstrip'); strip.innerHTML = '';
+  const img = twin.image || {};
+  const pageDbg = img.debug_path || (img.dewarped_path ? `runtime/debug/page_${stem(img.original_path)}.png` : null);
+  const layoutDbg = twin.layout_debug_path || `runtime/debug/layout_${stem(img.dewarped_path || img.original_path)}.png`;
+  for (const [cap, p] of [['T1 page detection (debug panel)', pageDbg], ['T2 layout (boxes, order, crossed-out)', layoutDbg]]) {
+    if (!p) continue;
+    const f = document.createElement('figure');
+    f.innerHTML = `<figcaption>${cap} · <span class="hint">${esc(p)}</span></figcaption><img alt="${cap}">`;
+    const im = f.querySelector('img'); im.onerror = () => { im.replaceWith(Object.assign(document.createElement('div'), { className: 'hint', textContent: 'not written for this snapshot' })); };
+    im.src = fileUrl(p); strip.appendChild(f);
+  }
+}
+$('#btn-debug').onclick = () => { $('#debugstrip').classList.toggle('open'); $('#btn-debug').classList.toggle('on'); };
 function renderPage(twin) {
   const W = twin.image.width, H = twin.image.height;
   const page = $('#page'); page.innerHTML = ''; page.style.setProperty('--aspect', (W / H).toFixed(4));
@@ -196,6 +221,11 @@ function renderPage(twin) {
 // ---------------------------------------------------------------- transcription list
 function renderLines(twin) {
   const box = $('#lines'); box.innerHTML = '';
+  if (!twin.lines.length) {
+    const issues = ((twin.quality && twin.quality.issues) || []).join(', ');
+    box.innerHTML = `<div class="card">No lines in this twin.${twin.quality && !twin.quality.ok ? ` Quality gate failed (${esc(issues) || 'no issues listed'}) — retake the photo.` : ' Layout returned nothing (see Debug → T2 layout picture).'}</div>`;
+    return;
+  }
   for (const l of twin.lines.slice().sort((a, b) => a.order - b.order)) {
     const d = document.createElement('div');
     d.className = 'line' + (l.status === 'crossed_out' ? ' crossed' : '') + (state.newIds.has(l.id) ? ' new' : '') + (state.selected === l.id ? ' selected' : '');
@@ -216,7 +246,12 @@ function select(id) {
   const l = state.twin && state.twin.lines.find((x) => x.id === state.selected);
   if (!l) { panel.className = ''; panel.innerHTML = ''; return; }
   const readings = l.readings || {};
-  const reread = l.reread || null;
+  // T3 readings: {line, page, reread, notes, cached}; each reading is {latex, text, kind, illegible, uncertain} or a string.
+  const rd = (r) => r == null ? null : (typeof r === 'object' ? (r.latex || r.text || '') : String(r));
+  const pagePass = rd(readings.page ?? readings.page_pass), linePass = rd(readings.line ?? readings.line_pass);
+  const notesRaw = readings.notes;
+  const notes = notesRaw == null || notesRaw === '[]' || (Array.isArray(notesRaw) && !notesRaw.length) ? '' : (typeof notesRaw === 'string' ? notesRaw : JSON.stringify(notesRaw));
+  const reread = l.reread || (readings.reread != null ? { ran: true, result: rd(readings.reread), reason: notes } : null);
   const fig = (cap, p) => `<figure><figcaption>${cap}</figcaption>${p ? `<img src="${esc(fileUrl(p))}" alt="${cap}" onerror="this.outerHTML='<div class=none>missing: ${esc(p)}</div>'">` : '<div class="none">n/a</div>'}</figure>`;
   const code = (v) => v == null ? '<em>n/a</em>' : `<code>${esc(typeof v === 'string' ? v : JSON.stringify(v))}</code>`;
   const alt = (l.uncertain_spans || []).map((s) => `[${s.start},${s.end}) → ${(s.alternatives || []).join(' | ')}`).join('<br>') || '<em>none</em>';
@@ -225,12 +260,13 @@ function select(id) {
     <table class="kv">
       <tr><td>final latex</td><td>${code(l.latex)}</td></tr>
       <tr><td>text</td><td>${esc(l.text)}</td></tr>
-      <tr><td>page pass</td><td>${code(readings.page_pass)}</td></tr>
-      <tr><td>line pass</td><td>${code(readings.line_pass)}</td></tr>
+      <tr><td>page pass</td><td>${code(pagePass)}</td></tr>
+      <tr><td>line pass</td><td>${code(linePass)}</td></tr>
+      <tr><td>agreement</td><td>${pagePass != null && linePass != null ? (pagePass.replace(/\s+/g, '') === linePass.replace(/\s+/g, '') ? '<span class="status" style="color:var(--green)">agree</span>' : '<span class="status crossed_out">disagree → re-read</span>') : '<em>n/a</em>'}${readings.cached ? ' · <span class="status">cached (crop unchanged)</span>' : ''}${notes ? `<br><span class="hint">${esc(notes)}</span>` : ''}</td></tr>
       <tr><td>re-read</td><td>${reread ? `${reread.ran ? 'ran' : 'not run'}${reread.reason ? ' — ' + esc(reread.reason) : ''}${reread.result != null ? ' → ' + code(reread.result) : ''}` : '<em>n/a</em>'}</td></tr>
       <tr><td>confidence</td><td><span class="conf ${confClass(l.confidence)}">${l.confidence.toFixed(2)}</span> &nbsp; parse_ok: ${l.parse_ok}</td></tr>
       <tr><td>uncertain</td><td>${alt}</td></tr>
-      <tr><td>latency</td><td>${l.latency_ms != null ? Math.round(l.latency_ms) + ' ms' : '<em>n/a</em>'}</td></tr>
+      <tr><td>latency</td><td>${typeof l.latency_ms === 'number' ? Math.round(l.latency_ms) + ' ms' : (l.latency_ms && typeof l.latency_ms === 'object' ? Object.entries(l.latency_ms).map(([k, v]) => `${k} ${Math.round(v)}`).join(' · ') + ' ms' : null) || (state.twin.latency_ms ? 'page: ' + Object.entries(state.twin.latency_ms).map(([k, v]) => `${k} ${Math.round(v)}`).join(' · ') + ' ms' : '<em>n/a</em>')}${l.status_hint ? ` · layout hint: ${esc(l.status_hint)}` : ''}${l.ink_density != null ? ` · ink ${Number(l.ink_density).toFixed(3)}` : ''}</td></tr>
       <tr><td>bbox</td><td>${code(l.bbox)} · region ${esc(l.region_id)}</td></tr>
       <tr><td>seen</td><td>first ${esc(l.first_seen)}<br>changed ${esc(l.last_changed)}</td></tr>
     </table>`;
@@ -246,7 +282,7 @@ function showTwin(twin, fromEvents) {
   state.seenSnapshots.add(twin.snapshot_id);
   state.twin = twin;
   if (state.selected && !twin.lines.some((l) => l.id === state.selected)) state.selected = null;
-  renderHeader(twin); renderPage(twin); renderLines(twin);
+  renderHeader(twin); renderPage(twin); renderLines(twin); renderDebug(twin);
   if (state.selected) select(state.selected), select(state.selected);
   setTimeout(() => { state.newIds.clear(); }, 3000);
 }
@@ -279,11 +315,12 @@ $('#btn-watch').onclick = async () => {
 // ---------------------------------------------------------------- dev drawer (L)
 function budgetFor(stage) {
   const b = state.budgets || {};
-  if (/snapshot_to_twin/.test(stage)) return b.snapshot_to_twin_first;
-  if (/^error\./.test(stage)) return undefined;
+  if (/snapshot_to_twin|transcribe\.build$|^pipeline\./.test(stage)) return b.snapshot_to_twin_first;
+  if (/^error\.|^eval\.|^capture\.wait_for_stable/.test(stage)) return undefined;
   return b.new_line_incremental;
 }
 async function refreshDrawer() {
+  try { const st = await (await fetch('/status')).json(); state.budgets = st.budget_ms || {}; } catch (e) { /* keep last */ }
   try {
     const recs = (await (await fetch('/telemetry?limit=400')).json()).records;
     const by = {};

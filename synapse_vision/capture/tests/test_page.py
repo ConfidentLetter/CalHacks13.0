@@ -205,3 +205,45 @@ def test_tile_outputs(tmp_path):
             assert y < prev[1] + prev[3], "neighbouring tiles overlap"
     assert tiles[0]["bbox"][1] == 0 and tiles[-1]["bbox"][1] + tiles[-1]["bbox"][3] == h
     assert tile("runtime/does_not_exist.jpg") == []
+
+
+# ----------------------------------------------------------------------------- flat pages (scans, uploads)
+
+def test_flat_demo_scan_is_accepted_whole():
+    """T4's eval/testset/synthetic_demo.jpg: already flat, white to every border — must not be 'no_page' or 'glare'."""
+    path = REPO_ROOT / "eval" / "testset" / "synthetic_demo.jpg"
+    if not path.exists():
+        pytest.skip("eval/testset/synthetic_demo.jpg not present")
+    out = detect_and_dewarp(str(path))
+    assert out["quality"]["ok"] is True and out["quality"]["issues"] == [], out["quality"]
+    assert out["quality"]["glare_fraction"] < 0.01
+    assert out["detection"]["method"] == "flat"
+    assert (out["width"], out["height"]) == (1700, 2200), "same size as the input, so truth bboxes line up"
+    assert out["dewarped_path"].startswith("runtime/dewarped/")
+
+
+def test_flat_synthetic_page_keeps_orientation(tmp_path):
+    s = synth.render(5, crossed_out=True)
+    portrait = synth.save(synth.SynthSample(s.page, s.corners, s.page), tmp_path / "flat_portrait.jpg")
+    out = detect_and_dewarp(str(portrait))
+    assert out["quality"]["ok"] and out["detection"]["method"] == "flat" and out["height"] > out["width"]
+    landscape_img = cv2.rotate(s.page, cv2.ROTATE_90_CLOCKWISE)
+    landscape = synth.save(synth.SynthSample(landscape_img, s.corners, landscape_img), tmp_path / "flat_landscape.jpg")
+    out = detect_and_dewarp(str(landscape))
+    assert out["quality"]["ok"] and out["detection"]["method"] == "flat" and out["width"] > out["height"]
+
+
+def test_camera_frames_still_take_the_strict_path(tmp_path):
+    for seed in range(4):
+        out, _ = _run(tmp_path, seed)
+        assert out["detection"]["method"] in ("edges", "threshold")
+    out, _ = _run(tmp_path, 1, no_page=True)
+    assert out["detection"]["method"] == "none" and "no_page" in _flags(out)
+
+
+def test_white_paper_is_not_glare_but_a_lamp_blob_is():
+    white = np.full((1100, 850), 255, np.uint8)
+    assert Q.glare_fraction(white) == 0.0
+    paper = np.full((1100, 850), 205, np.uint8)
+    cv2.circle(paper, (425, 550), 120, 255, -1)
+    assert 0.02 < Q.glare_fraction(paper) < 0.08

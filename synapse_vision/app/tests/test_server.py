@@ -105,6 +105,12 @@ def test_index_serves_html(client):
     assert r.status_code == 200 and "<" in r.text
 
 
+def test_real_mode_latest_before_first_snapshot_serves_flagged_mock(real_client):
+    r = real_client.get("/twin/latest")
+    assert r.status_code == 200 and "no real twin yet" in r.json()["_fallback"] and r.json()["source"] == "mock"
+    assert store.latest() is None  # not persisted as if it were real
+
+
 def test_real_mode_without_transcribe_falls_back_to_mock(real_client, monkeypatch):
     import builtins
     real_import = builtins.__import__

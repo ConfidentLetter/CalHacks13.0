@@ -113,3 +113,11 @@ def test_new_page_under_bad_quality_does_not_carry_old_lines(fake_pipeline):
     assert second["page_id"] != first["page_id"]
     assert [l["latex"] for l in second["lines"]] == ["q=7", "r=8"]
     assert second["changes"]["added"] == ["L0", "L1"] and second["changes"]["edited"] == []
+
+
+def test_twin_latency_and_repo_relative_paths(fake_pipeline):
+    fake_pipeline["lines"] = [_line(0, "a=1")]
+    twin = twin_mod.build_page_twin(str(twin_mod.REPO_ROOT / "runtime" / "snapshots" / "upload_x.jpg"))
+    assert twin["latency_ms"]["snapshot_to_twin"] == twin["latency_ms"]["total"] >= 0
+    assert twin["image"]["original_path"] == "runtime/snapshots/upload_x.jpg"
+    assert twin["image"]["dewarped_path"] == "runtime/snapshots/upload_x.jpg"

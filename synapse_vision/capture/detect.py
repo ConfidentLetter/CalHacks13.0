@@ -15,6 +15,11 @@ MIN_RECTANGULARITY = 0.80
 MAX_PAGE_AREA_FRACTION = 0.92        # a quad covering the whole frame is the frame, not a page
 MIN_INSIDE_OUTSIDE_CONTRAST = 8.0    # paper must be brighter than the ring just outside it (stretched gray levels)
 APPROX_EPS_STEPS = (0.02, 0.03, 0.045, 0.06, 0.08)
+FLAT_BORDER_FRACTION = 0.02          # outer ring inspected for "no desk visible"
+FLAT_BRIGHT_LEVEL = 150              # gray above this counts as paper
+FLAT_BRIGHT_FRACTION_MIN = 0.80      # of the whole frame
+FLAT_BORDER_BRIGHT_FRACTION_MIN = 0.90
+FLAT_PAPER_SATURATION_MAX = 40       # mean HSV saturation of the bright pixels
 
 
 @dataclass
@@ -233,10 +238,40 @@ def find_aruco_mat(img: np.ndarray) -> np.ndarray | None:
     return order_corners(mat)
 
 
+def looks_like_flat_page(img: np.ndarray) -> bool:
+    """True for an already-flat page that fills the frame (a scan, an upload, a page larger than the view):
+    bright low-saturation paper nearly everywhere, including the outer border, so no desk is visible."""
+    h, w = img.shape[:2]
+    scale = 400.0 / max(h, w)
+    small = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else img
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    bright = gray >= FLAT_BRIGHT_LEVEL
+    if bright.mean() < FLAT_BRIGHT_FRACTION_MIN:
+        return False
+    b = max(2, int(FLAT_BORDER_FRACTION * max(small.shape[:2])))
+    ring = np.ones(gray.shape, bool)
+    ring[b:-b, b:-b] = False
+    if bright[ring].mean() < FLAT_BORDER_BRIGHT_FRACTION_MIN:
+        return False
+    saturation = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)[:, :, 1]
+    return float(saturation[bright].mean()) <= FLAT_PAPER_SATURATION_MAX
+
+
+def frame_quad(img: np.ndarray) -> np.ndarray:
+    h, w = img.shape[:2]
+    return np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], np.float32)
+
+
 def detect_page(img: np.ndarray) -> PageDetection:
-    """Page quad by contours; if that fails and page.use_aruco_fallback, dewarp the ArUco mat and search inside it."""
+    """Page quad by contours (a page brighter than its surroundings); else a flat full-frame page
+    (scan/upload: bright paper to every border) is the frame itself; else, if page.use_aruco_fallback,
+    dewarp the ArUco mat and search inside it."""
     det = find_page_quad(img)
-    if det.quad is not None or not cfg("page.use_aruco_fallback", True):
+    if det.quad is not None:
+        return det
+    if looks_like_flat_page(img):
+        return PageDetection(frame_quad(img), "flat", 1.0)
+    if not cfg("page.use_aruco_fallback", True):
         return det
     mat = find_aruco_mat(img)
     if mat is None:

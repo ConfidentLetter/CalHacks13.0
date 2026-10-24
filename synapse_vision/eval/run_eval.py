@@ -29,9 +29,10 @@ RUNS_DIR = ROOT / "eval" / "runs"
 HISTORY_COLUMNS = [
     "ts", "note", "pages", "reviewed_pages", "lines_truth", "page_ok_rate", "line_precision", "line_recall", "merged_lines",
     "order_acc", "exact_match", "cer", "crossed_out_acc", "planted_total", "planted_preserved", "planted_preservation",
-    "autocorrections", "calib_hi_acc", "calib_mid_acc", "calib_lo_acc", "latency_p50_ms", "latency_p90_ms",
-    "incremental_p50_ms", "model",
+    "autocorrections", "verbatim_guard_risky", "calib_hi_acc", "calib_mid_acc", "calib_lo_acc", "latency_p50_ms",
+    "latency_p90_ms", "incremental_p50_ms", "model",
 ]
+VERBATIM_GUARD_PATH = ROOT / "runtime" / "debug" / "verbatim_guard.jsonl"
 
 
 def _scaled_pred_lines(twin: dict, truth: dict) -> list[dict]:
@@ -67,10 +68,37 @@ def evaluate_page(name: str, twin: dict, truth: dict) -> dict:
     score.update({
         "name": name, "reviewed": bool(truth.get("reviewed")), "page_ok": _page_ok(twin),
         "corner_error": _corner_error(twin, truth),
-        "latency_ms": (twin.get("latency_ms") or {}).get("snapshot_to_twin"),
+        "latency_ms": (twin.get("latency_ms") or {}).get("snapshot_to_twin") or (twin.get("latency_ms") or {}).get("total"),
+        "stage_latency_ms": {k: v for k, v in (twin.get("latency_ms") or {}).items() if k not in ("snapshot_to_twin", "total")},
         "fallback": twin.get("_fallback"),
     })
     return score
+
+
+def verbatim_guard_stats(path: Path = VERBATIM_GUARD_PATH, since: datetime | None = None) -> dict:
+    """T3's runtime/debug/verbatim_guard.jsonl: every disagreement where one reading was mathematically 'nicer'.
+
+    `chosen_is_nicer: true` = the system picked the nicer reading = the risky cases (possible autocorrection).
+    """
+    total = risky = 0
+    examples: list[dict] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {"total": 0, "risky": 0, "examples": []}
+    for raw in lines:
+        try:
+            rec = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if since and rec.get("ts") and str(rec["ts"]) < since.isoformat():
+            continue
+        total += 1
+        if rec.get("chosen_is_nicer"):
+            risky += 1
+            if len(examples) < 10:
+                examples.append({k: rec.get(k) for k in ("line_id", "nicer", "reread_choice", "final", "snapshot_id")})
+    return {"total": total, "risky": risky, "examples": examples}
 
 
 def incremental_latencies() -> list[float]:
@@ -105,7 +133,9 @@ def run(names: list[str], note: str, mock: bool = False, reuse: Path | None = No
     agg = M.aggregate(pages)
     lat = [p["latency_ms"] for p in pages if p.get("latency_ms") is not None]
     inc = incremental_latencies()
+    guard = verbatim_guard_stats(since=ts if not reuse else None)
     agg.update({
+        "verbatim_guard_total": guard["total"], "verbatim_guard_risky": guard["risky"], "verbatim_guard_examples": guard["examples"],
         "ts": ts.isoformat(timespec="seconds"), "note": note, "run_dir": T.rel(run_dir),
         "reviewed_pages": sum(1 for p in pages if p["reviewed"]),
         "page_ok_rate": sum(1 for p in pages if p["page_ok"]) / len(pages) if pages else None,
@@ -127,11 +157,20 @@ def append_history(agg: dict, history_path: Path = HISTORY_PATH) -> None:
     for k, v in row.items():
         if isinstance(v, float):
             row[k] = round(v, 4)
-    new = not history_path.exists()
-    with history_path.open("a", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=HISTORY_COLUMNS)
-        if new:
+    existing: list[dict] = []
+    if history_path.exists():
+        with history_path.open(newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            if reader.fieldnames and list(reader.fieldnames) != HISTORY_COLUMNS:
+                existing = list(reader)  # columns changed: rewrite old rows under the new header (blanks for new columns)
+    mode = "w" if existing else "a"
+    write_header = mode == "w" or not history_path.exists()
+    with history_path.open(mode, newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=HISTORY_COLUMNS, extrasaction="ignore")
+        if write_header:
             w.writeheader()
+        for old in existing:
+            w.writerow({k: old.get(k, "") for k in HISTORY_COLUMNS})
         w.writerow(row)
 
 
@@ -149,6 +188,9 @@ def format_report(agg: dict) -> str:
         lines.append(f"  AUTOCORRECTED  {a['truth_id']}  wrote {a['truth']!r}  read {a['pred']!r}  (= corrected {a['corrected']!r})  {a['note']}")
     for a in agg["planted_missed"]:
         lines.append(f"  missed         {a['truth_id']}  wrote {a['truth']!r}  read {a['pred']!r}  {a.get('reason', '')} {a['note']}")
+    lines.append(f"verbatim guard  {agg['verbatim_guard_risky']} risky (chose the 'nicer' reading) of {agg['verbatim_guard_total']} disagreements this run")
+    for g in agg["verbatim_guard_examples"]:
+        lines.append(f"  RISKY          {g.get('line_id')}  nicer {g.get('nicer')!r}  final {g.get('final')!r}  ({g.get('reread_choice')})")
     lines += [
         f"page detection ok           {_pct(agg['page_ok_rate'])}" + (f"  corner err mean {sum(agg['corner_errors']) / len(agg['corner_errors']):.3%}" if agg["corner_errors"] else "  (no corner truth)"),
         f"line detection  P {_pct(agg['line_precision'])}  R {_pct(agg['line_recall'])}  merged {agg['merged_lines']}  order {_pct(agg['order_acc'])}",

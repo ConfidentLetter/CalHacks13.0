@@ -20,6 +20,7 @@ WINDOW_PER_LINE_HEIGHT = 1.5
 MAX_LINE_HEIGHT_FRAC = 0.10    # of page height, for the line-height estimate
 RULE_SEED_MIN_SPAN_FRAC = 0.2  # a seed piece must be at least this long to be fitted as a rule
 RULE_MIN_COVERAGE = 0.5        # ink found along the fitted line over this fraction of the page ...
+RULE_DASH_BRIDGE_FRAC = 1 / 40  # dashed/broken rules (JPEG, dewarp) are bridged by this much before measuring
 RULE_EDGE_ZONE_FRAC = 0.12     # ... and over RULE_MIN_EDGE_COVERAGE of both outer zones (rules run edge to edge)
 RULE_MIN_EDGE_COVERAGE = 0.3
 RULE_MAX_THICKNESS_PX = 6      # thicker horizontal structures are handwriting (strikes, bars)
@@ -86,12 +87,13 @@ def _rule_mask(binary: np.ndarray, lenient: np.ndarray, horizontal: bool) -> np.
     bridged = cv2.dilate(seeds, cv2.getStructuringElement(cv2.MORPH_RECT, bridge_k))
     n, labels, stats, _ = cv2.connectedComponentsWithStats(bridged, connectivity=8)
     mask = np.zeros_like(binary)
+    bridged_thin = _bridge_dashes(thin, horizontal)
     for i in range(1, n):
         extent = stats[i, cv2.CC_STAT_WIDTH] if horizontal else stats[i, cv2.CC_STAT_HEIGHT]
         if extent < RULE_SEED_MIN_SPAN_FRAC * span:
             continue
         band = _fit_band(np.argwhere(labels == i), mask.shape, horizontal)
-        if band is not None and not _already_painted(mask, band, horizontal) and _is_page_rule(thin, band, horizontal):
+        if band is not None and not _already_painted(mask, band, horizontal) and _is_page_rule(bridged_thin, band, horizontal):
             _paint(mask, band, horizontal)
     # erase only thin pixels inside the rule band so crossing handwriting survives
     return cv2.bitwise_and(_thin_structures(binary, horizontal), mask)
@@ -120,6 +122,13 @@ def _coverage(thin: np.ndarray, band: tuple[np.ndarray, int], horizontal: bool, 
         rows = np.clip(centre[sl] + off, 0, limit)
         hit |= (thin[rows, xs] if horizontal else thin[xs, rows]) > 0
     return float(hit.mean()) if len(hit) else 0.0
+
+
+def _bridge_dashes(thin: np.ndarray, horizontal: bool) -> np.ndarray:
+    span = thin.shape[1] if horizontal else thin.shape[0]
+    b = max(5, int(span * RULE_DASH_BRIDGE_FRAC))
+    k = (b, 1) if horizontal else (1, b)
+    return cv2.dilate(thin, cv2.getStructuringElement(cv2.MORPH_RECT, k))
 
 
 def _is_page_rule(thin: np.ndarray, band: tuple[np.ndarray, int], horizontal: bool) -> bool:

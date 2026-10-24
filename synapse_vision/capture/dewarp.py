@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 from capture.compat import cfg
-from capture.detect import order_corners
+from capture.detect import order_corners, quad_angles_deg
 
 LETTER_ASPECT = 11.0 / 8.5
 A4_ASPECT = 297.0 / 210.0
@@ -58,6 +58,8 @@ def choose_aspect(quad: np.ndarray, frame_wh: tuple[int, int]) -> float:
     """Portrait aspect (long/short): homography estimate, else edge-length ratio; snap to Letter/A4 if within 3 %."""
     width, height = _edge_lengths(quad)
     est = aspect_from_homography(quad, frame_wh)
+    if np.abs(quad_angles_deg(quad) - 90).max() < 0.5:     # axis-aligned rectangle: edge ratio is exact
+        est = height / max(1e-6, width)
     if est is None or not (ASPECT_CLAMP[0] * 0.8 < est < ASPECT_CLAMP[1] * 1.25 or ASPECT_CLAMP[0] * 0.8 < 1 / est < ASPECT_CLAMP[1] * 1.25):
         est = height / max(1e-6, width)
     est = est if est >= 1.0 else 1.0 / est
@@ -106,10 +108,18 @@ def output_size(aspect: float) -> tuple[int, int]:
     return int(round(long_side / aspect)), long_side
 
 
-def dewarp(img: np.ndarray, quad: np.ndarray) -> Dewarped:
-    quad = to_portrait(quad)
-    aspect = choose_aspect(quad, (img.shape[1], img.shape[0]))
-    out_w, out_h = output_size(aspect)
+def dewarp(img: np.ndarray, quad: np.ndarray, flat: bool = False) -> Dewarped:
+    """flat=True: the quad is the whole frame (scan/upload) — keep its orientation and aspect, just rescale."""
+    if flat:
+        quad = order_corners(quad)
+        width, height = _edge_lengths(quad)
+        aspect = choose_aspect(quad, (img.shape[1], img.shape[0])) if height >= width else 1.0 / choose_aspect(quad, (img.shape[1], img.shape[0]))
+        long_side = int(cfg("page.output_long_side", 2200))
+        out_w, out_h = (int(round(long_side / aspect)), long_side) if aspect >= 1 else (long_side, int(round(long_side * aspect)))
+    else:
+        quad = to_portrait(quad)
+        aspect = choose_aspect(quad, (img.shape[1], img.shape[0]))
+        out_w, out_h = output_size(aspect)
     dst = np.array([[0, 0], [out_w - 1, 0], [out_w - 1, out_h - 1], [0, out_h - 1]], np.float32)
     homography = cv2.getPerspectiveTransform(quad.astype(np.float32), dst)
     warped = cv2.warpPerspective(img, homography, (out_w, out_h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)

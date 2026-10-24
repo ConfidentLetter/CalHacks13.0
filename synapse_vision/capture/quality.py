@@ -66,8 +66,22 @@ def blur_score(raw_gray: np.ndarray, norm_gray: np.ndarray) -> tuple[float, floa
     return float(lap[near_ink].var()), ink_fraction
 
 
+GLARE_BACKGROUND_SIGMA_FRACTION = 1 / 6   # of the long side: wide enough that a lamp blob stays above it
+GLARE_BACKGROUND_MARGIN = 10
+
+
 def glare_fraction(raw_gray: np.ndarray) -> float:
-    return float((raw_gray >= int(_get("page.glare_pixel_min"))).mean())
+    """Fraction of the page that is saturated AND clearly brighter than its wide surroundings.
+    Plain white paper (a scan, a bright exposure) is uniform, so it is not glare; a lamp reflection is."""
+    sat_level = int(_get("page.glare_pixel_min"))
+    scale = 400.0 / max(raw_gray.shape)
+    small = cv2.resize(raw_gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else raw_gray
+    saturated = small >= sat_level
+    if not saturated.any():
+        return 0.0
+    sigma = max(4.0, GLARE_BACKGROUND_SIGMA_FRACTION * max(small.shape))
+    background = cv2.GaussianBlur(small.astype(np.float32), (0, 0), sigma)
+    return float((saturated & (background < sat_level - GLARE_BACKGROUND_MARGIN)).mean())
 
 
 def skin_fraction_in_page(frame: np.ndarray, quad: np.ndarray | None) -> float:
@@ -100,8 +114,10 @@ def touches_frame_edge(quad: np.ndarray, frame_wh: tuple[int, int]) -> bool:
     return bool((x <= w * m).any() or (y <= h * m).any() or (x >= w * (1 - m)).any() or (y >= h * (1 - m)).any())
 
 
-def assess(frame: np.ndarray, quad: np.ndarray | None, raw_gray: np.ndarray | None, norm_gray: np.ndarray | None) -> Quality:
-    """Build the quality block. `quad` None means no page was found; the frame itself is then measured."""
+def assess(frame: np.ndarray, quad: np.ndarray | None, raw_gray: np.ndarray | None, norm_gray: np.ndarray | None,
+           flat: bool = False) -> Quality:
+    """Build the quality block. `quad` None means no page was found; the frame itself is then measured.
+    flat=True: the page IS the frame (scan/upload), so touching the frame edge is not a partial page."""
     q = Quality()
     if quad is None:
         q.issues.append("no_page")
@@ -122,7 +138,7 @@ def assess(frame: np.ndarray, quad: np.ndarray | None, raw_gray: np.ndarray | No
     q.glare_fraction = glare_fraction(raw_gray)
     q.extras = {"ink_fraction": round(ink_fraction, 5), "median": float(np.median(raw_gray))}
 
-    if touches_frame_edge(quad, (frame.shape[1], frame.shape[0])):
+    if not flat and touches_frame_edge(quad, (frame.shape[1], frame.shape[0])):
         q.issues.append("partial_page")
     if q.blur_score < float(_get("page.blur_threshold")) and ink_fraction >= float(_get("page.min_ink_fraction_for_blur")):
         q.issues.append("blur")

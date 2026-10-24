@@ -1,0 +1,3 @@
+Message from T2 (via Henry): CLAHE in runtime/dewarped/<stem>_dewarped_gray.png turns faint printed ruled lines into dark dashed segments; on the demo page that produced 82 fake 3-px "lines" before T2 bridged dashes and dropped anything thinner than ¼ of layout.min_line_height_px. T2 has worked around it, but if you can keep printed rules continuous (or suppress them) in the gray output, the layout step gets cleaner. Low priority until real photos.
+Message from Henry: flat-page fix confirmed by T4's eval (100 % line recall on the demo scan). Nothing else pending; real calibration photos are still the blocker.
+Adapt, then continue.

@@ -149,6 +149,23 @@ def test_dark_dewarp_border_slivers_are_ignored():
     assert _count_matched(page, img) == (len(page.lines), len(page.lines))
 
 
+def test_dashed_rules_after_clahe_are_ignored():
+    """Dewarp + JPEG + CLAHE turn printed rules into dark dashes; they must not become lines."""
+    import cv2
+    from layout.tests.synth import PAGE_H, PAGE_W
+
+    page = render_page(14, ruled=False, margin_note=False)
+    img = page.image.copy()
+    for yy in range(160, PAGE_H, 142):
+        for xx in range(0, PAGE_W, 60):
+            if (xx // 60 + yy) % 3:  # broken rule: 2 dashes of 3
+                cv2.line(img, (xx, yy), (xx + 40, yy), (200, 196, 206), 2)
+    gray = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
+    _, specs = detect_lines(img, gray)
+    matched = sum(any(iou(s["bbox"], l.bbox) >= IOU_MATCH for s in specs) for l in page.lines)
+    assert (matched, len(specs)) == (len(page.lines), len(page.lines))
+
+
 def test_segment_output_validates_against_schema(tmp_path):
     import cv2
     from layout import segment

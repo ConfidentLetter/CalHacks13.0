@@ -1,6 +1,8 @@
 """Classical line segmentation (``layout.method: classical``)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -29,9 +31,20 @@ def status_hint_for(crop_path: str) -> str:
     return "active"
 
 
-def detect_lines(img: np.ndarray) -> tuple[list[dict], list[dict]]:
+def gray_sibling(dewarped_path: str) -> np.ndarray | None:
+    """T1 writes ``<stem>_gray.png`` next to the colour page (lighting-flattened + CLAHE); prefer it for ink masks."""
+    p = Path(dewarped_path)
+    for cand in (p.with_name(p.stem + "_gray.png"), p.with_name(p.stem + "_gray.jpg")):
+        if cand.exists():
+            g = cv2.imread(str(cand), cv2.IMREAD_GRAYSCALE)
+            if g is not None:
+                return g
+    return None
+
+
+def detect_lines(img: np.ndarray, gray: np.ndarray | None = None) -> tuple[list[dict], list[dict]]:
     """Image -> (regions, ordered line specs [{bbox, region_id}]). No crops, no files."""
-    gray = to_gray(img)
+    gray = to_gray(img) if gray is None or gray.shape[:2] != img.shape[:2] else gray
     H, W = gray.shape
     with timed("layout.binarize"):
         binary, _ = binarize_page(gray)
@@ -46,7 +59,7 @@ def detect_lines(img: np.ndarray) -> tuple[list[dict], list[dict]]:
         lines = merge_fragments(lines, med_line_h, med_char_w)
         lines = split_columns(lines, med_line_h, med_char_w, W)
         lines = merge_duplicates(lines)
-        lines = drop_noise_lines(lines, speck_area(binary.shape))
+        lines = drop_noise_lines(lines, speck_area(binary.shape), float(config_get("layout.min_line_height_px", 28)))
         info["n_lines"] = len(lines)
     return order_and_regionize(lines, med_char_w, med_line_h, W)
 
@@ -56,7 +69,7 @@ def segment_classical(dewarped_path: str) -> dict:
 
     img = load_page(dewarped_path)
     snapshot_id = snapshot_id_from_path(dewarped_path)
-    regions, specs = detect_lines(img)
+    regions, specs = detect_lines(img, gray_sibling(dewarped_path))
     with timed("layout.crops", n_lines=len(specs)):
         crops = write_all_crops(img, [s["bbox"] for s in specs], snapshot_id, groups=[s["region_id"] for s in specs])
     with timed("layout.crossed_out", n_lines=len(specs)):
