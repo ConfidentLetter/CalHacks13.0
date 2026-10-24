@@ -14,6 +14,7 @@ snapshot (when the scene settles) → page detection + dewarp + quality gate →
 | T2 Layout | `layout/` | regions, lines, reading order, crossed-out detection, crops |
 | T3 Transcribe | `transcribe/` | verbatim reading, confidence, normalization, page twin, diffs |
 | T4 App & Eval | `app/`, `eval/` | config, telemetry, API, viewer, test set, metrics, accuracy chart |
+| T5 Bridge | `bridge/`, `docs/CONNECTIONS.md` | module analysis, `/api/*` adapter for the team frontend (`../frontend`, `../extension`), tutor/chat layer, CORS, end-to-end verification |
 | Henry | `contracts/`, `config/`, `main.py` | contracts, tuning, snapshots, camera, test pages, demo |
 
 Launch steps and first messages: `prompts/RUNSHEET.md`.

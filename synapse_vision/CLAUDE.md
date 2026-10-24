@@ -1,6 +1,6 @@
 # Rules for every AI coding agent in this repo
 
-You are one of four parallel AI terminals building Synapse Vision. One human (Henry) operates all four; all terminals share this folder. Read `README.md`, `contracts/`, `config/vision.yaml` and `mocks/` before writing code.
+You are one of five parallel AI terminals building Synapse Vision. One human (Henry) operates all four; all terminals share this folder. Read `README.md`, `contracts/`, `config/vision.yaml` and `mocks/` before writing code.
 
 - Write only in the folders your prompt assigns you and your own `NOTES_<terminal>.md`. Never edit `contracts/`, `config/`, `mocks/`, or another terminal's folder. You may read anything.
 - Implement every function listed for your folder in `contracts/interfaces.md` with the exact signature. Mock data first, real data second.
@@ -9,7 +9,7 @@ You are one of four parallel AI terminals building Synapse Vision. One human (He
 - Tunables come from `config/vision.yaml` via `app.config.get`. Time each stage with `app.telemetry.log`. Fall back to local no-ops if those modules don't exist yet.
 - Dependencies in `requirements/<folder>.txt`; Python 3.11; tests with pytest in `<folder>/tests/`.
 - Model from env `SV_MODEL`, key from `ANTHROPIC_API_KEY`. Never hard-code keys.
-- Never run git. Only T4 runs the server (port 8000).
+- Never run git. Port 8000 is served by ONE process: T4's `app.server:app` until T5's bridge lands, then `bridge.server:app` (which imports and extends T4's app). T4 and T5 coordinate the hand-off through NOTES; nobody else starts a server.
 
 ## Sync protocol
 - Before each new step: re-read `contracts/CHANGELOG.md` and the top status block of every `NOTES_T*.md`.

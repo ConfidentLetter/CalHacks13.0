@@ -1,7 +1,7 @@
 #!/bin/bash
-# Opens four macOS Terminal windows for Synapse Vision. Order: T4 first (everyone imports its config/telemetry), then T1, T2, T3.
+# Opens macOS Terminal windows for Synapse Vision. Usage: ./launch_terminals.sh [T numbers...]  (default: 4 1 2 3 5)
 DIR="$(cd "$(dirname "$0")" && pwd)"
-for T in 4 1 2 3; do
+for T in ${@:-4 1 2 3 5}; do
   osascript <<APPLESCRIPT
 tell application "Terminal"
   activate
