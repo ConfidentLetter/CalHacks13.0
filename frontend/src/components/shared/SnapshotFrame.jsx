@@ -8,13 +8,13 @@ export function SnapshotFrame({ snapshot, loading, capturing, onOpen, className,
   const [broken, setBroken] = useState(null)
   const isBroken = snapshot && broken === snapshot.imageUrl
 
-  if (loading && !snapshot) return <Skeleton className={cx('aspect-[4/3] w-full rounded-xl', className)} />
+  if (loading && !snapshot) return <Skeleton className={cx('aspect-[4/3] w-full rounded-sm', className)} />
 
   if (!snapshot || isBroken) {
     return (
       <div
         className={cx(
-          'relative grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-xl ruled border border-dashed border-sage-deep bg-paper',
+          'relative grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-sm ruled border border-dashed border-sage-deep bg-paper',
           className,
         )}
       >

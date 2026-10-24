@@ -1,30 +1,29 @@
 import { useState } from 'react'
-import {
-  Ban,
-  Camera,
-  CheckCircle2,
-  Globe,
-  PlugZap,
-  Plus,
-  RotateCcw,
-  Server,
-  ShieldCheck,
-  Timer,
-  Trash2,
-  X,
-  XCircle,
-} from 'lucide-react'
+import { CheckCircle2, XCircle } from 'lucide-react'
 import { useApp, useStudyData } from '../context/contexts'
-import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
-import { Segmented, Toggle } from '../components/ui/Controls'
+import { Toggle } from '../components/ui/Controls'
 import { ConfirmDialog } from '../components/ui/Modal'
-import { CAPTURE_INTERVALS, DEFAULT_SETTINGS, normalizeBaseUrl } from '../services/config'
+import { DEFAULT_SETTINGS, READING_SECONDS, normalizeBaseUrl } from '../services/config'
 import * as api from '../services/api'
 import { normalizeSite } from '../utils/format'
 
-function SiteList({ title, icon: Icon, tone, sites, onChange, placeholder, emptyText }) {
+function Section({ n, title, note, aside, children }) {
+  return (
+    <section className="grid gap-6 border-t border-olive/70 py-10 first:border-t-0 first:pt-2 lg:grid-cols-[15rem_1fr] lg:gap-14">
+      <header>
+        <p className="font-display text-sm text-olive/50 tabular-nums">{n}</p>
+        <h2 className="mt-0.5 text-2xl text-olive">{title}</h2>
+        {note && <p className="mt-2 text-sm leading-relaxed text-olive/65">{note}</p>}
+        {aside && <div className="mt-3">{aside}</div>}
+      </header>
+      <div className="min-w-0 space-y-6">{children}</div>
+    </section>
+  )
+}
+
+function SiteList({ title, tone, sites, onChange, placeholder, emptyText, scopeNote }) {
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
   const inputId = `site-${title.replace(/\W/g, '').toLowerCase()}`
@@ -41,10 +40,7 @@ function SiteList({ title, icon: Icon, tone, sites, onChange, placeholder, empty
 
   return (
     <div>
-      <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-olive">
-        <Icon className="size-4 text-olive/65" aria-hidden="true" />
-        {title}
-      </p>
+      <p className="mb-2 text-xs font-bold tracking-[0.16em] text-olive/60 uppercase">{title}</p>
       <form onSubmit={add} className="flex gap-2">
         <label htmlFor={inputId} className="sr-only">
           Add to {title}
@@ -61,7 +57,7 @@ function SiteList({ title, icon: Icon, tone, sites, onChange, placeholder, empty
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${inputId}-err` : undefined}
         />
-        <Button type="submit" icon={Plus} disabled={!value.trim()}>
+        <Button type="submit" variant={tone === 'green' ? 'secondary' : 'ghost'} disabled={!value.trim()}>
           Add
         </Button>
       </form>
@@ -70,21 +66,26 @@ function SiteList({ title, icon: Icon, tone, sites, onChange, placeholder, empty
           {error}
         </p>
       )}
-      <ul className="mt-3 flex flex-wrap gap-1.5">
-        {sites.length === 0 && <li className="text-xs text-olive/55">{emptyText}</li>}
+      <ul className="mt-3 border-t border-dotted border-olive/40">
+        {sites.length === 0 && <li className="py-3 text-xs text-olive/55">{emptyText}</li>}
         {sites.map((s) => (
-          <li key={s}>
-            <Badge tone={tone} className="py-1 pr-1 pl-2.5 text-xs">
+          <li key={s} className="flex items-center gap-3 border-b border-dotted border-olive/40 py-2">
+            <span
+              aria-hidden="true"
+              className={tone === 'green' ? 'h-4 w-1.5 shrink-0 bg-sage-deep' : 'h-4 w-1.5 shrink-0 bg-clay/60'}
+            />
+            <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-olive">
               {s}
-              <button
-                type="button"
-                onClick={() => onChange(sites.filter((x) => x !== s))}
-                className="ml-0.5 grid size-4 place-items-center rounded-full hover:bg-olive/20"
-                aria-label={`Remove ${s}`}
-              >
-                <X className="size-3" />
-              </button>
-            </Badge>
+              {scopeNote && <span className="font-sans text-xs text-olive/50"> + subdomains</span>}
+            </span>
+            <button
+              type="button"
+              onClick={() => onChange(sites.filter((x) => x !== s))}
+              className="text-xs font-semibold text-olive/60 underline decoration-olive/30 underline-offset-4 hover:text-clay hover:decoration-clay"
+              aria-label={`Remove ${s}`}
+            >
+              remove
+            </button>
           </li>
         ))}
       </ul>
@@ -116,9 +117,7 @@ function BackendCard() {
   }
 
   return (
-    <Card>
-      <CardHeader icon={Server} title="Backend connection" subtitle="Where the dashboard sends API requests" />
-      <CardBody className="space-y-5">
+    <Section n="05" title="Backend" note="Where the dashboard sends API requests. Your teammates’ server lives here.">
         <form onSubmit={save} className="space-y-2">
           <label htmlFor="api-url" className="text-sm font-medium text-olive">
             Backend API URL
@@ -137,7 +136,7 @@ function BackendCard() {
               autoComplete="off"
             />
             <div className="flex gap-2">
-              <Button icon={PlugZap} onClick={runTest} loading={test.state === 'loading'} disabled={!validUrl}>
+              <Button onClick={runTest} loading={test.state === 'loading'} disabled={!validUrl}>
                 Test
               </Button>
               <Button type="submit" variant="primary" disabled={!dirty || !validUrl}>
@@ -159,14 +158,13 @@ function BackendCard() {
             No API keys are stored in the dashboard — Claude and SpacetimeDB credentials live on the backend.
           </p>
         </form>
-      </CardBody>
-    </Card>
+    </Section>
   )
 }
 
 export function Settings() {
-  const { settings, updateSettings, notify } = useApp()
-  const { clearReadings, extension, capture } = useStudyData()
+  const { settings, updateSettings, notify, navigate } = useApp()
+  const { clearReadings, extension } = useStudyData()
   const [confirmClear, setConfirmClear] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -179,63 +177,58 @@ export function Settings() {
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-2">
-      <div className="space-y-5">
-        <Card>
-          <CardHeader icon={Camera} title="Notebook camera" subtitle="Overhead Raspberry Pi / ESP32 capture" />
-          <CardBody className="space-y-5">
-            <Toggle
-              checked={settings.cameraEnabled}
-              onChange={(cameraEnabled) => updateSettings({ cameraEnabled })}
-              label="Camera capture"
-              description={
-                capture.capturing && !settings.cameraEnabled
-                  ? 'Stopping capture…'
-                  : 'When off, capture is stopped and the Start button is disabled.'
-              }
-            />
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-olive">Capture interval</p>
-                <p className="text-xs text-olive/65">How often the camera photographs your notebook.</p>
-              </div>
-              <Segmented
-                label="Capture interval"
-                value={settings.captureIntervalSec}
-                onChange={(captureIntervalSec) => updateSettings({ captureIntervalSec })}
-                options={CAPTURE_INTERVALS.map((s) => ({ value: s, label: `${s}s` }))}
-                disabled={!settings.cameraEnabled}
-              />
-            </div>
-          </CardBody>
-        </Card>
+    <div className="mx-auto max-w-5xl">
+      <Section n="01" title="Notebook camera" note="A live preview of your page. Pip only sees single stills you send.">
+            <ul className="space-y-2 text-sm leading-relaxed text-olive/80">
+              <li>Starts only when you press Start on “peek at my notebook”, and stops when you press Stop or close the tab.</li>
+              <li>Nothing is recorded or saved. A still is grabbed only when you ask Pip a question or press Analyze.</li>
+              <li>Works with a laptop or USB webcam today; the Pi / ESP32 overhead stream is a separate option in the camera menu.</li>
+            </ul>
+            <Button variant="secondary" className="self-start" onClick={() => navigate('notebook')}>
+              Open the live camera
+            </Button>
+      </Section>
 
-        <Card>
-          <CardHeader
-            icon={Timer}
-            title="Reading tracking"
-            subtitle={extension.connected ? 'Synced to the Chrome extension' : 'Extension not detected — saved for when it connects'}
-            action={<Badge tone={extension.connected ? 'green' : 'neutral'}>{extension.connected ? 'Linked' : 'Offline'}</Badge>}
-          />
-          <CardBody className="space-y-5">
+      <Section
+        n="02"
+        title="Reading"
+        note={extension.connected ? 'Synced with the Chrome extension.' : 'Extension not detected — saved here until it connects.'}
+        aside={<Badge tone={extension.connected ? 'green' : 'neutral'}>{extension.connected ? 'linked' : 'offline'}</Badge>}
+      >
             <Toggle
               checked={settings.readingTrackingEnabled}
               onChange={(readingTrackingEnabled) => updateSettings({ readingTrackingEnabled })}
               label="Track active reading"
               description="Pause to stop the extension from recording any new pages."
             />
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-olive">Minimum active reading</p>
-                <p className="text-xs text-olive/65">Visible, focused, and recently interacted-with time before a page is saved.</p>
+            <div className={settings.readingTrackingEnabled ? '' : 'opacity-50'}>
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor="min-reading" className="text-sm font-medium text-olive">
+                  Save a page after
+                </label>
+                <output htmlFor="min-reading" className="font-display text-2xl text-olive tabular-nums">
+                  {settings.minReadingSeconds}s
+                </output>
               </div>
-              <Segmented
-                label="Minimum active reading time"
+              <p className="text-xs text-olive/65">
+                Seconds of active reading (tab visible, window focused, you interacting) on an allowed site.
+              </p>
+              <input
+                id="min-reading"
+                type="range"
+                min={READING_SECONDS.min}
+                max={READING_SECONDS.max}
+                step="1"
                 value={settings.minReadingSeconds}
-                onChange={(minReadingSeconds) => updateSettings({ minReadingSeconds })}
-                options={[15, 30, 60].map((s) => ({ value: s, label: `${s}s` }))}
+                onChange={(e) => updateSettings({ minReadingSeconds: Number(e.target.value) })}
                 disabled={!settings.readingTrackingEnabled}
+                aria-valuetext={`${settings.minReadingSeconds} seconds`}
+                className="mt-3 w-full accent-sage-deep"
               />
+              <div className="flex justify-between text-[11px] text-olive/55 tabular-nums" aria-hidden="true">
+                <span>{READING_SECONDS.min}s</span>
+                <span>{READING_SECONDS.max}s</span>
+              </div>
             </div>
             <Toggle
               checked={settings.shareReadingTextWithTutor}
@@ -243,72 +236,70 @@ export function Settings() {
               label="Let the tutor use captured page text"
               description="Off: the tutor only sees page titles and URLs. Page text is uploaded only if you also enable it in the extension."
             />
+      </Section>
+
+      <Section
+        n="03"
+        title="Allowed websites"
+        note="Any site you choose — Canvas, Notion, Figma, YouTube, docs. Nothing else is ever tracked. Each entry covers the domain and its subdomains."
+      >
             <SiteList
-              title="Allowed study sites"
-              icon={Globe}
+              scopeNote
+              title="Allowed websites"
               tone="green"
               sites={settings.allowedSites}
               onChange={(allowedSites) => updateSettings({ allowedSites })}
               placeholder="docs.python.org"
               emptyText="No sites allowed — nothing will be tracked."
             />
-            <p className="-mt-2 text-xs text-olive/55">
-              Chrome still asks you to grant access per site from the extension popup — the dashboard can’t grant permissions for you.
+            <p className="-mt-3 text-xs leading-relaxed text-olive/55">
+              The extension’s list is the source of truth. While the extension is linked, edits here sync to it automatically; otherwise they apply the next time it connects. Chrome still asks you to grant access per site from the extension popup — the dashboard can’t grant permissions.
             </p>
             <SiteList
               title="Blocked sites"
-              icon={Ban}
               tone="red"
               sites={settings.blockedSites}
               onChange={(blockedSites) => updateSettings({ blockedSites })}
               placeholder="mail.google.com"
               emptyText="No blocked sites."
             />
-          </CardBody>
-        </Card>
-      </div>
+      </Section>
 
-      <div className="space-y-5">
-        <BackendCard key={settings.apiBaseUrl} />
-
-        <Card>
-          <CardHeader icon={ShieldCheck} title="Privacy" subtitle="What Synapse collects — and what it never does" />
-          <CardBody className="space-y-4 text-sm leading-relaxed text-olive/80">
+      <Section n="04" title="Privacy" note="What Synapse collects — and what it never does.">
             <ul className="space-y-3">
               {[
                 ['Opt-in only', 'Reading is tracked only on sites you approve, and only while the tab is visible, focused, and you’re interacting with it.'],
                 ['Never collected', 'Passwords, form fields, text inputs, private messages, and pages with login/checkout forms are skipped entirely.'],
                 ['Text stays local by default', 'Extracted article text is kept in the extension until you explicitly allow uploading it.'],
-                ['Camera', 'Snapshots are taken only while capture is running and are sent to your team’s backend for analysis.'],
+                ['Camera', 'The live preview stays on your device. Only the single still sent with a question or Analyze goes to the backend.'],
                 ['Your control', 'Pause tracking anytime, delete individual records, or clear everything below.'],
               ].map(([k, v]) => (
                 <li key={k} className="flex gap-3">
-                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-sage-ink" aria-hidden="true" />
+                  <span aria-hidden="true" className="mt-2 h-px w-4 shrink-0 bg-olive/60" />
                   <span>
                     <strong className="font-medium text-olive">{k}.</strong> {v}
                   </span>
                 </li>
               ))}
             </ul>
-            <p className="rounded-xl border border-olive/12 bg-olive/4 p-3 text-xs text-olive/65">
+            <p className="rounded-sm border border-olive/12 bg-olive/4 p-3 text-xs text-olive/65">
               PDFs opened in Chrome’s built-in viewer don’t expose their text to extensions, so for PDFs Synapse records only the
               title, URL and reading time.
             </p>
-          </CardBody>
-        </Card>
+      </Section>
 
-        <Card>
-          <CardHeader icon={Trash2} title="Data management" />
-          <CardBody className="flex flex-col gap-3 sm:flex-row">
-            <Button variant="danger" icon={Trash2} onClick={() => setConfirmClear(true)}>
+      <BackendCard key={settings.apiBaseUrl} />
+
+      <Section n="06" title="Your data" note="Delete things, or start the settings over.">
+        <div className="flex flex-col gap-3 sm:flex-row">
+            <Button variant="danger" onClick={() => setConfirmClear(true)}>
               Clear reading history
             </Button>
-            <Button variant="ghost" icon={RotateCcw} onClick={() => setConfirmReset(true)}>
+            <Button variant="ghost" onClick={() => setConfirmReset(true)}>
               Reset settings to defaults
             </Button>
-          </CardBody>
-        </Card>
-      </div>
+        </div>
+      </Section>
 
       <ConfirmDialog
         open={confirmClear}

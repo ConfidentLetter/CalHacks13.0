@@ -13,7 +13,7 @@ export function Badge({ tone = 'neutral', icon: Icon, className, children }) {
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap',
+        'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap',
         TONES[tone],
         className,
       )}

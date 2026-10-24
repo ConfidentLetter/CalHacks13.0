@@ -16,7 +16,7 @@
   let activeSec = 0
   let lastInteraction = Date.now()
   let qualified = false
-  let minSec = 30
+  let minSec = 5
   let textSent = false
 
   function isSensitivePage() {
@@ -72,8 +72,14 @@
 
   if (isSensitivePage()) return
 
-  chrome.storage.local.get('settings').then(({ settings }) => {
-    if (settings?.minReadingSeconds) minSec = settings.minReadingSeconds
+  // Follow the user's 1–10s threshold, including changes made while this page is open.
+  const applyThreshold = (settings) => {
+    const n = settings?.minReadingSeconds
+    if (Number.isInteger(n) && n >= 1 && n <= 10) minSec = n
+  }
+  chrome.storage.local.get('settings').then(({ settings }) => applyThreshold(settings))
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.settings) applyThreshold(changes.settings.newValue)
   })
 
   const bump = () => (lastInteraction = Date.now())

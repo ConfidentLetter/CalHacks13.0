@@ -71,7 +71,7 @@ function renderSite() {
       el.textContent = 'Not approved — reading here is not tracked.'
       el.className = 'site-status'
       action.hidden = false
-      action.textContent = `Track ${status.site}`
+      action.textContent = `Allow current website (${status.site})`
       break
     case 'needs-permission':
       el.textContent = 'On your allow list — Chrome needs your permission to read this site.'
@@ -83,7 +83,7 @@ function renderSite() {
       el.textContent = tracking ? '✓ Approved — tracking active reading' : 'Approved — tracking is paused'
       el.className = `site-status ${tracking ? 'ok' : 'warn'}`
       action.hidden = false
-      action.textContent = 'Stop tracking this site'
+      action.textContent = 'Remove this site'
       break
   }
   $('save-page').disabled = status.state === 'restricted' || status.state === 'blocked'
@@ -91,7 +91,7 @@ function renderSite() {
 
 function renderTimer() {
   const { live, settings, status } = state
-  const min = settings.minReadingSeconds || 30
+  const min = settings.minReadingSeconds || 5
   const sec = live?.activeSec || 0
   const pct = Math.min(100, Math.round((sec / min) * 100))
   $('timer').textContent = fmt(sec)
@@ -183,7 +183,7 @@ async function renderSiteList() {
       li.className = 'pending'
       li.title = 'Allowed, but Chrome access not granted yet — visit the site and click “Grant access”.'
     }
-    li.append(document.createTextNode(site))
+    li.append(document.createTextNode(`${site} + subdomains`))
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.textContent = '×'
@@ -208,13 +208,15 @@ function render() {
   renderTimer()
   const tracking = settings.trackingEnabled
   const toggle = $('toggle-tracking')
-  toggle.textContent = tracking ? 'Disable Tracking' : 'Enable Tracking'
+  toggle.textContent = tracking ? 'Pause tracking' : 'Resume tracking'
   toggle.className = `btn ${tracking ? 'secondary' : 'primary'}`
   $('stats').textContent = `${savedCount} saved · ${pendingCount} pending sync`
 
   const share = $('share-text')
   share.checked = settings.shareText
   $('upload-shots').checked = settings.uploadScreenshots
+  if (document.activeElement !== $('min-reading')) $('min-reading').value = String(settings.minReadingSeconds)
+  $('min-reading-value').textContent = `${settings.minReadingSeconds}s`
   $('shot-interval').value = String(settings.screenshotIntervalSec)
   $('add-canvas').hidden = settings.allowedSites.includes(CANVAS_SITE)
   renderShots()
@@ -238,7 +240,7 @@ async function checkConnection() {
 
 $('consent-btn').addEventListener('click', async () => {
   await send('popup:consent')
-  flash('Tracking enabled. Approve a study site to begin.', 'ok')
+  flash('Tracking enabled. Allow a website to begin.', 'ok')
   refresh()
 })
 
@@ -300,9 +302,47 @@ $('upload-shots').addEventListener('change', async (e) => {
   flash(e.target.checked ? 'Snapshots will upload to the backend' : 'Snapshots stay on this device')
 })
 
+$('min-reading').addEventListener('input', (e) => {
+  $('min-reading-value').textContent = `${e.target.value}s`
+})
+$('min-reading').addEventListener('change', async (e) => {
+  await send('popup:update-settings', { patch: { minReadingSeconds: Number(e.target.value) } })
+  flash(`Pages save after ${e.target.value}s of active reading`, 'ok')
+})
+
 $('shot-interval').addEventListener('change', async (e) => {
   await send('popup:update-settings', { patch: { screenshotIntervalSec: Number(e.target.value) } })
   flash(`Snapshot every ${e.target.value}s`, 'ok')
+})
+
+// Accepts "notion.so", "https://www.figma.com/file/…", "*.example.com" → bare host.
+function parseSite(input) {
+  const raw = input.trim().toLowerCase().replace(/^\*\./, '')
+  if (!raw) return ''
+  try {
+    const host = new URL(/^[a-z]+:\/\//.test(raw) ? raw : `https://${raw}`).hostname.replace(/^www\./, '')
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : ''
+  } catch {
+    return ''
+  }
+}
+
+$('add-site-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const site = parseSite($('add-site').value)
+  if (!site) return flash('Enter a domain like notion.so or a full https:// URL', 'err')
+  // permissions.request must be the first await in this user gesture.
+  let granted = false
+  try {
+    granted = await chrome.permissions.request({ origins: sitePatterns(site) })
+  } catch (err) {
+    return flash(`Chrome refused the request: ${err.message}`, 'err')
+  }
+  if (!granted) return flash(`Permission not granted — ${site} won’t be tracked.`, 'err')
+  await send('popup:approve-site', { site })
+  $('add-site').value = ''
+  flash(`Allowed ${site} (and its subdomains). Reload open tabs on it.`, 'ok')
+  refresh()
 })
 
 $('add-canvas').addEventListener('click', async () => {

@@ -84,10 +84,12 @@
 @layer components {
   /* A sheet of paper: white surface, thin warm border, soft resting shadow. */
   .glass {
-    @apply rounded-md border border-paper-deep bg-white;
-    box-shadow:
-      0 1px 0 rgb(73 70 56 / 0.04),
-      0 10px 24px -18px rgb(73 70 56 / 0.35);
+    @apply rounded-sm border border-olive/25 bg-white;
+  }
+  /* paper sheet with a small offset print, used sparingly for the main object on a page */
+  .sheet {
+    @apply relative border border-olive/70 bg-white;
+    box-shadow: 5px 5px 0 0 var(--color-paper-deep);
   }
   /* Ruled notebook lines, drawn on top of a paper surface. */
   .ruled {
@@ -121,7 +123,7 @@
     animation: var(--animate-shimmer);
   }
   .input {
-    @apply w-full rounded-xl border border-paper-deep bg-cream px-3.5 py-2.5 text-sm text-olive placeholder:text-olive/45 transition outline-none focus:border-butter-deep focus:ring-4 focus:ring-butter/60;
+    @apply w-full rounded-sm border border-olive/30 bg-white px-3.5 py-2.5 text-sm text-olive placeholder:text-olive/45 transition outline-none focus:border-butter-deep focus:ring-4 focus:ring-butter/60;
   }
 }
 
@@ -133,4 +135,68 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---- Pip the study buddy: one small animation per state (disabled by reduced-motion above) ---- */
+@keyframes pip-bob {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes pip-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes pip-lean {
+  50% {
+    transform: rotate(-4deg) translateY(-2px);
+  }
+}
+@keyframes pip-blink-dots {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes pip-talk {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.pip-body {
+  transform-origin: 50% 90%;
+}
+.pip-ready .pip-body {
+  animation: pip-bob 2.6s ease-in-out infinite;
+}
+.pip-listening .pip-body {
+  animation: pip-lean 1.2s ease-in-out infinite;
+}
+.pip-sending .pip-body {
+  animation: pip-hop 0.6s ease-out infinite;
+}
+.pip-thinking .pip-dots {
+  animation: pip-blink-dots 1s steps(2) infinite;
+}
+.pip-speaking .pip-mouth-a {
+  animation: pip-talk 0.32s steps(1) infinite;
+}
+.pip-speaking .pip-mouth-b {
+  animation: pip-talk 0.32s steps(1) infinite reverse;
+}
+.pip-listening .pip-waves {
+  animation: pip-blink-dots 0.6s steps(2) infinite;
 }

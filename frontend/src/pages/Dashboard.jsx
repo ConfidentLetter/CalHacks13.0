@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { ArrowRight, ArrowUpRight, RefreshCw, Send } from 'lucide-react'
-import { useApp, useStudyData } from '../context/contexts'
+import { ArrowRight, ArrowUpRight, Send } from 'lucide-react'
+import { useApp, useCamera, useStudyData } from '../context/contexts'
 import { Button } from '../components/ui/Button'
 import { StatusDot } from '../components/ui/Badge'
 import { ErrorState, Skeleton } from '../components/ui/Feedback'
-import { SnapshotFrame } from '../components/shared/SnapshotFrame'
+import { LiveVideo } from '../components/shared/LiveVideo'
 import { useNow } from '../hooks/useInterval'
-import { cx, domainOf, formatDuration, isToday, timeAgo } from '../utils/format'
+import { cx, domainOf, formatClock, formatDuration, isToday, timeAgo } from '../utils/format'
 
-const QUICK_PROMPTS = ['check my latest notebook work', 'explain integration by parts', 'quiz me on what i read today']
+const QUICK_PROMPTS = ['check the page on my desk', 'explain integration by parts', 'quiz me on what i read today']
 
 function greeting() {
   const h = new Date().getHours()
@@ -114,7 +114,8 @@ function Welcome() {
 
 function StatusLedger() {
   const { navigate } = useApp()
-  const { status, capture, extension, snapshot } = useStudyData()
+  const { status, extension, lastFrame } = useStudyData()
+  const camera = useCamera()
   const cam = status.data?.camera
   const ai = status.data?.ai
   const ext = extension.info
@@ -124,9 +125,9 @@ function StatusLedger() {
   const rows = [
     {
       label: 'camera',
-      state: !cam?.connected ? 'offline' : capture.capturing ? 'active' : 'online',
-      value: !cam ? 'backend offline' : !cam.connected ? 'not connected' : capture.capturing ? 'capturing' : 'connected, idle',
-      note: snapshot.data ? `last frame ${timeAgo(snapshot.data.capturedAt)}` : null,
+      state: camera.isLive ? 'active' : 'idle',
+      value: camera.isLive ? 'live' : 'off',
+      note: lastFrame ? `last still ${timeAgo(lastFrame.capturedAt)}` : cam?.connected ? 'overhead camera online' : null,
       to: 'notebook',
     },
     {
@@ -175,7 +176,8 @@ function StatusLedger() {
 
 function Notebook() {
   const { navigate } = useApp()
-  const { snapshot, refreshSnapshot, capture, analysis } = useStudyData()
+  const { analysis, lastFrame } = useStudyData()
+  const camera = useCamera()
   return (
     <section className="relative">
       {/* second sheet underneath */}
@@ -186,49 +188,45 @@ function Notebook() {
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-olive/70 px-5 py-4">
           <div>
             <Eyebrow n="01">the notebook</Eyebrow>
-            <h3 className="mt-1 text-2xl text-olive">latest snapshot</h3>
+            <h3 className="mt-1 text-2xl text-olive">{camera.isLive ? 'live on your desk' : 'your page'}</h3>
           </div>
-          <div className="flex items-center gap-3 text-xs text-olive/60">
-            <span className="flex items-center gap-1.5">
-              <StatusDot state={capture.capturing ? 'active' : 'idle'} pulse={capture.capturing} />
-              {capture.capturing ? 'capturing' : 'capture paused'}
-            </span>
-            <Button
-              size="icon"
-              variant="ghost"
-              icon={RefreshCw}
-              loading={snapshot.loading}
-              onClick={() => refreshSnapshot()}
-              aria-label="Refresh snapshot"
-            />
-          </div>
+          <span className="flex items-center gap-1.5 text-xs text-olive/60">
+            <StatusDot state={camera.isLive ? 'offline' : 'idle'} pulse={camera.isLive} />
+            {camera.isLive ? 'live camera on' : 'camera off'}
+          </span>
         </header>
         <div className="grid gap-5 p-5 lg:grid-cols-[1.5fr_1fr]">
-          <SnapshotFrame
-            snapshot={snapshot.data}
-            loading={snapshot.loading}
-            capturing={capture.capturing}
-            onOpen={snapshot.data ? () => navigate('notebook') : undefined}
-            className="rounded-sm"
-          />
-          <div className="flex flex-col gap-4">
-            {snapshot.error && (
-              <ErrorState message={snapshot.error} onRetry={() => refreshSnapshot()} className="rounded-sm" />
+          <div className="relative aspect-video overflow-hidden border border-olive/70 bg-olive">
+            {camera.isLive && camera.stream ? (
+              <LiveVideo stream={camera.stream} />
+            ) : (
+              <div className="grid size-full place-items-center p-6 text-center text-cream">
+                <div className="space-y-3">
+                  <p className="font-display text-lg">camera off</p>
+                  <Button variant="primary" onClick={() => navigate('notebook')}>
+                    Start the live camera
+                  </Button>
+                </div>
+              </div>
             )}
+          </div>
+          <div className="flex flex-col gap-4">
             <div className="ruled flex-1 border-l-2 border-clay/40 pl-4 text-sm leading-7 text-olive/80">
               {analysis.data ? (
                 <>
-                  <span className="font-semibold text-olive">notes from the last check — </span>
+                  <span className="font-semibold text-olive">
+                    notes on the still from {formatClock(analysis.frame?.capturedAt)} —{' '}
+                  </span>
                   {analysis.data.summary}
                 </>
-              ) : snapshot.data ? (
-                'this page hasn’t been checked yet. open the observer to go through it step by step.'
+              ) : lastFrame ? (
+                `Pip last looked at a still from ${formatClock(lastFrame.capturedAt)}.`
               ) : (
-                'once the overhead camera takes a picture of your notebook, the latest page lands here.'
+                'the preview is just for you. Pip only sees a single still when you ask a question or press Analyze.'
               )}
             </div>
             <Button variant="primary" className="self-start" onClick={() => navigate('notebook')}>
-              {snapshot.data ? 'check my work' : 'set up capture'} <ArrowRight className="size-4" aria-hidden="true" />
+              {camera.isLive ? 'ask about this page' : 'open the camera'} <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -304,7 +302,7 @@ function ReadingList() {
         <ErrorState className="mt-4 rounded-sm" message={readingsState.error} onRetry={refreshReadings} />
       ) : !readings.length ? (
         <p className="mt-4 border-l-2 border-sage-deep pl-4 text-sm leading-relaxed text-olive/65">
-          nothing saved yet. approve a study site in the extension and read for about 30 seconds.
+          nothing saved yet. allow a website in the extension and read for a few seconds.
         </p>
       ) : (
         <ul className="mt-4">

@@ -10,14 +10,13 @@ export const DEFAULT_API_BASE_URL =
 
 export const SETTINGS_STORAGE_KEY = 'synapse.settings.v1'
 
-export const CAPTURE_INTERVALS = [30, 60, 120]
+export const READING_SECONDS = { min: 1, max: 10, default: 5 }
 
 export const DEFAULT_SETTINGS = {
   apiBaseUrl: DEFAULT_API_BASE_URL,
-  cameraEnabled: true,
-  captureIntervalSec: 60,
-  readingTrackingEnabled: true,
-  minReadingSeconds: 30,
+  readingTrackingEnabled: false,
+  minReadingSeconds: 5,
+  voiceDemo: false, // "Demo voice": scripted Pip replies while the backend isn't ready
   shareReadingTextWithTutor: false,
   allowedSites: [],
   blockedSites: ['mail.google.com', 'web.whatsapp.com', 'messenger.com', 'discord.com'],
@@ -32,7 +31,11 @@ export function loadSettings() {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
     if (!raw) return { ...DEFAULT_SETTINGS }
     const { dataMode: _legacy, ...saved } = JSON.parse(raw)
-    return { ...DEFAULT_SETTINGS, ...saved }
+    const merged = { ...DEFAULT_SETTINGS, ...saved }
+    // Older saves used 15/30/60s; the threshold is now 1–10s.
+    const m = merged.minReadingSeconds
+    if (!Number.isInteger(m) || m < 1 || m > 10) merged.minReadingSeconds = DEFAULT_SETTINGS.minReadingSeconds
+    return merged
   } catch {
     return { ...DEFAULT_SETTINGS }
   }

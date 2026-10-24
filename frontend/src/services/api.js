@@ -159,19 +159,6 @@ export async function testConnection(baseUrl) {
   return { data, latencyMs: Math.round(performance.now() - started) }
 }
 
-/** POST /api/camera/start { intervalSec } */
-export function startCapture(intervalSec) {
-  return call(
-    'POST /api/camera/start',
-    () => http('POST', '/api/camera/start', { intervalSec })
-  )
-}
-
-/** POST /api/camera/stop */
-export function stopCapture() {
-  return call('POST /api/camera/stop', () => http('POST', '/api/camera/stop', {}))
-}
-
 /** GET /api/camera/latest[?fresh=true] — fresh asks the camera for a new frame now (optional). */
 export async function getLatestSnapshot({ fresh = false } = {}) {
   const res = await call(
@@ -181,11 +168,46 @@ export async function getLatestSnapshot({ fresh = false } = {}) {
   return { ...res, data: normalizeSnapshot(res.data) }
 }
 
-/** POST /api/camera/analyze { snapshotId } */
-export function analyzeSnapshot(snapshotId) {
-  return call(
-    'POST /api/camera/analyze',
-    () => http('POST', '/api/camera/analyze', { snapshotId }, { timeoutMs: 60_000 })
+/**
+ * Live camera stream URL. The backend may report `camera.streamUrl` (absolute or relative) and
+ * `camera.streamType` ('mjpeg' | 'video') in GET /api/status; otherwise we assume MJPEG at
+ * GET /api/camera/stream. This is only a URL — the browser connects to it directly.
+ */
+export function getStreamInfo(camera) {
+  return {
+    url: resolveUrl(camera?.streamUrl || '/api/camera/stream'),
+    type: camera?.streamType === 'video' ? 'video' : 'mjpeg',
+  }
+}
+
+/**
+ * POST /api/camera/capture — hardware adapter only: ask the Pi/ESP32 for one still right now.
+ * Returns the new snapshot. 404/501 → reported as not implemented; never faked.
+ */
+export async function captureNow() {
+  const res = await call('POST /api/camera/capture', () => http('POST', '/api/camera/capture', {}, { timeoutMs: 20_000 }))
+  return { ...res, data: normalizeSnapshot(res.data) }
+}
+
+/** Turn a captured frame (from CameraProvider.captureFrame) into the API's `image` field. */
+function frameBody(frame) {
+  if (!frame) return undefined
+  return frame.source === 'hardware'
+    ? { source: 'hardware', snapshotId: frame.snapshotId, capturedAt: frame.capturedAt }
+    : {
+        source: 'webcam',
+        mimeType: frame.mimeType,
+        base64: frame.base64,
+        width: frame.width,
+        height: frame.height,
+        capturedAt: frame.capturedAt,
+      }
+}
+
+/** POST /api/camera/analyze { image } — analyze one still grabbed from the live camera. */
+export function analyzeFrame(frame) {
+  return call('POST /api/camera/analyze', () =>
+    http('POST', '/api/camera/analyze', { image: frameBody(frame) }, { timeoutMs: 60_000 }),
   )
 }
 
@@ -244,8 +266,10 @@ export function sendChat({
   includeNotebook = true,
   includeReading = true,
   includeReadingText = false,
+  frame = null,
 }) {
-  const body = { message, history, includeNotebook, includeReading, includeReadingText }
+  // `image` is the single still captured when the question was asked — not a video stream.
+  const body = { message, history, includeNotebook, includeReading, includeReadingText, image: frameBody(frame) }
   return call(
     'POST /api/chat',
     () => http('POST', '/api/chat', body, { timeoutMs: 90_000 })

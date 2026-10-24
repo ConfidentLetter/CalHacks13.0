@@ -77,7 +77,7 @@
       </section>
 
       <div class="actions">
-        <button class="btn primary" id="toggle-tracking" type="button">Disable Tracking</button>
+        <button class="btn primary" id="toggle-tracking" type="button">Pause tracking</button>
         <button class="btn secondary" id="save-page" type="button">Save Current Page</button>
         <button class="btn ghost span2" id="open-dashboard" type="button">Open Dashboard ↗</button>
       </div>
@@ -97,6 +97,10 @@
             <small>Off: only title, URL, and time are uploaded.</small>
           </span>
           <input type="checkbox" id="share-text" />
+        </label>
+        <label class="field">
+          <span>Save a page after <strong id="min-reading-value">5s</strong> of active reading</span>
+          <input type="range" id="min-reading" min="1" max="10" step="1" value="5" />
         </label>
         <label class="field">
           <span>Snapshot every</span>
@@ -122,8 +126,14 @@
           <input type="url" id="dashboard-url" spellcheck="false" />
         </label>
         <div class="field">
-          <span>Approved sites</span>
+          <span>Allowed websites — only these are ever tracked</span>
           <ul id="site-list" class="site-list"></ul>
+          <form id="add-site-form" class="add-site">
+            <label for="add-site" class="sr-only">Add a website</label>
+            <input id="add-site" type="text" placeholder="notion.so or https://…" spellcheck="false" autocomplete="off" />
+            <button class="btn secondary" type="submit">Allow</button>
+          </form>
+          <small class="scope-note">Each entry covers that domain and its subdomains (e.g. canva.com → www.canva.com).</small>
           <button class="btn ghost quick-add" id="add-canvas" type="button">+ Canvas (instructure.com)</button>
         </div>
         <p class="note">

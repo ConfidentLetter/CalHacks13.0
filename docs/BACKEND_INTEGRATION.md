@@ -44,28 +44,23 @@ Health check. The dashboard polls it every 10s, and the extension calls it to sh
 {
   "ok": true,
   "version": "0.1.0",
-  "camera": { "connected": true, "capturing": false, "intervalSec": 60, "lastCaptureAt": "2026-10-24T03:10:00Z" },
+  "camera": { "connected": true,
+              "streamUrl": "/api/camera/stream", "streamType": "mjpeg" },
   "reading": { "eventsToday": 4 },
   "ai": { "available": true, "model": "claude-sonnet-5-5" }
 }
 ```
 `camera.connected` must reflect the real hardware. The UI shows "Not connected" when it's false.
 
-### `POST /api/camera/start`
-```json
-// request
-{ "intervalSec": 60 }          // 30 | 60 | 120
-// response
-{ "capturing": true, "intervalSec": 60 }
-```
-Calling it again while capture is running should **update the interval**. The interval selector does this.
-
-### `POST /api/camera/stop`
-```json
-// request: {}
-// response
-{ "capturing": false }
-```
+### `GET /api/camera/stream` (new — live preview)
+The live preview for the hardware adapter. The laptop/USB webcam doesn't use this: it streams straight from the browser via getUserMedia.
+- **Preferred: MJPEG**, `Content-Type: multipart/x-mixed-replace; boundary=frame`. The browser shows it directly in an `<img>`.
+  On a Pi, `picamera2` + a small MJPEG server (or `mjpg-streamer`) works. On an ESP32-CAM, the stock `CameraWebServer` `/stream` already serves this format.
+- Alternatively, browser-playable video (HLS/MP4): report `"streamType": "video"` in `/api/status`.
+- If the stream lives on the device itself rather than the backend, add `"streamUrl": "http://<pi-ip>:8080/stream"` to `camera` in
+  `GET /api/status` (absolute or relative). The UI uses that URL instead of `/api/camera/stream`.
+- The UI only shows **LIVE** after a real frame arrives. If no frame arrives within 10s, it shows an error with a retry button.
+  It only connects while `camera.connected` is true.
 
 ### `GET /api/camera/latest[?fresh=true]`
 Returns the latest snapshot. `fresh=true` comes from the "Refresh Snapshot" button. You may trigger an
@@ -82,12 +77,26 @@ immediate capture or ignore the flag. While capturing, the dashboard polls this 
 Instead of `imageUrl` you can send `"imageBase64": "...", "mimeType": "image/jpeg"`.
 If there is no snapshot yet, return `null` with status 200 (a 404 would be reported as "not implemented").
 
+### `POST /api/camera/capture` (hardware adapter only)
+Used only when the student picks "Overhead camera (Pi / ESP32 stream)". It takes one still right now, at the moment of a question or Analyze. Respond with the same snapshot object as
+`GET /api/camera/latest`. Until this is implemented, the button shows a "not implemented on the backend yet" error,
+and the UI never pretends a picture was taken.
+```json
+// request: {}
+// response
+{ "id": "snap_124", "imageUrl": "/snapshots/snap_124.jpg", "capturedAt": "2026-10-24T03:11:02Z", "deviceId": "pi-desk-1" }
+```
+
 ### `POST /api/camera/analyze`
-Runs Claude Vision on a snapshot. The UI allows up to 60s before timing out.
+Runs Claude Vision on **one still** grabbed from the live camera when the student presses "Analyze my page".
+The UI waits up to 60s.
 
 ```json
-// request
-{ "snapshotId": "snap_123" }
+// request — webcam still (laptop/USB camera, captured in the browser)
+{ "image": { "source": "webcam", "mimeType": "image/jpeg", "base64": "/9j/4AAQ…", "width": 1600, "height": 900,
+             "capturedAt": "2026-10-24T11:11:20Z" } }
+// request — hardware still (Pi/ESP32 adapter; the frame came from POST /api/camera/capture)
+{ "image": { "source": "hardware", "snapshotId": "snap_124", "capturedAt": "2026-10-24T11:11:20Z" } }
 // response
 {
   "snapshotId": "snap_123",
@@ -170,7 +179,9 @@ The UI allows up to 90s before timing out.
   "history": [ { "role": "user", "content": "..." }, { "role": "assistant", "content": "..." } ],
   "includeNotebook": true,        // user toggle: use latest snapshot(s)
   "includeReading": true,         // user toggle: use reading titles/URLs
-  "includeReadingText": false     // user consent: may use stored page text
+  "includeReadingText": false,    // user consent: may use stored page text
+  "image": { "source": "webcam", "mimeType": "image/jpeg", "base64": "…", "width": 1600, "height": 900,
+             "capturedAt": "2026-10-24T11:11:35Z" }   // optional: ONE still taken when the question was sent
 }
 // response
 {
@@ -197,3 +208,9 @@ stored page text to Claude when it's false.
 | Endpoint paths / payload shapes | `frontend/src/services/api.js` |
 | Default backend URL | `frontend/src/services/config.js` or `VITE_API_BASE_URL` |
 | Extension sync logic | `extension/background.js` → `flush()` |
+
+## Live camera model (important for the AI side)
+- There is **no interval capture** any more. The live preview is shown only in the browser and is never recorded or uploaded.
+- The AI gets exactly **one still** per question or Analyze click, in `image`. Please don't describe it as "watching" the page.
+  Answer about the still, and feel free to say "in the photo from 11:11…".
+- `image.base64` is a JPEG up to 1600px wide (~150–400 KB). Raise your JSON body limit to at least 2 MB.

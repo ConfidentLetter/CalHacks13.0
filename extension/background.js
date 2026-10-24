@@ -13,7 +13,7 @@ const DEFAULT_SETTINGS = {
   consentGiven: false,
   trackingEnabled: false,
   shareText: false,
-  minReadingSeconds: 30,
+  minReadingSeconds: 5, // 1–10s of active reading before a page is saved
   backendUrl: 'http://localhost:8000',
   dashboardUrl: 'http://localhost:5173',
   allowedSites: [],
@@ -27,7 +27,13 @@ const DEFAULT_SETTINGS = {
 
 async function getSettings() {
   const { settings } = await chrome.storage.local.get('settings')
-  return { ...DEFAULT_SETTINGS, ...(settings || {}) }
+  const merged = { ...DEFAULT_SETTINGS, ...(settings || {}) }
+  if (!validReadingSeconds(merged.minReadingSeconds)) merged.minReadingSeconds = DEFAULT_SETTINGS.minReadingSeconds
+  return merged
+}
+
+function validReadingSeconds(n) {
+  return Number.isInteger(n) && n >= 1 && n <= 10
 }
 
 async function setSettings(patch) {
@@ -396,6 +402,7 @@ async function bridgeInfo() {
       version: chrome.runtime.getManifest().version,
       trackingEnabled: settings.consentGiven && settings.trackingEnabled,
       consentGiven: settings.consentGiven,
+      minReadingSeconds: settings.minReadingSeconds,
       allowedSites: settings.allowedSites,
       blockedSites: settings.blockedSites,
       pendingCount: records.filter((r) => !r.synced).length,
@@ -518,7 +525,7 @@ const handlers = {
     }
     if (Array.isArray(incoming.allowedSites)) patch.allowedSites = incoming.allowedSites
     if (Array.isArray(incoming.blockedSites)) patch.blockedSites = incoming.blockedSites
-    if ([15, 30, 60].includes(incoming.minReadingSeconds)) patch.minReadingSeconds = incoming.minReadingSeconds
+    if (validReadingSeconds(incoming.minReadingSeconds)) patch.minReadingSeconds = incoming.minReadingSeconds
     if (typeof incoming.backendUrl === 'string' && /^https?:\/\//.test(incoming.backendUrl)) {
       patch.backendUrl = incoming.backendUrl.replace(/\/+$/, '')
     }

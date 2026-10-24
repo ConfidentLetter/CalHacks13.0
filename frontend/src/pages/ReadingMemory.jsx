@@ -81,7 +81,7 @@ function ReadingDetail({ record, onDelete, onClose }) {
           ['When', formatDateTime(record.timestamp)],
           ['Domain', domainOf(record.url)],
         ].map(([k, v]) => (
-          <div key={k} className="rounded-xl border border-olive/8 bg-olive/4 p-3">
+          <div key={k} className="rounded-sm border border-olive/8 bg-olive/4 p-3">
             <dt className="text-[11px] text-olive/55">{k}</dt>
             <dd className="mt-0.5 truncate text-sm font-medium text-olive">{v}</dd>
           </div>
@@ -94,11 +94,11 @@ function ReadingDetail({ record, onDelete, onClose }) {
           <SourceBadge source={record.source} />
         </div>
         {record.excerpt ? (
-          <p className="max-h-64 overflow-y-auto rounded-xl border border-olive/8 bg-paper p-4 text-sm leading-relaxed whitespace-pre-line text-olive/80">
+          <p className="max-h-64 overflow-y-auto rounded-sm border border-olive/8 bg-paper p-4 text-sm leading-relaxed whitespace-pre-line text-olive/80">
             {record.excerpt}
           </p>
         ) : (
-          <p className="rounded-xl border border-dashed border-olive/20 p-4 text-xs leading-relaxed text-olive/55">
+          <p className="rounded-sm border border-dashed border-olive/20 p-4 text-xs leading-relaxed text-olive/55">
             No page text stored for this session. Only the title, URL and reading time were saved — either text sharing is
             off, or the page (e.g. a PDF) didn’t expose readable text.
           </p>
@@ -117,7 +117,7 @@ function ReadingDetail({ record, onDelete, onClose }) {
           href={record.url}
           target="_blank"
           rel="noreferrer noopener"
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-olive/14 bg-olive/12 px-4 text-sm font-medium text-olive transition hover:bg-olive/16"
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-olive/14 bg-olive/12 px-4 text-sm font-medium text-olive transition hover:bg-olive/16"
         >
           <ExternalLink className="size-4" aria-hidden="true" /> Open page
         </a>
@@ -265,7 +265,7 @@ export function ReadingMemory() {
 
   return (
     <div className="space-y-5">
-      <Card className="p-4">
+      <div className="border-b border-olive/70 pb-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-olive/55" aria-hidden="true" />
@@ -296,10 +296,10 @@ export function ReadingMemory() {
             {filtered.length} page{filtered.length === 1 ? '' : 's'} · {formatDuration(totalSec)} total
           </span>
         </div>
-      </Card>
+      </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1.15fr_1fr]">
-        <Card className="overflow-hidden">
+      <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr]">
+        <div>
           {readingsState.loading && !readings.length ? (
             <div className="space-y-2 p-4">
               {[0, 1, 2, 3, 4].map((i) => (
@@ -314,7 +314,7 @@ export function ReadingMemory() {
             <EmptyState
               icon={BookOpenText}
               title="Your reading memory is empty"
-              description="Install the Synapse extension, approve a study site, and read for about 30 seconds. Pages appear here automatically."
+              description="Install the Synapse extension, allow a website, and read for a few seconds. Pages appear here automatically."
               className="py-16"
             />
           ) : !filtered.length ? (
@@ -336,55 +336,61 @@ export function ReadingMemory() {
               className="py-16"
             />
           ) : (
-            <ul className="divide-y divide-olive/8" aria-label="Reading history">
-              {filtered.map((r) => {
+            <ul className="space-y-3" aria-label="Reading history">
+              {filtered.map((r, i) => {
                 const active = r.id === selectedId
                 return (
                   <li
                     key={r.id}
                     className={cx(
-                      'group relative flex items-center gap-3 px-4 py-3 transition',
-                      active ? 'bg-butter/50' : 'hover:bg-olive/4',
+                      'group relative flex items-stretch border bg-white transition',
+                      active ? 'border-olive shadow-[4px_4px_0_0_var(--color-olive)]' : 'border-olive/25 hover:border-olive/60',
                       newIds.has(r.id) && 'animate-highlight',
                     )}
                   >
-                    {active && <span className="absolute inset-y-0 left-0 w-0.5 bg-butter" aria-hidden="true" />}
+                    {/* bookmark ribbon */}
+                    <span
+                      aria-hidden="true"
+                      className={cx(
+                        'relative w-3 shrink-0 [clip-path:polygon(0_0,100%_0,100%_100%,50%_82%,0_100%)]',
+                        i % 3 === 0 ? 'bg-butter-deep' : i % 3 === 1 ? 'bg-sage-deep' : 'bg-paper-deep',
+                      )}
+                    />
                     <button
                       type="button"
                       onClick={() => setSelectedId(r.id)}
                       aria-pressed={active}
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      className="flex min-w-0 flex-1 items-start gap-4 px-4 py-3 text-left"
                     >
-                      <Favicon url={r.url} src={r.favicon} size={36} />
                       <div className="min-w-0 flex-1">
-                        <p className="flex items-center gap-2 truncate text-sm font-medium text-olive">
-                          <span className="truncate">{r.title}</span>
-                          {newIds.has(r.id) && <Badge tone="violet">New</Badge>}
+                        <p className="text-[10px] font-bold tracking-[0.18em] text-olive/55 uppercase">
+                          {domainOf(r.url)}
+                          {newIds.has(r.id) && <span className="ml-2 bg-butter px-1 text-olive">new</span>}
                         </p>
-                        <p className="truncate text-xs text-olive/55">{r.url}</p>
+                        <p className="mt-0.5 line-clamp-2 font-display text-base leading-snug text-olive">{r.title}</p>
                       </div>
-                      <div className="hidden shrink-0 text-right sm:block">
-                        <p className="text-sm text-olive tabular-nums">{formatDuration(r.durationSec)}</p>
-                        <p className="text-[11px] text-olive/55">{timeAgo(r.timestamp, now)}</p>
+                      <div className="shrink-0 text-right">
+                        <p className="font-display text-lg leading-none text-olive tabular-nums">{formatDuration(r.durationSec)}</p>
+                        <p className="mt-1 text-[11px] text-olive/55">{timeAgo(r.timestamp, now)}</p>
                       </div>
                     </button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      icon={Trash2}
+                    <button
+                      type="button"
                       onClick={() => setPendingDelete(r)}
                       aria-label={`Delete ${r.title}`}
-                      className="text-olive/55 hover:text-clay lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
-                    />
+                      className="shrink-0 border-l border-dotted border-olive/30 px-3 text-xs font-semibold text-olive/50 transition hover:bg-clay/10 hover:text-clay lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+                    >
+                      remove
+                    </button>
                   </li>
                 )
               })}
             </ul>
           )}
-        </Card>
+        </div>
 
         {isWide && (
-          <Card className="sticky top-24 hidden self-start lg:block">
+          <Card className="sheet sticky top-24 hidden self-start rounded-none lg:block">
             <ReadingDetail record={selected} onDelete={setPendingDelete} />
           </Card>
         )}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AppProvider } from './context/AppProvider'
 import { StudyDataProvider } from './context/StudyDataProvider'
+import { CameraProvider } from './context/CameraProvider'
 import { useApp } from './context/contexts'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
@@ -50,7 +51,9 @@ export default function App() {
   return (
     <AppProvider>
       <StudyDataProvider>
-        <Shell />
+        <CameraProvider>
+          <Shell />
+        </CameraProvider>
       </StudyDataProvider>
     </AppProvider>
   )

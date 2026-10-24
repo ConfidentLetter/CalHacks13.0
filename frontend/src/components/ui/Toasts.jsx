@@ -22,7 +22,7 @@ export function Toasts() {
         return (
           <div
             key={t.id}
-            className="glass animate-fade-up pointer-events-auto flex w-full max-w-sm items-start gap-3 bg-paper px-4 py-3 text-sm text-olive"
+            className="glass animate-fade-up pointer-events-auto rounded-sm flex w-full max-w-sm items-start gap-3 bg-paper px-4 py-3 text-sm text-olive"
           >
             <Icon className={cx('mt-0.5 size-4 shrink-0', TONES[t.tone])} aria-hidden="true" />
             <p className="flex-1">{t.message}</p>

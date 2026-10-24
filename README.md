@@ -22,7 +22,7 @@ The dashboard shows real data only. Until the backend is up at `http://localhost
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked** and select the `extension/` folder.
 4. Pin **Synapse** from the puzzle-piece menu and click it. Accept the consent screen.
-5. Go to a study site (e.g. a Wikipedia article), open the popup, click **Track \<site\>**, then approve Chrome's permission prompt.
+5. Go to any website you want tracked (Canvas, Notion, Figma, YouTube, docs…), open the popup, click **Allow current website**, then approve Chrome's permission prompt. Each entry covers that domain and its subdomains.
 6. Read actively (scroll or move the mouse) for 30s. The timer fills up and the page is saved.
 7. With the dashboard open at `localhost:5173`, the page shows up live in **Reading Memory**, even without a backend.
 

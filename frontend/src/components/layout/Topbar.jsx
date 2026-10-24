@@ -1,5 +1,5 @@
 import { Menu } from 'lucide-react'
-import { useApp, useStudyData } from '../../context/contexts'
+import { useApp, useCamera, useStudyData } from '../../context/contexts'
 import { NAV_ITEMS } from './navItems'
 import { StatusDot } from '../ui/Badge'
 import { Logo } from './Sidebar'
@@ -14,7 +14,8 @@ const SUBTITLES = {
 
 export function Topbar({ onMenu }) {
   const { route } = useApp()
-  const { capture, extension } = useStudyData()
+  const { extension } = useStudyData()
+  const camera = useCamera()
   const item = NAV_ITEMS.find((n) => n.id === route)
 
   return (
@@ -36,11 +37,11 @@ export function Topbar({ onMenu }) {
           <p className="truncate text-xs text-olive/65">{SUBTITLES[route]}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden items-center gap-2 rounded-full border border-olive/12 bg-olive/5 px-3 py-1.5 text-xs text-olive/80 sm:inline-flex">
-            <StatusDot state={capture.capturing ? 'active' : 'idle'} pulse={capture.capturing} />
-            {capture.capturing ? 'Capturing' : 'Camera idle'}
+          <span className="hidden items-center gap-2 rounded-sm border border-olive/20 bg-white px-2.5 py-1 text-xs text-olive/80 sm:inline-flex">
+            <StatusDot state={camera.isLive ? 'offline' : 'idle'} pulse={camera.isLive} />
+            {camera.isLive ? 'Live camera on' : 'Camera off'}
           </span>
-          <span className="hidden items-center gap-2 rounded-full border border-olive/12 bg-olive/5 px-3 py-1.5 text-xs text-olive/80 sm:inline-flex">
+          <span className="hidden items-center gap-2 rounded-sm border border-olive/20 bg-white px-2.5 py-1 text-xs text-olive/80 sm:inline-flex">
             <StatusDot state={extension.connected && extension.info?.trackingEnabled ? 'online' : 'idle'} />
             {extension.connected ? (extension.info?.trackingEnabled ? 'Tracking reading' : 'Tracking paused') : 'Extension off'}
           </span>

@@ -297,6 +297,38 @@ p {
   font-size: 11px;
   color: var(--faint);
 }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.add-site {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.add-site input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 1px solid var(--paper-deep);
+  background: var(--cream);
+  color: var(--olive);
+  font: 12px ui-monospace, Menlo, monospace;
+}
+.add-site .btn {
+  height: 32px;
+}
+.scope-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
 .quick-add {
   margin-top: 8px;
   height: 30px;
@@ -461,6 +493,13 @@ p {
   background: var(--cream);
   color: var(--olive);
   font: 12px ui-monospace, Menlo, monospace;
+}
+.field input[type='range'] {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--sage-deep);
 }
 .field input:focus {
   outline: none;

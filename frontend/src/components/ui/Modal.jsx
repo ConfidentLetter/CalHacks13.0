@@ -55,7 +55,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
         aria-label={title}
         tabIndex={-1}
         className={cx(
-          'glass animate-fade-up relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-b-none bg-white outline-none sm:rounded-2xl',
+          'glass animate-fade-up relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-b-none bg-cream outline-none sm:rounded-sm',
           size === 'lg' ? 'sm:max-w-4xl' : 'sm:max-w-lg',
         )}
       >

@@ -52,7 +52,7 @@ export function Segmented({ value, onChange, options, label, size = 'md', disabl
       aria-label={label}
       onKeyDown={onKeyDown}
       className={cx(
-        'inline-flex rounded-xl border border-olive/14 bg-paper p-1',
+        'inline-flex rounded-sm border border-olive/14 bg-paper p-1',
         disabled && 'pointer-events-none opacity-50',
       )}
     >
@@ -67,9 +67,9 @@ export function Segmented({ value, onChange, options, label, size = 'md', disabl
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(o.value)}
             className={cx(
-              'rounded-lg font-medium transition',
+              'rounded-[2px] font-medium transition',
               size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
-              active ? 'bg-olive/16 text-olive shadow-sm' : 'text-olive/65 hover:text-olive',
+              active ? 'bg-olive text-cream' : 'text-olive/65 hover:text-olive',
             )}
           >
             {o.label}

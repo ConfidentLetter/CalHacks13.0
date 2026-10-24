@@ -2,15 +2,11 @@ import { AlertTriangle, RotateCw } from 'lucide-react'
 import { Button } from './Button'
 import { cx } from '../../utils/format'
 
-export function EmptyState({ icon: Icon, title, description, action, className }) {
+export function EmptyState({ title, description, action, className }) {
   return (
     <div className={cx('flex flex-col items-center justify-center px-6 py-10 text-center', className)}>
-      {Icon && (
-        <span className="mb-3 grid size-12 place-items-center rounded-2xl border border-olive/12 bg-olive/5 text-olive/65">
-          <Icon className="size-5" aria-hidden="true" />
-        </span>
-      )}
-      <p className="text-sm font-medium text-olive">{title}</p>
+      <span aria-hidden="true" className="mb-3 h-px w-10 bg-olive/40" />
+      <p className="font-display text-lg text-olive">{title}</p>
       {description && <p className="mt-1 max-w-sm text-xs leading-relaxed text-olive/65">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>

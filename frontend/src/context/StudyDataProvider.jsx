@@ -7,7 +7,6 @@ import { useInterval } from '../hooks/useInterval'
 
 const STATUS_POLL_MS = 10_000
 const READING_POLL_MS = 15_000
-const SNAPSHOT_POLL_MS = 10_000
 const ACTIVITY_KEY = 'synapse.activity.v2'
 const NEW_HIGHLIGHT_MS = 8_000
 
@@ -51,95 +50,27 @@ export function StudyDataProvider({ children }) {
     })
   }, [])
 
-  // ---- notebook snapshots ---------------------------------------------------
-  const [snapshot, setSnapshot] = useState({ data: null, loading: false, error: null })
-  const [analysis, setAnalysis] = useState({ data: null, loading: false, error: null })
-  const [capture, setCapture] = useState({ capturing: false, busy: false, startedAt: null })
-  const lastSnapId = useRef(null)
+  // ---- notebook analysis -----------------------------------------------------
+  // Stills are grabbed from the live camera (CameraProvider) only when the student asks.
+  const [analysis, setAnalysis] = useState({ data: null, frame: null, loading: false, error: null })
+  // The most recent still the AI actually looked at (from Analyze or a tutor question).
+  const [lastFrame, setLastFrame] = useState(null)
 
-  const applySnapshot = useCallback(
-    (data, { announce = true } = {}) => {
-      setSnapshot({ data, loading: false, error: null })
-      if (data && data.id !== lastSnapId.current) {
-        if (lastSnapId.current && announce) logEvent('snapshot', 'New notebook snapshot', data.deviceId || '')
-        lastSnapId.current = data.id
-        setAnalysis({ data: null, loading: false, error: null })
+  const analyze = useCallback(
+    async (frame) => {
+      setLastFrame(frame)
+      setAnalysis({ data: null, frame, loading: true, error: null })
+      try {
+        const { data } = await api.analyzeFrame(frame)
+        setAnalysis({ data, frame, loading: false, error: null })
+        const issues = (data.steps || []).filter((s) => s.status === 'error').length
+        logEvent('analysis', 'Notebook page analyzed', issues ? `${issues} issue${issues > 1 ? 's' : ''} found` : 'No issues found')
+      } catch (err) {
+        setAnalysis({ data: null, frame, loading: false, error: err.message })
       }
     },
     [logEvent],
   )
-
-  const refreshSnapshot = useCallback(
-    async ({ fresh = false, silent = false } = {}) => {
-      if (!silent) setSnapshot((s) => ({ ...s, loading: true, error: null }))
-      try {
-        const { data } = await api.getLatestSnapshot({ fresh })
-        applySnapshot(data, { announce: true })
-        return data
-      } catch (err) {
-        setSnapshot((s) => ({ ...s, loading: false, error: err.message }))
-        return null
-      }
-    },
-    [applySnapshot],
-  )
-
-  const startCapture = useCallback(
-    async (intervalSec) => {
-      setCapture((c) => ({ ...c, busy: true }))
-      try {
-        await api.startCapture(intervalSec)
-        setCapture({ capturing: true, busy: false, startedAt: Date.now() })
-        logEvent('camera', 'Capture started', `Every ${intervalSec}s`)
-        notify('Camera capture started', 'success')
-        refreshSnapshot({ silent: true })
-      } catch (err) {
-        setCapture((c) => ({ ...c, busy: false }))
-        notify(`Could not start capture: ${err.message}`, 'error')
-      }
-    },
-    [logEvent, notify, refreshSnapshot],
-  )
-
-  const stopCapture = useCallback(async () => {
-    setCapture((c) => ({ ...c, busy: true }))
-    try {
-      await api.stopCapture()
-      setCapture({ capturing: false, busy: false, startedAt: null })
-      logEvent('camera', 'Capture stopped')
-      notify('Capture stopped', 'info')
-    } catch (err) {
-      setCapture((c) => ({ ...c, busy: false }))
-      notify(`Could not stop capture: ${err.message}`, 'error')
-    }
-  }, [logEvent, notify])
-
-  const analyze = useCallback(async () => {
-    const snap = snapshot.data
-    if (!snap) return
-    setAnalysis({ data: null, loading: true, error: null })
-    try {
-      const { data } = await api.analyzeSnapshot(snap.id)
-      setAnalysis({ data, loading: false, error: null })
-      const issues = (data.steps || []).filter((s) => s.status === 'error').length
-      logEvent('analysis', 'Notebook analyzed', issues ? `${issues} issue${issues > 1 ? 's' : ''} found` : 'No issues found')
-    } catch (err) {
-      setAnalysis({ data: null, loading: false, error: err.message })
-    }
-  }, [snapshot.data, logEvent])
-
-  // Keep local capture state in sync with what the backend reports.
-  useEffect(() => {
-    const cam = status.data?.camera
-    if (cam && typeof cam.capturing === 'boolean') {
-      setCapture((c) => (c.busy || c.capturing === cam.capturing ? c : { ...c, capturing: cam.capturing }))
-    }
-  }, [status.data])
-
-  // Respect the "camera capture" master switch in Settings.
-  useEffect(() => {
-    if (!settings.cameraEnabled && capture.capturing && !capture.busy) stopCapture()
-  }, [settings.cameraEnabled, capture.capturing, capture.busy, stopCapture])
 
   // ---- reading history ------------------------------------------------------
   const [remote, setRemote] = useState({ items: [], loading: true, error: null })
@@ -219,12 +150,10 @@ export function StudyDataProvider({ children }) {
   // Initial loads, and reload whenever the backend URL or data mode changes.
   useEffect(() => {
     seenIds.current = null
-    lastSnapId.current = null
     setRemote((r) => ({ ...r, loading: true }))
     refreshStatus()
     refreshReadings()
-    refreshSnapshot({ silent: true })
-  }, [settings.apiBaseUrl, refreshStatus, refreshReadings, refreshSnapshot])
+  }, [settings.apiBaseUrl, refreshStatus, refreshReadings])
 
   // Extension ↔ dashboard preference sync. When the extension reports its state, adopt
   // its tracking switch and any sites approved from the popup; then push dashboard edits.
@@ -236,6 +165,9 @@ export function StudyDataProvider({ children }) {
       const extraSites = (info.allowedSites || []).filter((s) => !prev.allowedSites.includes(s))
       const patch = {}
       if (extraSites.length) patch.allowedSites = [...prev.allowedSites, ...extraSites]
+      if (Number.isInteger(info.minReadingSeconds) && info.minReadingSeconds !== prev.minReadingSeconds) {
+        patch.minReadingSeconds = info.minReadingSeconds
+      }
       if (typeof info.trackingEnabled === 'boolean' && info.trackingEnabled !== prev.readingTrackingEnabled) {
         patch.readingTrackingEnabled = info.trackingEnabled
       }
@@ -264,7 +196,6 @@ export function StudyDataProvider({ children }) {
 
   useInterval(refreshStatus, STATUS_POLL_MS)
   useInterval(refreshReadings, READING_POLL_MS)
-  useInterval(() => refreshSnapshot({ silent: true }), capture.capturing ? SNAPSHOT_POLL_MS : null)
 
   // Combined timeline: session events + reading records.
   const activity = useMemo(() => {
@@ -282,13 +213,10 @@ export function StudyDataProvider({ children }) {
   const value = {
     status,
     refreshStatus,
-    snapshot,
-    refreshSnapshot,
     analysis,
     analyze,
-    capture,
-    startCapture,
-    stopCapture,
+    lastFrame,
+    setLastFrame,
     readings,
     readingsState: remote,
     refreshReadings,

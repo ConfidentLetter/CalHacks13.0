@@ -8,7 +8,7 @@ import { cx } from '../../utils/format'
 export function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="relative grid size-9 place-items-center rounded-xl border border-butter-deep bg-butter">
+      <span className="relative grid size-9 place-items-center rounded-sm border border-butter-deep bg-butter">
         <svg viewBox="0 0 24 24" className="size-5 text-olive" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <circle cx="6" cy="7" r="2.2" />
           <circle cx="18" cy="6" r="2.2" />
@@ -43,7 +43,7 @@ function NavList({ onNavigate }) {
               onNavigate?.()
             }}
             className={cx(
-              'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
+              'group relative flex items-center gap-3 rounded-sm px-3 py-2.5 text-sm font-medium transition',
               active
                 ? 'border border-paper-deep bg-white text-olive shadow-sm'
                 : 'border border-transparent text-olive/65 hover:bg-white/60 hover:text-olive',
@@ -71,7 +71,7 @@ function SystemPanel() {
   const backendLabel =
     conn.backend === 'online' ? 'Connected' : conn.backend === 'offline' ? 'Not connected' : 'Checking…'
   return (
-    <div className="rounded-xl border border-olive/12 bg-olive/4 p-3 text-xs">
+    <div className="rounded-sm border border-olive/12 bg-olive/4 p-3 text-xs">
       <p className="mb-2 font-medium tracking-wide text-olive/55 uppercase">System</p>
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">

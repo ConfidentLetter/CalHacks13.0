@@ -16,7 +16,7 @@ export function AnalysisPanel({ analysis, hasSnapshot, onRetry }) {
     return (
       <div className="space-y-3" aria-live="polite">
         <div className="flex items-center gap-2 text-sm text-honey">
-          <LoadingDots label="Analyzing" /> Reading your handwriting…
+          <LoadingDots label="Analyzing" /> Analyzing your page…
         </div>
         <Skeleton className="h-4 w-11/12" />
         <Skeleton className="h-4 w-3/4" />
@@ -66,7 +66,7 @@ export function AnalysisPanel({ analysis, hasSnapshot, onRetry }) {
               <li
                 key={i}
                 className={cx(
-                  'flex gap-3 rounded-xl border p-3',
+                  'flex gap-3 rounded-sm border p-3',
                   s.status === 'error' ? 'border-clay/40 bg-clay/10' : 'border-olive/8 bg-olive/4',
                 )}
               >
@@ -82,7 +82,7 @@ export function AnalysisPanel({ analysis, hasSnapshot, onRetry }) {
       )}
 
       {data.hints?.length > 0 && (
-        <div className="rounded-xl border border-sage-deep bg-sage/50 p-3.5">
+        <div className="rounded-sm border border-sage-deep bg-sage/50 p-3.5">
           <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-sage-ink">
             <Lightbulb className="size-3.5" aria-hidden="true" /> Hints
           </p>

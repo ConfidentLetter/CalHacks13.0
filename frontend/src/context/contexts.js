@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 
 export const AppContext = createContext(null)
 export const StudyDataContext = createContext(null)
+export const CameraContext = createContext(null)
 
 /** settings, navigation, toasts */
 export function useApp() {
@@ -14,6 +15,13 @@ export function useApp() {
 export function useStudyData() {
   const ctx = useContext(StudyDataContext)
   if (!ctx) throw new Error('useStudyData must be used inside <StudyDataProvider>')
+  return ctx
+}
+
+/** live notebook camera: status, devices, start/stop, captureFrame */
+export function useCamera() {
+  const ctx = useContext(CameraContext)
+  if (!ctx) throw new Error('useCamera must be used inside <CameraProvider>')
   return ctx
 }
 

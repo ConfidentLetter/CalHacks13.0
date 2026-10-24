@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, BookOpenText, Bot, Camera, Eraser, RotateCw, Send, Sparkles, User } from 'lucide-react'
-import { useApp, useStudyData } from '../context/contexts'
+import { BookOpenText, Camera, Eraser, Mic, MicOff, RotateCw, Send, Sparkles } from 'lucide-react'
+import { useApp, useCamera, useStudyData } from '../context/contexts'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Toggle } from '../components/ui/Controls'
 import { EmptyState, LoadingDots } from '../components/ui/Feedback'
 import { ConfirmDialog, Modal } from '../components/ui/Modal'
 import * as api from '../services/api'
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { cx, formatClock, uid } from '../utils/format'
 
 const HISTORY_KEY = 'synapse.chat.v2'
@@ -33,6 +34,7 @@ function saveHistory(messages) {
     // Snapshot image data URLs can be large; keep only references in storage.
     const slim = messages.map((m) => ({
       ...m,
+      frame: m.frame && { capturedAt: m.frame.capturedAt, source: m.frame.source },
       sources: m.sources?.map(({ imageUrl, ...s }) => ({ ...s, imageUrl: imageUrl?.startsWith('data:') ? undefined : imageUrl })),
     }))
     localStorage.setItem(HISTORY_KEY, JSON.stringify(slim.slice(-60)))
@@ -72,29 +74,19 @@ function Message({ m, onRetry, onOpenSnapshot }) {
   const isUser = m.role === 'user'
   const isError = m.role === 'error'
   return (
-    <div className={cx('animate-fade-up flex gap-3', isUser && 'flex-row-reverse')}>
-      <span
-        className={cx(
-          'grid size-8 shrink-0 place-items-center rounded-xl border',
-          isUser
-            ? 'border-olive/20 bg-olive/12 text-olive/80'
-            : isError
-              ? 'border-clay/40 bg-clay/10 text-clay'
-              : 'border-butter-deep bg-butter text-honey',
-        )}
-        aria-hidden="true"
-      >
-        {isUser ? <User className="size-4" /> : isError ? <AlertTriangle className="size-4" /> : <Bot className="size-4" />}
-      </span>
-      <div className={cx('flex max-w-[85%] min-w-0 flex-col gap-2 sm:max-w-[75%]', isUser && 'items-end')}>
+    <div className={cx('animate-fade-up flex', isUser ? 'justify-end' : 'justify-start')}>
+      <div className={cx('flex max-w-[88%] min-w-0 flex-col gap-1.5 sm:max-w-[72%]', isUser && 'items-end')}>
+        <p className="text-[10px] font-bold tracking-[0.18em] text-olive/50 uppercase">
+          {isUser ? 'you' : isError ? 'couldn’t answer' : 'pip'} · <time dateTime={m.at}>{formatClock(m.at)}</time>
+        </p>
         <div
           className={cx(
-            'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+            'text-sm',
             isUser
-              ? 'rounded-tr-md bg-butter text-olive'
+              ? 'sticky-note rotate-[0.6deg] px-4 py-3 leading-relaxed motion-reduce:rotate-0'
               : isError
-                ? 'rounded-tl-md border border-clay/40 bg-clay/10 text-clay'
-                : 'rounded-tl-md border border-paper-deep bg-paper text-olive',
+                ? 'border-l-2 border-clay py-1 pl-4 leading-7 text-clay'
+                : 'border-l-2 border-sage-deep py-1 pl-4 leading-7 text-olive',
           )}
         >
           {m.content.split(/\n{2,}/).map((p, i) => (
@@ -103,22 +95,27 @@ function Message({ m, onRetry, onOpenSnapshot }) {
             </p>
           ))}
           {isError && onRetry && (
-            <Button size="sm" variant="ghost" icon={RotateCw} className="mt-2 -ml-2 text-clay" onClick={() => onRetry(m)}>
+            <Button size="sm" variant="ghost" icon={RotateCw} className="mt-2" onClick={() => onRetry(m)}>
               Try again
             </Button>
           )}
         </div>
+        {m.frame && (
+          <figure className="w-40 border border-olive/40 bg-white p-1">
+            {m.frame.previewUrl && <img src={m.frame.previewUrl} alt="Still sent with this question" className="w-full" />}
+            <figcaption className="px-0.5 pt-1 text-[10px] text-olive/60">
+              still sent to Pip · {formatClock(m.frame.capturedAt)}
+            </figcaption>
+          </figure>
+        )}
         {m.sources?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            <span className="self-center text-[11px] text-olive/55">Sources:</span>
+          <div className="flex flex-wrap gap-1.5 pl-4">
+            <span className="self-center text-[11px] text-olive/55">from:</span>
             {m.sources.map((s, i) => (
               <SourceChip key={`${s.type}-${s.id}-${i}`} source={s} onOpenSnapshot={onOpenSnapshot} />
             ))}
           </div>
         )}
-        <div className="flex items-center gap-2 text-[11px] text-olive/55">
-          <time dateTime={m.at}>{formatClock(m.at)}</time>
-        </div>
       </div>
     </div>
   )
@@ -126,7 +123,9 @@ function Message({ m, onRetry, onOpenSnapshot }) {
 
 export function AITutor() {
   const { tutorDraft, consumeTutorDraft, navigate, settings } = useApp()
-  const { snapshot, readings, logEvent } = useStudyData()
+  const { readings, logEvent, setLastFrame } = useStudyData()
+  const camera = useCamera()
+  const [sendingFrame, setSendingFrame] = useState(null)
   const [messages, setMessages] = useState(loadHistory)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -136,6 +135,11 @@ export function AITutor() {
   const [viewSnapshot, setViewSnapshot] = useState(null)
   const scroller = useRef(null)
   const textarea = useRef(null)
+  // Voice input: finished phrases are appended to the box so they can be edited before sending.
+  const voice = useSpeechRecognition({
+    onFinal: (text) => setInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${text}` : text)),
+  })
+  const stopVoice = voice.stop
   const handledDraft = useRef(null)
 
   useEffect(() => saveHistory(messages), [messages])
@@ -148,8 +152,26 @@ export function AITutor() {
     async (text, priorMessages) => {
       const question = text.trim()
       if (!question) return
+      stopVoice()
       const base = priorMessages ?? messages
-      const userMsg = { id: uid(), role: 'user', content: question, at: new Date().toISOString() }
+      // One fresh still from the live camera, taken right now — Pip never sees the video itself.
+      let frame = null
+      if (includeNotebook && camera.isLive) {
+        try {
+          frame = await camera.captureFrame()
+        } catch {
+          frame = null // answer without the page rather than fail the question
+        }
+      }
+      if (frame) setLastFrame(frame)
+      setSendingFrame(frame)
+      const userMsg = {
+        id: uid(),
+        role: 'user',
+        content: question,
+        at: new Date().toISOString(),
+        frame: frame && { previewUrl: frame.previewUrl, capturedAt: frame.capturedAt, source: frame.source },
+      }
       setMessages([...base, userMsg])
       setInput('')
       setSending(true)
@@ -165,6 +187,7 @@ export function AITutor() {
           includeNotebook,
           includeReading,
           includeReadingText: settings.shareReadingTextWithTutor,
+          frame,
         })
         setMessages((prev) => [
           ...prev,
@@ -189,10 +212,11 @@ export function AITutor() {
         ])
       } finally {
         setSending(false)
+        setSendingFrame(null)
         textarea.current?.focus()
       }
     },
-    [messages, includeNotebook, includeReading, settings.shareReadingTextWithTutor, logEvent],
+    [messages, includeNotebook, includeReading, settings.shareReadingTextWithTutor, logEvent, stopVoice, camera, setLastFrame],
   )
 
   // Questions handed over from Quick Ask / other pages.
@@ -223,13 +247,14 @@ export function AITutor() {
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
-      <Card className="flex h-[calc(100dvh-13rem)] min-h-[480px] flex-col overflow-hidden lg:h-[calc(100dvh-9.5rem)]">
-        <div ref={scroller} className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6" aria-live="polite">
+      <Card className="sheet flex h-[calc(100dvh-13rem)] min-h-[480px] flex-col overflow-hidden rounded-none lg:h-[calc(100dvh-9.5rem)]">
+        <div ref={scroller} className="ruled relative flex-1 space-y-7 overflow-y-auto bg-cream py-6 pr-4 pl-8 sm:pr-8 sm:pl-14" aria-live="polite">
+          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 w-px bg-clay/30 sm:left-9" />
           {messages.length === 0 ? (
             <EmptyState
               icon={Sparkles}
               title="ask a little question"
-              description="let’s work through it together — answers can use your latest notebook snapshot and the pages you’ve read."
+              description="let’s work through it together — with the camera on, Pip gets one still of your page when you send."
               className="h-full"
               action={
                 <div className="flex max-w-lg flex-wrap justify-center gap-2">
@@ -238,7 +263,7 @@ export function AITutor() {
                       key={s}
                       type="button"
                       onClick={() => send(s)}
-                      className="rounded-full border border-olive/14 bg-olive/5 px-3 py-1.5 text-xs text-olive/80 transition hover:border-butter-deep hover:bg-butter/50 hover:text-olive"
+                      className="rounded-sm border border-olive/25 bg-white px-3 py-1.5 text-xs text-olive/80 transition hover:border-butter-deep hover:bg-butter/50 hover:text-olive"
                     >
                       {s}
                     </button>
@@ -250,13 +275,9 @@ export function AITutor() {
             messages.map((m) => <Message key={m.id} m={m} onRetry={sending ? null : retry} onOpenSnapshot={openSnapshot} />)
           )}
           {sending && (
-            <div className="flex items-center gap-3">
-              <span className="grid size-8 place-items-center rounded-xl border border-butter-deep bg-butter text-honey">
-                <Bot className="size-4" aria-hidden="true" />
-              </span>
-              <div className="rounded-2xl rounded-tl-md border border-olive/12 bg-olive/5 px-4 py-3">
-                <LoadingDots label="Tutor is thinking" />
-              </div>
+            <div className="flex items-center gap-3 border-l-2 border-sage-deep py-1 pl-4 text-xs text-olive/60">
+              <LoadingDots label="Pip is thinking" />{' '}
+              {sendingFrame ? `Analyzing your page… (still from ${formatClock(sendingFrame.capturedAt)})` : 'thinking it through…'}
             </div>
           )}
         </div>
@@ -268,7 +289,7 @@ export function AITutor() {
           }}
           className="border-t border-olive/12 bg-paper p-3 sm:p-4"
         >
-          <div className="flex items-end gap-2 rounded-2xl border border-olive/14 bg-cream p-2 focus-within:border-butter-deep focus-within:ring-4 focus-within:ring-butter-deep">
+          <div className="flex items-end gap-2 rounded-sm border border-olive/14 bg-cream p-2 focus-within:border-butter-deep focus-within:ring-4 focus-within:ring-butter-deep">
             <label htmlFor="tutor-input" className="sr-only">
               Message the AI tutor
             </label>
@@ -286,23 +307,52 @@ export function AITutor() {
               placeholder="Ask about your notes, a concept, or what you read…"
               className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-olive outline-none placeholder:text-olive/55"
             />
+            <Button
+              variant={voice.listening ? 'danger' : 'ghost'}
+              size="icon"
+              icon={voice.listening ? MicOff : Mic}
+              onClick={voice.listening ? voice.stop : voice.start}
+              disabled={!voice.supported}
+              aria-pressed={voice.listening}
+              aria-label={voice.listening ? 'Stop voice input' : 'Start voice input'}
+              title={voice.supported ? undefined : 'Voice input isn’t supported in this browser — try Chrome or Edge'}
+              className={cx('h-10 w-10', voice.listening && 'animate-pulse')}
+            />
             <Button type="submit" variant="primary" icon={Send} loading={sending} disabled={!input.trim()}>
               Send
             </Button>
           </div>
-          <p className="mt-2 px-1 text-[11px] text-olive/55">enter to send · shift + enter for a new line</p>
+          {voice.listening && (
+            <p className="mt-2 flex items-center gap-2 px-1 text-xs text-clay" role="status">
+              <span className="size-2 animate-pulse rounded-full bg-clay" aria-hidden="true" />
+              listening… {voice.interim && <span className="truncate text-olive/65 italic">“{voice.interim}”</span>}
+            </p>
+          )}
+          {voice.error && (
+            <p className="mt-2 px-1 text-xs text-clay" role="alert">
+              {voice.error}
+            </p>
+          )}
+          <p className="mt-2 px-1 text-[11px] text-olive/55">
+            enter to send · shift + enter for a new line
+            {voice.supported ? ' · mic turns speech into text (audio is never saved)' : ' · voice input not supported in this browser'}
+          </p>
         </form>
       </Card>
 
       <div className="space-y-5">
-        <Card>
-          <CardHeader title="Context" subtitle="What the tutor can see" />
-          <CardBody className="space-y-4">
+        <Card className="border-0 bg-transparent">
+          <CardHeader title="What the tutor can see" className="border-olive/70 px-0" />
+          <CardBody className="space-y-4 px-0">
             <Toggle
               checked={includeNotebook}
               onChange={setIncludeNotebook}
-              label="Notebook snapshots"
-              description={snapshot.data ? `Latest frame at ${formatClock(snapshot.data.capturedAt)}` : 'No snapshot yet'}
+              label="My notebook page"
+              description={
+                camera.isLive
+                  ? 'Camera live — one still is captured when you send'
+                  : 'Camera off — start it in “peek at my notebook”'
+              }
             />
             <Toggle
               checked={includeReading}
@@ -324,7 +374,7 @@ export function AITutor() {
                 type="button"
                 disabled={sending}
                 onClick={() => send(s)}
-                className="w-full rounded-xl px-3 py-2 text-left text-xs leading-relaxed text-olive transition hover:bg-white/60 disabled:opacity-50"
+                className="w-full rounded-sm px-3 py-2 text-left text-xs leading-relaxed text-olive transition hover:bg-white/60 disabled:opacity-50"
               >
                 {s}
               </button>
