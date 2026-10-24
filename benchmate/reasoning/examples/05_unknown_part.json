@@ -1,0 +1,58 @@
+{
+ "name": "unknown part",
+ "frame_id": "example_unknown_part",
+ "twin_lines": [
+  "esp32_1 = esp32-devkitc (conf 0.95): 3V3@C1, GND@C14, 5V@C19, GPIO21@J15, GPIO22@J18",
+  "bme280_1 = bme280 (conf 0.88): VIN@B40, GND@B41, SCL@B42, SDA@B43",
+  "unknown_1 = unknown part (conf 0.71): ",
+  "net_1: bme280_1.GND <-> esp32_1.GND | holes A14,A41,B41,C14,RAIL_TOP_MINUS | via w_black_1 (conf 0.90), w_black_2 (conf 0.90)",
+  "net_2: bme280_1.SCL <-> esp32_1.GPIO22 | holes A42,B42,I18,J18 | via w_green_1 (conf 0.84)",
+  "net_3: bme280_1.SDA <-> esp32_1.GPIO21 | holes A43,B43,I15,J15 | via w_yellow_1 (conf 0.86)",
+  "net_4: bme280_1.VIN <-> esp32_1.3V3 | holes A1,A40,B40,C1,RAIL_TOP_PLUS | via w_red_1 (conf 0.90), w_red_2 (conf 0.90)",
+  "net_5: esp32_1.5V | holes C19"
+ ],
+ "serial": [
+  "[boot] ESP32 ready",
+  "[i2c] scanning bus SDA=21 SCL=22 ...",
+  "[i2c] device found at 0x76",
+  "[bme280] T=22.41C P=1012.8hPa H=48.2%"
+ ],
+ "question": "Is everything wired correctly?",
+ "diagnosis": {
+  "findings": [
+   {
+    "id": "unknown_part:unknown_1",
+    "severity": "info",
+    "title": "Unknown part - register it to check it",
+    "explanation": "unknown_1 ('HW-123') has no profile, so its wiring cannot be checked.",
+    "fix": "Click the first pin of unknown_1 to register it",
+    "evidence": {
+     "wires": [],
+     "components": [
+      "unknown_1"
+     ]
+    },
+    "confidence": 0.71
+   },
+   {
+    "id": "sensor_responding",
+    "severity": "ok",
+    "title": "Sensor responding",
+    "explanation": "Serial shows a live reading: [bme280] T=22.41C P=1012.8hPa H=48.2%",
+    "fix": "Nothing to do",
+    "evidence": {
+     "wires": [],
+     "components": [
+      "bme280_1"
+     ],
+     "serial_lines": [
+      "[i2c] device found at 0x76",
+      "[bme280] T=22.41C P=1012.8hPa H=48.2%"
+     ]
+    },
+    "confidence": 0.95
+   }
+  ],
+  "needs_user_confirmation": []
+ }
+}

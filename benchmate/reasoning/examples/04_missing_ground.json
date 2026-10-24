@@ -1,0 +1,66 @@
+{
+ "name": "missing ground",
+ "frame_id": "example_missing_ground",
+ "twin_lines": [
+  "esp32_1 = esp32-devkitc (conf 0.95): 3V3@C1, GND@C14, 5V@C19, GPIO21@J15, GPIO22@J18",
+  "bme280_1 = bme280 (conf 0.88): VIN@B40, GND@B41, SCL@B42, SDA@B43",
+  "net_2: bme280_1.SCL <-> esp32_1.GPIO22 | holes A42,B42,I18,J18 | via w_green_1 (conf 0.84)",
+  "net_3: bme280_1.SDA <-> esp32_1.GPIO21 | holes A43,B43,I15,J15 | via w_yellow_1 (conf 0.86)",
+  "net_4: bme280_1.VIN <-> esp32_1.3V3 | holes A1,A40,B40,C1,RAIL_TOP_PLUS | via w_red_1 (conf 0.90), w_red_2 (conf 0.90)",
+  "net_5: esp32_1.5V | holes C19",
+  "net_1: esp32_1.GND | holes A14,C14,RAIL_TOP_MINUS | via w_black_1 (conf 0.90)",
+  "net_7: bme280_1.GND | holes B41"
+ ],
+ "serial": [
+  "[boot] ESP32 ready",
+  "[i2c] scanning bus SDA=21 SCL=22 ...",
+  "[i2c] no I2C devices found",
+  "[bme280] init failed: sensor not found at 0x76 or 0x77"
+ ],
+ "question": "The sensor is not found, what's wrong?",
+ "diagnosis": {
+  "findings": [
+   {
+    "id": "ground",
+    "severity": "error",
+    "title": "GND is not connected to GND",
+    "explanation": "bme280_1 GND does not reach the microcontroller. The esp32-devkitc profile expects gnd on GND.",
+    "fix": "Add a wire from B41 to RAIL_TOP_MINUS (esp32_1 GND)",
+    "evidence": {
+     "wires": [],
+     "components": [
+      "bme280_1",
+      "esp32_1"
+     ],
+     "datasheet": [
+      {
+       "part_id": "bme280",
+       "page": 38,
+       "quote": "Pin-out and connection diagram 7.1 Pin-out TOP VIEW (pads not visible) 8 VDD 7 GND 6 VDDIO 5 SDO BOTTOM VIEW (pads visible) 1 GND 2 CSB 3 SDI 4 SCK Pin 1 marker 1 GND 2 CSB 3 SDI 4 SCK 8 VDD 7 GND 6 V"
+      }
+     ]
+    },
+    "confidence": 0.88
+   },
+   {
+    "id": "i2c_no_device",
+    "severity": "warning",
+    "title": "No I2C device found on the bus",
+    "explanation": "The microcontroller reports an empty I2C bus but the image shows the expected wiring. A wire may not be seated, or the camera may have mis-read a wire end.",
+    "fix": "Reseat the SDA, SCL and VIN wires, then rescan",
+    "evidence": {
+     "wires": [],
+     "components": [
+      "bme280_1"
+     ],
+     "serial_lines": [
+      "[i2c] no I2C devices found",
+      "[bme280] init failed: sensor not found at 0x76 or 0x77"
+     ]
+    },
+    "confidence": 0.6
+   }
+  ],
+  "needs_user_confirmation": []
+ }
+}

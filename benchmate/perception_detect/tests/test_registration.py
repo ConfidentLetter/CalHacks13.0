@@ -6,8 +6,8 @@ import perception_detect.registration as reg
 def test_register_persists_to_json(reg_path):
     reg.register("bme280", 0, (100.0, 200.0), path=reg_path)
     data = json.loads(reg_path.read_text())
-    assert data == [{"part_id": "bme280", "row_index": 0, "pixel": [100.0, 200.0],
-                     "end_pixel": None, "homography_hash": None}]
+    assert data == [{"part_id": "bme280", "row_index": 0, "pixel": [100.0, 200.0], "hole": None,
+                     "end_pixel": None, "end_hole": None, "homography_hash": None}]
 
 
 def test_register_replaces_same_part_row(reg_path):
@@ -27,16 +27,30 @@ def test_registration_survives_restart(reg_path):
     assert reg.load_registrations(reg_path)[0]["pixel"] == [10.0, 20.0]
 
 
-def test_stale_when_homography_changes(reg_path):
-    H1 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    H2 = [[2, 0, 5], [0, 2, 5], [0, 0, 1]]
-    reg.set_current_homography(H1)
-    reg.register("bme280", 0, (1, 1), path=reg_path)
+def test_register_snaps_hole_only_when_calibrated(reg_path):
+    from perception_detect.geometry_bridge import IDENTITY, hole_to_pixel
+    px = hole_to_pixel("B40", IDENTITY)
+    reg.set_current_homography(IDENTITY, calibrated=False)
+    reg.register("bme280", 0, px, path=reg_path)
+    assert reg.load_registrations(reg_path)[0]["hole"] is None
+    reg.set_current_homography(IDENTITY, calibrated=True)
+    reg.register("bme280", 0, px, end_pixel=hole_to_pixel("B43", IDENTITY), path=reg_path)
     r = reg.load_registrations(reg_path)[0]
-    assert r["homography_hash"] == reg.homography_hash(H1)
-    assert reg.is_stale(r, H1) is False
-    assert reg.is_stale(r, H2) is True
-    reg.set_current_homography(None)
+    assert (r["hole"], r["end_hole"]) == ("B40", "B43")
+    assert r["homography_hash"] == reg.homography_hash(IDENTITY)
+
+
+def test_stale_only_when_pixel_maps_to_another_hole(reg_path):
+    from perception_detect.geometry_bridge import IDENTITY, hole_to_pixel, pitch_px
+    reg.set_current_homography(IDENTITY)
+    reg.register("bme280", 0, hole_to_pixel("B40", IDENTITY), path=reg_path)
+    r = reg.load_registrations(reg_path)[0]
+    assert reg.is_stale(r, IDENTITY) is False
+    jitter = [[1, 0, 0.3], [0, 1, -0.2], [0, 0, 1]]        # sub-pixel camera drift: same hole
+    assert reg.is_stale(r, jitter) is False
+    shift = [[1, 0, 2 * pitch_px(IDENTITY)], [0, 1, 0], [0, 0, 1]]   # camera moved two holes
+    assert reg.is_stale(r, shift) is True
+    assert reg.resolve_holes(r, shift) == ("B40", None)   # but the stored hole is still used
 
 
 def test_bad_input_raises(reg_path):

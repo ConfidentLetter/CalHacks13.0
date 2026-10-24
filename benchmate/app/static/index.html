@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BenchMate</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c2330; --line: #2a3240;
+    --text: #e8edf3; --muted: #93a1b3; --accent: #4cc2ff;
+    --error: #ff4d4f; --warning: #ffb020; --info: #8b97a8; --ok: #3ddc84;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: grid; grid-template-rows: 52px 1fr 64px; grid-template-columns: 2fr 1fr;
+    grid-template-areas: "bar bar" "live side" "ask ask"; gap: 10px; padding: 10px; overflow: hidden;
+  }
+  button, select, input { font: inherit; color: inherit; }
+  button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.active { background: var(--accent); color: #06202e; border-color: var(--accent); font-weight: 600; }
+  button.danger { border-color: var(--error); color: var(--error); }
+
+  /* toolbar */
+  #bar { grid-area: bar; display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+  #brand { font-weight: 700; font-size: 22px; letter-spacing: .3px; margin-right: 8px; }
+  #brand span { color: var(--accent); }
+  .modes { display: flex; gap: 6px; }
+  #mode-help { color: var(--muted); font-size: 14px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--warning); color: #221600; letter-spacing: .5px; display: none; }
+  .badge.on { display: inline-block; }
+  #conn { width: 10px; height: 10px; border-radius: 50%; background: var(--error); }
+  #conn.on { background: var(--ok); }
+
+  /* live view */
+  #live { grid-area: live; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; line-height: 0; max-width: 100%; max-height: 100%; }
+  #stream { display: block; max-width: 100%; max-height: calc(100vh - 160px); }
+  #overlay { position: absolute; left: 0; top: 0; cursor: crosshair; }
+  #popover { position: absolute; z-index: 5; max-width: 360px; background: #0b0e13ee; border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; display: none; line-height: 1.35; }
+  #popover b { color: var(--accent); font: 600 14px/1.3 -apple-system, sans-serif; display: block; margin-bottom: 6px; }
+  #status { position: absolute; left: 12px; bottom: 10px; background: #0b0e13cc; border-radius: 8px; padding: 6px 10px; font-size: 14px; color: var(--muted); display: flex; gap: 14px; max-width: calc(100% - 24px); }
+  #status .err { color: var(--error); }
+  #status b { color: var(--text); font-weight: 600; }
+
+  /* side */
+  #side { grid-area: side; display: grid; grid-template-rows: 1fr minmax(140px, 32%); gap: 10px; min-height: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; min-height: 0; display: flex; flex-direction: column; }
+  .panel h2 { margin: 0; padding: 10px 14px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+  .panel h2 small { font-weight: 400; letter-spacing: 0; text-transform: none; }
+  #cards { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--panel-2); border-left: 5px solid var(--info); border-radius: 10px; padding: 12px 14px; transition: opacity .25s, transform .25s; }
+  .card.error { border-left-color: var(--error); } .card.warning { border-left-color: var(--warning); }
+  .card.info { border-left-color: var(--info); } .card.ok { border-left-color: var(--ok); }
+  .card.enter { opacity: 0; transform: translateY(6px); }
+  .card .title { font-size: 18px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+  .card .conf { font-size: 12px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+  .card .fix { font-size: 20px; margin: 8px 0 6px; line-height: 1.3; }
+  .card .fix::before { content: "Fix: "; color: var(--accent); font-weight: 600; }
+  .card details { color: var(--muted); font-size: 14px; }
+  .card summary { cursor: pointer; color: var(--muted); } .card details p { margin: 6px 0 0; color: var(--text); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { position: relative; font-size: 13px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: help; }
+  .chip.ds { border-color: var(--accent); }
+  .chip .tip { display: none; position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 6; width: 300px; background: #0b0e13; border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.35; white-space: normal; }
+  .chip:hover .tip { display: block; }
+  .card.pending .title { color: var(--muted); }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .card.confirm .buttons { display: flex; gap: 8px; margin-top: 10px; }
+  .card .phase { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; }
+
+  #serial { font-family: var(--mono); font-size: 13px; overflow: auto; padding: 8px 12px; white-space: pre-wrap; line-height: 1.45; }
+  #serial .bad { color: var(--error); } #serial .good { color: var(--ok); } #serial .ts { color: var(--muted); }
+
+  /* ask bar */
+  #ask { grid-area: ask; display: flex; gap: 10px; align-items: center; }
+  #q { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 18px; outline: none; }
+  #q:focus { border-color: var(--accent); }
+  #mic.listening { background: var(--error); color: #fff; border-color: var(--error); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
+
+  /* latency drawer */
+  #latency { position: fixed; right: 10px; top: 62px; width: 380px; max-height: 70vh; overflow: auto; z-index: 20; display: none; font-family: var(--mono); font-size: 13px; }
+  #latency.on { display: flex; }
+  #latency table { width: 100%; border-collapse: collapse; } #latency td { padding: 4px 12px; border-bottom: 1px solid var(--line); }
+  #latency td.num { text-align: right; } #latency .over { color: var(--error); font-weight: 700; }
+  #latency .hist { padding: 8px 12px; color: var(--muted); white-space: pre; }
+
+  @media (max-width: 900px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 52px minmax(200px, 45vh) 1fr 64px; grid-template-areas: "bar" "live" "side" "ask"; }
+    #stream { max-height: 45vh; }
+    #mode-help { display: none; } .card .fix { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div id="brand">Bench<span>Mate</span></div>
+  <div class="modes">
+    <button data-mode="normal" class="active">Normal</button>
+    <button data-mode="calibrate">Calibrate</button>
+    <button data-mode="register">Register</button>
+  </div>
+  <select id="part" style="display:none; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:7px 10px;"></select>
+  <div id="mode-help">Move a wire; BenchMate re-checks when your hand leaves the frame. Keys: 1 OK · 2 5V · 3 swapped · 0 live · R rerun · L latency</div>
+  <span id="mockbadge" class="badge">MOCK</span>
+  <button id="rerun" title="Re-run checks on a fresh frame (R)">Re-check</button>
+  <div id="conn" title="WebSocket"></div>
+</div>
+
+<div id="live">
+  <div id="stage">
+    <img id="stream" src="/stream" alt="live camera">
+    <canvas id="overlay"></canvas>
+    <div id="popover"></div>
+  </div>
+  <div id="status"><span id="st-stage">starting…</span><span id="st-err" class="err"></span></div>
+</div>
+
+<div id="side">
+  <div class="panel">
+    <h2>Findings <small id="cards-meta"></small></h2>
+    <div id="cards"></div>
+  </div>
+  <div class="panel">
+    <h2>Serial <small id="serial-meta"></small></h2>
+    <div id="serial"></div>
+  </div>
+</div>
+
+<div id="ask">
+  <input id="q" placeholder="Ask BenchMate: why isn't the sensor reading?" autocomplete="off">
+  <button id="mic" title="Speak your question">🎤</button>
+  <button id="send">Ask</button>
+</div>
+
+<div id="latency" class="panel">
+  <h2>Latency (last run) <small>L to close</small></h2>
+  <table id="lat-table"></table>
+  <div class="hist" id="lat-hist"></div>
+</div>
+
+<script>
+(() => {
+  // ------------------------------------------------------------------ state
+  const S = {
+    ws: null, twin: null, diagnosis: null, mock: false, mode: 'normal', corners: [],
+    highlight: {}, pendingFrame: null, profiles: [], registerRows: 0, registerStep: 0,
+    lastMs: {}, budget: { twin: 2000, rules: 300, refine: 2000 }, serialLines: 0, pulse: 0, selected: null,
+    frameW: 1280, frameH: 720,
+  };
+  const $ = id => document.getElementById(id);
+  const img = $('stream'), cv = $('overlay'), ctx = cv.getContext('2d');
+  const WIRE_COLORS = { red: '#ff4d4f', black: '#9aa4b2', yellow: '#ffd21e', green: '#3ddc84', blue: '#4cc2ff', orange: '#ff8a3d', white: '#ffffff', purple: '#c084fc', brown: '#b07a4a', gray: '#9aa4b2', grey: '#9aa4b2' };
+
+  // ------------------------------------------------------------------ websocket
+  let backoff = 500;
+  function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    S.ws = ws;
+    ws.onopen = () => { $('conn').classList.add('on'); backoff = 500; };
+    ws.onclose = () => { $('conn').classList.remove('on'); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 8000); };
+    ws.onmessage = ev => { try { handle(JSON.parse(ev.data)); } catch (e) { console.error('bad message', e); } };
+  }
+  function send(obj) { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(obj)); else setErr('not connected'); }
+
+  function handle(m) {
+    switch (m.type) {
+      case 'hello':
+        S.mock = !!m.mock; $('mockbadge').classList.toggle('on', S.mock);
+        if (m.budget_ms) S.budget = m.budget_ms;
+        if (m.camera && m.camera.size && m.camera.size[0]) { S.frameW = m.camera.size[0]; S.frameH = m.camera.size[1]; }
+        $('serial-meta').textContent = m.serial ? (m.serial.mode === 'replay' ? 'replay' : (m.serial.port || 'no port')) : '';
+        if (m.recent_serial) m.recent_serial.forEach(l => addSerial(l));
+        if (m.twin) setTwin(m.twin);
+        if (m.diagnosis) setDiagnosis(m.diagnosis, 'restored');
+        setStage('connected' + (S.mock ? ' · mock mode' : ''), '');
+        break;
+      case 'twin': setTwin(m.twin); break;
+      case 'diagnosis': setDiagnosis(m.diagnosis, m.phase); break;
+      case 'serial': addSerial(m.line, m.ts); break;
+      case 'confirm_request': addConfirmCard(m); break;
+      case 'status': onStatus(m); break;
+    }
+  }
+
+  // ------------------------------------------------------------------ status line + latency
+  let errUntil = 0;
+  function setStage(text, err) { $('st-stage').innerHTML = text; if (err !== undefined && Date.now() > errUntil) $('st-err').textContent = err; }
+  function setErr(err) { $('st-err').textContent = err; errUntil = Date.now() + 8000; setTimeout(() => { if (Date.now() >= errUntil) $('st-err').textContent = ''; }, 8100); }
+  function onStatus(m) {
+    if (m.error) { setErr(`${m.stage}: ${m.error}`); if (m.stage === 'refine') dropPending(); return; }
+    if (m.telemetry) { if (['twin', 'rules', 'refine', 'capture_still', 'pipeline_total', 'calibrate'].includes(m.stage)) S.lastMs[m.stage] = m.ms; renderLatency(); return; }
+    if (m.stage === 'mock') { S.mock = true; $('mockbadge').classList.add('on'); }
+    if (m.stage === 'live') { S.mock = false; $('mockbadge').classList.remove('on'); }
+    if (m.stage === 'calibrate') { const mk = m.markers; S.corners = []; setStage(`calibrated (${m.manual ? 'manual corners' : 'ArUco'})${mk ? ` · ${mk.length}/4 markers` : ''}`, ''); return; }
+    if (m.stage === 'markers') { setStage(m.markers == null ? 'marker detection unavailable' : `<b>${m.markers.length}/4 markers</b> visible — click 4 corners (TL, TR, BR, BL) if fewer`); return; }
+    if (m.ms != null && m.ms > 0) { S.lastMs[m.stage] = m.ms; setStage(`<b>${m.stage}</b> ${fmtMs(m.ms)}${m.over_budget ? ' <span class="err">over budget</span>' : ''}`, ''); renderLatency(); }
+  }
+  const fmtMs = ms => ms >= 1000 ? (ms / 1000).toFixed(2) + ' s' : Math.round(ms) + ' ms';
+  function renderLatency() {
+    const rows = ['capture_still', 'twin', 'rules', 'refine', 'pipeline_total', 'calibrate'].filter(k => S.lastMs[k] != null);
+    $('lat-table').innerHTML = rows.map(k => { const over = S.budget[k] && S.lastMs[k] > S.budget[k]; return `<tr><td>${k}</td><td class="num ${over ? 'over' : ''}">${fmtMs(S.lastMs[k])}</td><td class="num" style="color:var(--muted)">${S.budget[k] ? 'budget ' + fmtMs(S.budget[k]) : ''}</td></tr>`; }).join('') || '<tr><td>no run yet</td></tr>';
+  }
+  async function loadHistory() {
+    try {
+      const recs = await (await fetch('/api/telemetry?n=300')).json();
+      const agg = {};
+      recs.forEach(r => { if (!['twin', 'rules', 'refine', 'pipeline_total'].includes(r.stage)) return; (agg[r.stage] ||= []).push(r.ms); });
+      $('lat-hist').textContent = Object.entries(agg).map(([k, v]) => { v.sort((a, b) => a - b); const p = q => v[Math.min(v.length - 1, Math.floor(q * v.length))]; return `${k.padEnd(15)} n=${String(v.length).padStart(3)}  p50 ${fmtMs(p(.5)).padStart(8)}  p90 ${fmtMs(p(.9)).padStart(8)}`; }).join('\n') || 'telemetry.jsonl empty';
+    } catch (e) { $('lat-hist').textContent = 'telemetry unavailable'; }
+  }
+
+  // ------------------------------------------------------------------ twin + overlay
+  function setTwin(twin) {
+    S.twin = twin; S.selected = null; $('popover').style.display = 'none';
+    $('cards-meta').textContent = twin ? `frame ${twin.frame_id}${twin._mock_scenario ? ' · mock ' + twin._mock_scenario : ''}` : '';
+    draw();
+  }
+  // Mock twins carry pixel [0,0]; lay holes out on a synthetic grid so the overlay still means something.
+  function holeToPixel(hole) {
+    if (!hole) return null;
+    const W = S.frameW, H = S.frameH, x0 = W * .08, x1 = W * .92, pitch = (x1 - x0) / 62;
+    const yTop = H * .22, yBot = H * .78, rowPitch = (yBot - yTop) / 11;
+    if (hole.startsWith('RAIL_')) { const top = hole.includes('TOP'); const plus = hole.includes('PLUS'); return [x0 + pitch * 31, top ? yTop - rowPitch * (plus ? 2.2 : 1.2) : yBot + rowPitch * (plus ? 2.2 : 1.2)]; }
+    const m = /^([A-J])(\d+)$/.exec(hole); if (!m) return null;
+    const col = m[1].charCodeAt(0) - 65, idx = col < 5 ? col : col + 1.6;
+    return [x0 + (parseInt(m[2]) - 1) * pitch, yTop + idx * rowPitch];
+  }
+  const px = (p, hole) => (p && (p[0] || p[1])) ? p : holeToPixel(hole);
+  // Mock twins: box = hull of the component's pin holes on the synthetic grid (real twins use bbox as-is).
+  function bboxOf(c) {
+    if (!S.twin?._mock_scenario) return c.bbox;
+    const pts = (c.pins || []).map(p => holeToPixel(p.hole)).filter(Boolean); if (!pts.length) return c.bbox;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), m = 18;
+    return [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) - Math.min(...xs) + 2 * m, Math.max(...ys) - Math.min(...ys) + 2 * m];
+  }
+
+  function fit() {
+    const w = img.clientWidth, h = img.clientHeight; if (!w) return;
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    if (img.naturalWidth) { S.frameW = img.naturalWidth; S.frameH = img.naturalHeight; }
+  }
+  const sx = () => cv.width / S.frameW, sy = () => cv.height / S.frameH;
+  function draw() {
+    fit(); ctx.clearRect(0, 0, cv.width, cv.height);
+    const t = S.twin; if (!t) return;
+    const kx = sx(), ky = sy(), pulse = .55 + .45 * Math.sin(S.pulse / 180 * Math.PI);
+    ctx.lineWidth = 3; ctx.font = `${Math.max(11, 13 * kx)}px -apple-system, sans-serif`; ctx.textBaseline = 'bottom';
+    (t.components || []).forEach(c => {
+      const [x, y, w, h] = bboxOf(c).map((v, i) => v * (i % 2 ? ky : kx)); const hl = S.highlight[c.id];
+      ctx.setLineDash(c.confidence < .6 ? [6, 6] : []);
+      ctx.strokeStyle = hl ? colorFor(hl, pulse) : '#4cc2ff'; ctx.lineWidth = hl ? 4 : 2.5; ctx.strokeRect(x, y, w, h);
+      label(c.part_id || c.label_text || c.id, x, y - 4, ctx.strokeStyle);
+    });
+    (t.wires || []).forEach(w => {
+      const a = px(w.end_a.pixel, w.end_a.hole), b = px(w.end_b.pixel, w.end_b.hole); if (!a || !b) return;
+      const hl = S.highlight[w.id]; const col = WIRE_COLORS[(w.color || '').toLowerCase()] || '#dddddd';
+      ctx.setLineDash(w.confidence < .6 ? [8, 6] : []);
+      if (hl) { ctx.strokeStyle = colorFor(hl, pulse); ctx.lineWidth = 10; ctx.globalAlpha = .45; seg(a, b, kx, ky); ctx.globalAlpha = 1; }
+      ctx.strokeStyle = col; ctx.lineWidth = S.selected === w.id ? 6 : 4; seg(a, b, kx, ky);
+      [[a, w.end_a.hole], [b, w.end_b.hole]].forEach(([p, hole]) => { dot(p[0] * kx, p[1] * ky, col); if (hole) label(hole, p[0] * kx + 6, p[1] * ky - 6, col); });
+    });
+    ctx.setLineDash([]);
+    if (S.mode === 'calibrate') S.corners.forEach((c, i) => { dot(c[0] * kx, c[1] * ky, '#ffb020', 7); label(['TL', 'TR', 'BR', 'BL'][i], c[0] * kx + 8, c[1] * ky - 8, '#ffb020'); });
+  }
+  const colorFor = (sev, pulse) => sev === 'error' ? `rgba(255,77,79,${pulse})` : sev === 'warning' ? `rgba(255,176,32,${pulse})` : '#8b97a8';
+  function seg(a, b, kx, ky) { ctx.beginPath(); ctx.moveTo(a[0] * kx, a[1] * ky); ctx.lineTo(b[0] * kx, b[1] * ky); ctx.stroke(); }
+  function dot(x, y, col, r = 5) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = '#0e1116'; ctx.lineWidth = 2; ctx.stroke(); }
+  function label(text, x, y, col) { const w = ctx.measureText(text).width + 8; ctx.fillStyle = '#0e1116dd'; ctx.fillRect(x - 2, y - 16, w, 18); ctx.fillStyle = col; ctx.fillText(text, x + 2, y); }
+  (function tick() { if (Object.keys(S.highlight).length || S.mode === 'calibrate') { S.pulse = (S.pulse + 6) % 360; draw(); } requestAnimationFrame(tick); })();
+  new ResizeObserver(draw).observe(img); img.addEventListener('load', draw);
+
+  // click: calibrate corners / register pin / element popover
+  cv.addEventListener('click', ev => {
+    const r = cv.getBoundingClientRect(); const fx = (ev.clientX - r.left) / sx(), fy = (ev.clientY - r.top) / sy();
+    if (S.mode === 'calibrate') { S.corners.push([Math.round(fx), Math.round(fy)]); if (S.corners.length === 4) { send({ type: 'calibrate', corners: S.corners }); setStage('calibrating from 4 corners…'); } else setStage(`corner ${S.corners.length}/4 (${['TL', 'TR', 'BR', 'BL'][S.corners.length]} next)`); draw(); return; }
+    if (S.mode === 'register') { const part = $('part').value; if (!part) return setErr('pick a part first'); send({ type: 'register', part_id: part, row_index: S.registerStep, pixel: [fx, fy] }); S.registerStep++; if (S.registerStep < S.registerRows) setStage(`${part}: now click the first pin of row ${S.registerStep + 1}`); else { setStage(`${part} registered`); S.registerStep = 0; setMode('normal'); } return; }
+    const hit = hitTest(fx, fy); if (!hit) { $('popover').style.display = 'none'; S.selected = null; draw(); return; }
+    S.selected = hit.id; showPopover(hit, ev.clientX - r.left, ev.clientY - r.top); draw();
+  });
+  function hitTest(x, y) {
+    const t = S.twin; if (!t) return null; const tol = 10 / sx();
+    for (const w of t.wires || []) { const a = px(w.end_a.pixel, w.end_a.hole), b = px(w.end_b.pixel, w.end_b.hole); if (a && b && distSeg(x, y, a, b) < tol) return { kind: 'wire', id: w.id, obj: w }; }
+    for (const c of t.components || []) { const [bx, by, bw, bh] = c.bbox; if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) return { kind: 'component', id: c.id, obj: c }; }
+    return null;
+  }
+  function distSeg(px_, py_, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1]; const l2 = dx * dx + dy * dy || 1; let t = ((px_ - a[0]) * dx + (py_ - a[1]) * dy) / l2; t = Math.max(0, Math.min(1, t)); return Math.hypot(px_ - (a[0] + t * dx), py_ - (a[1] + t * dy)); }
+  function showPopover(hit, x, y) {
+    const nets = (S.twin.nets || []).filter(n => hit.kind === 'wire' ? n.holes.includes(hit.obj.end_a.hole) || n.holes.includes(hit.obj.end_b.hole) : n.members.some(m => m.startsWith(hit.id + '.')));
+    const o = { ...hit.obj }; delete o.bbox;
+    $('popover').innerHTML = `<b>${hit.id}</b>${esc(JSON.stringify(o, null, 1))}\n\nnets: ${esc(JSON.stringify(nets.map(n => ({ id: n.id, members: n.members })), null, 1))}`;
+    const p = $('popover'); p.style.display = 'block'; p.style.left = Math.min(x + 12, cv.width - 370) + 'px'; p.style.top = Math.min(y + 12, cv.height - 200) + 'px';
+  }
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  // ------------------------------------------------------------------ cards
+  function setDiagnosis(d, phase) {
+    S.diagnosis = d; dropPending();
+    S.highlight = {};
+    (d.findings || []).forEach(f => { if (f.severity === 'error' || f.severity === 'warning') [...(f.evidence?.wires || []), ...(f.evidence?.components || [])].forEach(id => { if (S.highlight[id] !== 'error') S.highlight[id] = f.severity; }); });
+    const cards = $('cards'); const samePhaseReplace = cards.dataset.frame === d.frame_id;
+    [...cards.querySelectorAll('.card:not(.confirm)')].forEach(c => c.remove());
+    cards.dataset.frame = d.frame_id;
+    const frag = document.createDocumentFragment();
+    if (!(d.findings || []).length) frag.appendChild(card('ok', 'No issues found', d.mode === 'answer' ? 'Rules found nothing wrong for that question.' : 'Wiring matches every profile check.', '', null, 1, phase));
+    (d.findings || []).forEach(f => frag.appendChild(findingCard(f, phase)));
+    cards.prepend(frag);
+    requestAnimationFrame(() => cards.querySelectorAll('.card.enter').forEach(c => c.classList.remove('enter')));
+    if (d.mode === 'answer' && d.question) $('cards-meta').textContent = `“${d.question}” · ${phase || d.mode}`;
+    draw();
+  }
+  function findingCard(f, phase) {
+    const el = card(f.severity, f.title, f.fix, f.explanation, f.evidence, f.confidence, phase);
+    return el;
+  }
+  function card(sev, title, fix, explanation, evidence, conf, phase) {
+    const el = document.createElement('div'); el.className = `card enter ${sev}`;
+    const ds = (evidence?.datasheet || []).map(d => `<span class="chip ds">📄 ${esc(d.part_id)} p. ${d.page}${d.quote ? `<span class="tip">${esc(d.quote)}</span>` : ''}</span>`).join('');
+    const sl = (evidence?.serial_lines || []).map(l => `<span class="chip">⌨ ${esc(l)}</span>`).join('');
+    const wires = (evidence?.wires || []).map(w => `<span class="chip">${esc(w)}</span>`).join('');
+    el.innerHTML = `<div class="title"><span>${esc(title)}</span><span class="conf">${conf != null ? Math.round(conf * 100) + '%' : ''}</span></div>` +
+      (fix ? `<div class="fix">${esc(fix)}</div>` : '') +
+      (explanation ? `<details><summary>Why</summary><p>${esc(explanation)}</p></details>` : '') +
+      ((ds || sl || wires) ? `<div class="chips">${ds}${sl}${wires}</div>` : '') +
+      (phase ? `<div class="phase">${phase === 'rules' ? 'rule engine' : phase === 'refined' ? 'refined by vision model' : phase}</div>` : '');
+    return el;
+  }
+  function addPendingCard(question) {
+    dropPending();
+    const el = document.createElement('div'); el.className = 'card pending'; el.id = 'pending';
+    el.innerHTML = `<div class="title"><span><span class="spinner"></span>Thinking…</span></div><div style="color:var(--muted)">“${esc(question)}”</div>`;
+    $('cards').prepend(el);
+  }
+  function dropPending() { const p = $('pending'); if (p) p.remove(); }
+  function addConfirmCard(m) {
+    const el = document.createElement('div'); el.className = 'card confirm warning';
+    el.innerHTML = `<div class="title"><span>Please confirm</span><span class="conf">${esc(m.element_id)}</span></div><div class="fix" style="font-size:17px">${esc(m.prompt)}</div><div class="buttons"><button data-a="1">Yes</button><button data-a="0">No</button></div>`;
+    el.querySelectorAll('button').forEach(b => b.onclick = () => { send({ type: 'confirm', element_id: m.element_id, answer: b.dataset.a === '1' }); el.remove(); });
+    $('cards').prepend(el);
+  }
+
+  // ------------------------------------------------------------------ serial
+  function addSerial(line, ts) {
+    const box = $('serial'); const div = document.createElement('div');
+    const bad = /no i2c|fail|error|not found|timeout/i.test(line), good = /found at|T=|ready/i.test(line);
+    div.className = bad ? 'bad' : good ? 'good' : '';
+    div.innerHTML = `<span class="ts">${ts ? new Date(ts * 1000).toLocaleTimeString([], { hour12: false }) : '        '}</span> ${esc(line)}`;
+    box.appendChild(div); while (box.children.length > 200) box.firstChild.remove();
+    box.scrollTop = box.scrollHeight; S.serialLines++;
+  }
+
+  // ------------------------------------------------------------------ modes + toolbar
+  function setMode(mode) {
+    S.mode = mode; S.corners = []; S.registerStep = 0;
+    document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    $('part').style.display = mode === 'register' ? '' : 'none';
+    if (mode === 'calibrate') { setStage('checking markers…'); send({ type: 'markers' }); }
+    else if (mode === 'register') { loadProfiles(); setStage('pick a part, then click the FIRST pin of its first row'); }
+    else setStage('normal'); draw();
+  }
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+  async function loadProfiles() {
+    try { S.profiles = await (await fetch('/api/profiles')).json(); } catch (e) { S.profiles = []; }
+    $('part').innerHTML = '<option value="">part…</option>' + S.profiles.map(p => `<option value="${esc(p.part_id)}" data-rows="${p.rows || 1}">${esc(p.part_id)}${p.role ? ' (' + p.role + ')' : ''}</option>`).join('');
+  }
+  $('part').onchange = () => { const o = $('part').selectedOptions[0]; S.registerRows = o ? parseInt(o.dataset.rows || '1') : 1; S.registerStep = 0; if (o?.value) setStage(`${o.value}: click the first pin of row 1 (${S.registerRows} row${S.registerRows > 1 ? 's' : ''})`); };
+  $('rerun').onclick = () => { setStage('re-checking…'); send({ type: 'rerun' }); };
+
+  // ------------------------------------------------------------------ ask bar + speech
+  function ask() { const q = $('q').value.trim(); if (!q) return; addPendingCard(q); send({ type: 'ask', question: q }); $('q').value = ''; setStage('asking…', ''); }
+  $('send').onclick = ask; $('q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { $('mic').disabled = true; $('mic').title = 'Speech recognition needs Chrome'; }
+  else {
+    let rec = null;
+    $('mic').onclick = () => {
+      if (rec) { rec.stop(); return; }
+      rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true;
+      rec.onresult = e => { const t = [...e.results].map(r => r[0].transcript).join(''); $('q').value = t; if (e.results[e.results.length - 1].isFinal) { rec.stop(); ask(); } };
+      rec.onend = () => { $('mic').classList.remove('listening'); rec = null; };
+      rec.onerror = e => setErr('mic: ' + e.error);
+      rec.start(); $('mic').classList.add('listening');
+    };
+  }
+
+  // ------------------------------------------------------------------ keys
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.metaKey || e.ctrlKey) return;
+    const k = e.key.toLowerCase();
+    if (k === '1') send({ type: 'mock', scenario: 'ok' });
+    else if (k === '2') send({ type: 'mock', scenario: '5v' });
+    else if (k === '3') send({ type: 'mock', scenario: 'sda_swapped' });
+    else if (k === '0') send({ type: 'live' });
+    else if (k === 'r') $('rerun').click();
+    else if (k === 'l') { $('latency').classList.toggle('on'); if ($('latency').classList.contains('on')) { renderLatency(); loadHistory(); } }
+    else if (k === 'escape') setMode('normal');
+    else if (k === '/') { e.preventDefault(); $('q').focus(); }
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>

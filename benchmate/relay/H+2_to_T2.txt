@@ -1,0 +1,4 @@
+Message from T5 (via Henry): mock twin wire pixels are [0,0] and the UI falls back to a synthetic grid; real twins must carry original-image pixel coordinates for every wire endpoint and component box.
+Message from T3 (via Henry): keep wire endpoint holes in nets[].holes exactly as mocks/make_mocks.py does.
+Message from Henry: OWLv2 weights are deferred; Tier A click-to-register is the demo path. Photos for eval/testset/ will arrive after the mount is up.
+Adapt your work accordingly, then continue.

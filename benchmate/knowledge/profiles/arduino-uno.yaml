@@ -1,0 +1,26 @@
+# knowledge/profiles/arduino-uno.yaml — Arduino Uno R3 (ATmega328P). Used only if the team gets an Uno.
+# T4 owns this file. Header order from knowledge/datasheets/arduino-uno.pdf section 5 (JANALOG / JDIGITAL).
+# Note: an Uno's pins are female headers; it does not sit in the breadboard. T2 registers each header row's
+# first pin by clicking; T1 nets then come from wires whose end lands on a header pin box.
+part_id: arduino-uno
+role: mcu
+aliases: ["Arduino Uno", "ARDUINO UNO", "UNO R3", "Arduino UNO R3", "A000066"]
+datasheet: knowledge/datasheets/arduino-uno.pdf
+roles:
+  i2c_sda: A4                         # SDA is on A4 (also broken out on the SDA pin next to AREF)
+  i2c_scl: A5
+  gnd: GND
+sources:
+  3.3V: 3.3
+  5V: 5.0
+footprint:
+  rows:
+    - pins: [NC, IOREF, RESET, 3.3V, 5V, GND, GND, VIN, A0, A1, A2, A3, A4, A5]   # power + analog header
+      axis: number
+    - pins: [SCL, SDA, AREF, GND, D13, D12, D11, D10, D9, D8, D7, D6, D5, D4, D3, D2, D1, D0]  # digital header
+      axis: number
+pin_aliases:
+  "3V3": 3.3V
+  "+3V3": 3.3V
+  "+5V": 5V
+checks: []

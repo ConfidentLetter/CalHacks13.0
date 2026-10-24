@@ -1,0 +1,44 @@
+{
+ "name": "vin on 5v",
+ "frame_id": "twin_5v",
+ "twin_lines": [
+  "esp32_1 = esp32-devkitc (conf 0.95): 3V3@C1, GND@C14, 5V@C19, GPIO21@J15, GPIO22@J18",
+  "bme280_1 = bme280 (conf 0.88): VIN@B40, GND@B41, SCL@B42, SDA@B43",
+  "net_1: bme280_1.GND <-> esp32_1.GND | holes A14,A41,B41,C14,RAIL_TOP_MINUS | via w_black_1 (conf 0.90), w_black_2 (conf 0.90)",
+  "net_2: bme280_1.SCL <-> esp32_1.GPIO22 | holes A42,B42,I18,J18 | via w_green_1 (conf 0.84)",
+  "net_3: bme280_1.SDA <-> esp32_1.GPIO21 | holes A43,B43,I15,J15 | via w_yellow_1 (conf 0.86)",
+  "net_4: bme280_1.VIN <-> esp32_1.5V | holes A19,A40,B40,C19,RAIL_BOTTOM_PLUS | via w_red_2 (conf 0.90), w_red_3 (conf 0.90)",
+  "net_5: esp32_1.3V3 | holes A1,C1,RAIL_TOP_PLUS | via w_red_1 (conf 0.90)"
+ ],
+ "serial": [],
+ "question": "Is it safe to power this on?",
+ "diagnosis": {
+  "findings": [
+   {
+    "id": "supply_voltage",
+    "severity": "error",
+    "title": "VIN is on 5V, max is 3.6 V",
+    "explanation": "bme280_1 VIN is powered from esp32_1 5V (5 V). The bme280 datasheet limits the supply to 3.6 V, so this can damage it.",
+    "fix": "Move the red wire from RAIL_BOTTOM_PLUS to RAIL_TOP_PLUS",
+    "evidence": {
+     "wires": [
+      "w_red_2"
+     ],
+     "components": [
+      "bme280_1",
+      "esp32_1"
+     ],
+     "datasheet": [
+      {
+       "part_id": "bme280",
+       "page": 13,
+       "quote": "Table 5: Absolute maximum ratings Parameter Condition Min Max Unit Voltage at any supply pin VDD and VDDIO pin -0.3 4.25 V Voltage at any interface pin -0.3 VDDIO + 0.3 V Storage temperature \u2264 65% RH"
+      }
+     ]
+    },
+    "confidence": 0.88
+   }
+  ],
+  "needs_user_confirmation": []
+ }
+}

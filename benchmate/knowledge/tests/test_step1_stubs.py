@@ -38,14 +38,25 @@ def test_public_api_exported():
 
 def test_search_returns_contract_hits():
     hits = search("bme280", "maximum supply voltage")
-    assert hits, "stub must return the mock hit"
+    assert hits
     for h in hits:
         assert set(h) == HIT_KEYS
         assert isinstance(h["page"], str)
         assert isinstance(h["score"], float)
         assert len(h["text"]) <= 1200
-    mock = json.loads((ROOT / "mocks" / "search_bme280_supply.json").read_text())
-    assert hits[0]["text"] == mock[0]["text"]
+
+
+def test_search_falls_back_to_mock_when_no_index(tmp_path, monkeypatch):
+    from knowledge import retrieval
+    monkeypatch.setattr(retrieval, "INDEX_DIR", tmp_path)
+    retrieval.invalidate()
+    try:
+        hits = search("bme280", "maximum supply voltage")
+        mock = json.loads((ROOT / "mocks" / "search_bme280_supply.json").read_text())
+        assert hits[0]["text"] == mock[0]["text"] and hits[0]["page"] == "0"
+        assert search("esp32-devkitc", "anything") == []
+    finally:
+        retrieval.invalidate()
 
 
 def test_search_respects_k_and_empty_query():
@@ -54,10 +65,16 @@ def test_search_respects_k_and_empty_query():
     assert len(search("bme280", "supply", k=1)) == 1
 
 
-def test_profiles_match_contract_examples():
+def test_profiles_keep_the_contract_example_shape():
     examples = {d["part_id"]: d for d in yaml.safe_load_all((ROOT / "contracts" / "profile.example.yaml").read_text())}
     for pid in ("bme280", "esp32-devkitc"):
-        assert get_profile(pid) == examples[pid]
+        prof, ex = get_profile(pid), examples[pid]
+        assert set(ex) <= set(prof), f"{pid} dropped keys {set(ex) - set(prof)}"
+        assert prof["role"] == ex["role"]
+        assert [c["id"] for c in prof["checks"]] == [c["id"] for c in ex["checks"]]
+        for c_prof, c_ex in zip(prof["checks"], ex["checks"]):
+            assert set(c_ex) <= set(c_prof)
+            assert c_prof["kind"] == c_ex["kind"] and c_prof["pin"] == c_ex["pin"]
 
 
 def test_list_profiles_contains_both_and_is_sorted():
@@ -89,9 +106,6 @@ def test_reads_stubs():
     assert recent_reads("bme280", hours=1) == []
 
 
-def test_ingest_stub(tmp_path):
-    pdf = tmp_path / "x.pdf"
-    pdf.write_bytes(b"%PDF-1.4\n")
-    assert ingest(str(pdf), "bme280") == 0
+def test_ingest_missing_file_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         ingest(str(tmp_path / "missing.pdf"), "bme280")

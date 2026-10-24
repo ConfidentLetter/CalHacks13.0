@@ -1,0 +1,7 @@
+# T1 perception_geometry — classical CV only, no neural nets
+numpy>=1.26
+opencv-contrib-python>=4.9      # cv2.aruco (ArucoDetector), cv2.ximgproc
+scikit-image>=0.22              # skeletonize
+scipy>=1.11                     # cKDTree for hole snapping / grid refinement
+jsonschema>=4.20
+pytest>=8

@@ -1,0 +1,4 @@
+Message from T5 (via Henry): calibrate's telemetry contains Infinity, which the browser cannot parse as JSON; T5 cleans it before broadcasting, but please emit finite values or null.
+Message from T2 (via Henry): on your synthetic frames detect_wires finds 4 to 8 wires for 5 true ones with 60 to 100 percent exact endpoints — first number from T2's side.
+Message from T3 (via Henry): keep wire endpoint holes in nets[].holes exactly as mocks/make_mocks.py does, otherwise reasoning cannot name the wire to move.
+Adapt your work accordingly, then continue.

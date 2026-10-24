@@ -1,0 +1,54 @@
+{
+ "name": "sda scl swapped",
+ "frame_id": "twin_sda_swapped",
+ "twin_lines": [
+  "esp32_1 = esp32-devkitc (conf 0.95): 3V3@C1, GND@C14, 5V@C19, GPIO21@J15, GPIO22@J18",
+  "bme280_1 = bme280 (conf 0.88): VIN@B40, GND@B41, SCL@B42, SDA@B43",
+  "net_1: bme280_1.GND <-> esp32_1.GND | holes A14,A41,B41,C14,RAIL_TOP_MINUS | via w_black_1 (conf 0.90), w_black_2 (conf 0.90)",
+  "net_2: bme280_1.SCL <-> esp32_1.GPIO21 | holes A42,B42,I15,J15 | via w_green_1 (conf 0.84)",
+  "net_3: bme280_1.SDA <-> esp32_1.GPIO22 | holes A43,B43,I18,J18 | via w_yellow_1 (conf 0.86)",
+  "net_4: bme280_1.VIN <-> esp32_1.3V3 | holes A1,A40,B40,C1,RAIL_TOP_PLUS | via w_red_1 (conf 0.90), w_red_2 (conf 0.90)",
+  "net_5: esp32_1.5V | holes C19"
+ ],
+ "serial": [
+  "[boot] ESP32 ready",
+  "[i2c] scanning bus SDA=21 SCL=22 ...",
+  "[i2c] no I2C devices found",
+  "[bme280] init failed: sensor not found at 0x76 or 0x77"
+ ],
+ "question": "Why isn't the sensor reading?",
+ "diagnosis": {
+  "findings": [
+   {
+    "id": "i2c_swapped",
+    "severity": "error",
+    "title": "SDA and SCL are swapped",
+    "explanation": "bme280_1 SDA lands on esp32_1 GPIO22 and SCL on GPIO21. The esp32-devkitc default I2C pins are SDA=GPIO21, SCL=GPIO22, so the bus scan finds no device.",
+    "fix": "Swap the yellow wire (I18) and the green wire (I15)",
+    "evidence": {
+     "wires": [
+      "w_yellow_1",
+      "w_green_1"
+     ],
+     "components": [
+      "bme280_1",
+      "esp32_1"
+     ],
+     "serial_lines": [
+      "[i2c] no I2C devices found",
+      "[bme280] init failed: sensor not found at 0x76 or 0x77"
+     ],
+     "datasheet": [
+      {
+       "part_id": "bme280",
+       "page": 33,
+       "quote": "The I\u00b2C interface uses the following pins: \u2022 SCK: serial clock (SCL) \u2022 SDI: data (SDA) \u2022 SDO: Slave address LSB (GND = \u20180\u2019, VDDIO = \u20181\u2019) CSB must be connected to VDDIO to select I\u00b2C interface."
+      }
+     ]
+    },
+    "confidence": 0.84
+   }
+  ],
+  "needs_user_confirmation": []
+ }
+}

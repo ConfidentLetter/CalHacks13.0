@@ -1,14 +1,26 @@
 # NOTES_T3 — Reasoning
 
-**Done:** Step 1 — `reasoning.run_checks / answer / refine` exist with contract signatures, return the mock diagnosis adapted to frame_id/mode; schema-validated; 4 tests pass.
-**Next:** Step 2 — rule engine (`reasoning/rules.py`) over `contracts/profile.example.yaml` profiles; Step 3 run_checks with serial evidence + citations.
-**Blocked:** nothing. Using local fallbacks: no `app/telemetry.py` yet (no-op shim in `reasoning/_telemetry.py`), no `knowledge.*` yet (profiles read from `contracts/profile.example.yaml`).
+**Done:** Steps 1-6 — rule engine (`rules.py`: same_net, max_supply, I2C-swap + shorted-rails patterns, concrete move/swap fixes), `run_checks`/`answer` (serial evidence, datasheet citations via `knowledge.search` with a 150 ms shared budget, read-history note, confidence gating -> `needs_user_confirmation`), `refine()` (Anthropic Messages API, cached prefix, frame + close-up tiles, streaming, one retry carrying the validation error), few-shot bank (`reasoning/examples/*.json`, 6 cases), `verify.py` (schema + grounding + rules-trump-model). 48 tests, no network: `pytest reasoning/tests -q` (0.5 s; `-m realsearch` adds the slow live-T4 test).
+**Next:** live run of `refine()` with a real key (`source env.sh && python -m reasoning.smoke_refine sda_swapped [frame.jpg]`) — Henry, please run this once and paste the output; then tune wording/effort. Replace text-only examples with photo tiles from T2's test set once it exists.
+**Blocked:** cannot call the model from this terminal (no `ANTHROPIC_API_KEY` in env.sh yet). Everything else is done and tested.
 
-Latencies: n/a yet (stub).
+Latencies (mocks, this laptop): rules 0.1 ms; `answer()` Phase 1 ≈ 2-10 ms warm. **Cold:** T4's first `knowledge.search` loads a model (~15 s) — all citation searches of one diagnosis share a 150 ms budget (`BM_SEARCH_BUDGET_MS`) so Phase 1 stays < 300 ms and just lacks the citation on that first call; `reasoning.warmup()` avoids even that. Model latency: not measured yet (no key); prompt prefix ≈ 3.4k tokens cached, `BM_EFFORT=low` by default, `max_tokens` 4096.
 
 ## For other terminals
-- T5: `reasoning.answer()` returns within ~1 ms today (mock); call `reasoning.refine(...)` right after and send both as `diagnosis` messages with the same `frame_id`.
-- Deps: `requirements/reasoning.txt` (anthropic, jsonschema, PyYAML, pytest) — all already in the shared venv.
+- **T5 (startup):** call `reasoning.warmup()` once in a background thread at server start (loads profiles/examples and warms T4's search, ~15 s cold). Otherwise the first card has no datasheet citation.
+- **T5 (per question):** `d1 = reasoning.answer(q, twin, serial, frame_path)` → send immediately as `diagnosis`; then `d2 = reasoning.refine(q, twin, serial, frame_path, d1)` → send as a second `diagnosis` with the same `frame_id`. `refine` never raises and returns `d1` itself when offline/failed (identity check `d2 is d1` tells you nothing new arrived). Proactive path: `reasoning.run_checks(twin, serial)` on every stable frame.
+- **T5 (UI):** `needs_user_confirmation[].element_id` is a wire id or component id from the twin; the `prompt` already carries the consequence ("Is the yellow wire in I18? If so: SDA and SCL are swapped."). Finding ids to style: `i2c_swapped`, `supply_voltage`, `ground`, `i2c_sda`, `i2c_scl`, `sources_shorted:<net>`, `unknown_part:<comp>`, `no_mcu`, `i2c_no_device` (serial-only hedge, warning), `sensor_responding` (severity `ok`). `latency_ms` keys: `rules_ms, search_ms, answer_phase1_ms|run_checks_ms, refine_ms, model_first_token_ms, model_total_ms`.
+- **Henry (contract):** `diagnosis.schema.json` says `evidence.datasheet[].page` is an **integer**, but T4 returns `page` as a string label (`"22"`). I coerce with the first digits; a non-numeric label (`"iv"`) drops the citation. If you want the label verbatim on the card, change the schema to `["integer","string"]` and I will pass it through.
+- **T4:** I call `knowledge.search(part_id, check.search_query, k=3)`, pick the hit whose `text` contains the key number (e.g. `3.6`) and quote that sentence (≤ 200 chars); and `knowledge.recent_reads(part_id)` matching on `page`. Your real index already returns p.33 (I2C pins) and the abs-max table for the supply query — the operating-range page (1.71–3.6 V) would make the 5 V card stronger if it ranks in the top 3 for "supply voltage VDD maximum operating". `supply.max_v` and `roles` from your profiles drive all checks: if the real module has a regulator (accepts 5 V), set `max_v` accordingly and scenario 1 will not fire.
+- **T1/T2:** rules only use `nets[].members` + `nets[].holes` + `wires[].end_*.hole|pixel` + `components[].pins[].hole` + `bbox`. Keep wire endpoint holes inside `nets[].holes` (as `mocks/make_mocks.py` does) so I can name the wire to move. Wire/component confidence < 0.6 turns its finding into a confirmation prompt and makes `refine()` send a close-up tile around that element's `pixel`/`bbox` to the model.
+- Deps: `requirements/reasoning.txt` (anthropic, jsonschema, PyYAML, pytest; Pillow is already present via T1/T2) — all in the shared venv.
+
+## Module map
+`__init__.py` API+warmup · `diagnosis.py` pipeline · `rules.py` checks+patterns · `twin_view.py` net/hole helpers · `profiles.py` loader (knowledge → yaml → contract example) · `serial_evidence.py` · `citations.py` · `prompt_builder.py` · `images.py` · `model_client.py` · `verify.py` · `refiner.py` · `examples.py` + `examples/build_examples.py` · `smoke_refine.py` (live) · `tests/`.
 
 ## Log
 - H+0: read contracts/mocks/prompt; Step 1 stubs + tests.
+- Step 2: rules.py + twin_view.py + profiles.py (prefers knowledge.list_profiles, falls back to contracts/profile.example.yaml). 12 rule tests.
+- Step 3: serial_evidence.py, citations.py, diagnosis.py; run_checks/answer real. 11 more tests.
+- Steps 4-6: images/prompt_builder/model_client/refiner/verify + examples bank; 17 more tests with a fake model and deliberately hallucinated outputs (unknown wire/pin/component, invalid hole, uncited page, "all fine" vs strong rule, bad JSON twice, exception).
+- Found: T4 cold search ≈ 15 s → added 150 ms shared search budget + `warmup()`.

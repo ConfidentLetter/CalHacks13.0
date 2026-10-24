@@ -1,0 +1,27 @@
+# knowledge/profiles/esp32-devkit-v1.yaml — 30-pin "DOIT ESP32 DEVKIT V1" clone (very common in lending kits).
+# T4 owns this file. Pin order from the DOIT V1 silkscreen (D-prefixed GPIO names). Use this profile instead of
+# esp32-devkitc if the borrowed board has 15 pins per side and a "VIN" pin. VERIFY against Henry's photo.
+part_id: esp32-devkit-v1
+role: mcu
+aliases: ["ESP32 DEVKIT V1", "DOIT ESP32 DEVKIT V1", "ESP32 DevKit V1", "DOIT ESP32", "ESP32 DEVKITV1"]
+datasheet: knowledge/datasheets/esp32-wroom-32.pdf
+roles:
+  i2c_sda: D21                        # Arduino-ESP32 default Wire pins (GPIO21 / GPIO22)
+  i2c_scl: D22
+  gnd: GND
+sources:
+  3V3: 3.3
+  VIN: 5.0                            # VIN = USB 5 V when powered over USB
+footprint:
+  rows:
+    - pins: [EN, VP, VN, D34, D35, D32, D33, D25, D26, D27, D14, D12, D13, GND, VIN]
+      axis: number
+    - pins: [D23, D22, TX0, RX0, D21, D19, D18, D5, TX2, RX2, D4, D2, D15, GND, 3V3]
+      axis: number
+pin_aliases:
+  GPIO21: D21
+  GPIO22: D22
+  IO21: D21
+  IO22: D22
+  5V: VIN
+checks: []

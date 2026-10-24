@@ -1,5 +1,5 @@
 # T2 eval — Python 3.11
 jsonschema>=4.20
 numpy>=1.26
-opencv-python-headless>=4.9
+opencv-contrib-python>=4.9   # same flavor T1 installed; do not mix with opencv-python-headless
 matplotlib>=3.8

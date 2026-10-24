@@ -1,20 +1,32 @@
-# DRAFT copied from contracts/profile.example.yaml by T4 (Step 1). VERIFY against real hardware in Step 2.
-# ---------- example 2: mcu ----------
+# knowledge/profiles/esp32-devkitc.yaml — Espressif ESP32-DevKitC V4 (38-pin, ESP32-WROOM-32/32E module).
+# T4 owns this file. Pin order verified against Espressif's ESP32-DevKitC V4 user guide, "Header Block" J2/J3
+# (knowledge/datasheets/esp32-devkitc-v4.pdf, page labels 4-5). STATUS: board variant to be confirmed from
+# Henry's photo — a 30-pin "DOIT ESP32 DEVKIT V1" has a DIFFERENT order (see knowledge/profiles/esp32-devkit-v1.yaml).
 part_id: esp32-devkitc
 role: mcu
-aliases: ["ESP32-WROOM-32", "ESP32 DevKitC", "ESP32-DEVKITC-32E", "ESP32 DEVKIT V1"]
-datasheet: knowledge/datasheets/esp32-devkitc.pdf
+aliases: ["ESP32-WROOM-32", "ESP32-WROOM-32E", "ESP32 DevKitC", "ESP32-DEVKITC-32E", "ESP32-DevKitC V4", "ESP32 DEVKITC"]
+datasheet: knowledge/datasheets/esp32-devkitc-v4.pdf
 roles:                                # role -> pin name on this board
-  i2c_sda: GPIO21                     # Arduino-ESP32 default Wire pins
-  i2c_scl: GPIO22
+  i2c_sda: GPIO21                     # Arduino-ESP32 core default Wire pins (NOT a datasheet fact: ESP32 I2C
+  i2c_scl: GPIO22                     # can be routed to any GPIO via the GPIO matrix, esp32.pdf 4.8.4)
   gnd: GND
 sources:                              # pins that supply power, with their voltage
   3V3: 3.3
   5V: 5.0
 footprint:
-  rows:                               # VERIFY pin order on your exact board; DevKit variants differ
+  rows:                               # J2 (3V3 ... 5V) and J3 (GND ... CLK), silkscreen names
     - pins: [3V3, EN, VP, VN, GPIO34, GPIO35, GPIO32, GPIO33, GPIO25, GPIO26, GPIO27, GPIO14, GPIO12, GND, GPIO13, SD2, SD3, CMD, 5V]
       axis: number
     - pins: [GND, GPIO23, GPIO22, TX, RX, GPIO21, GND, GPIO19, GPIO18, GPIO5, GPIO17, GPIO16, GPIO4, GPIO0, GPIO2, GPIO15, SD1, SD0, CLK]
       axis: number
+pin_aliases:                          # silkscreen variants T2 may read -> canonical pin name above
+  IO21: GPIO21
+  IO22: GPIO22
+  D21: GPIO21
+  D22: GPIO22
+  D2: SD2
+  D3: SD3
+  D1: SD1
+  D0: SD0
+  VIN: 5V
 checks: []

@@ -1,0 +1,6 @@
+Message from Henry: contract change — diagnosis.schema.json page is now integer OR string, so your string page labels are now the contract (contracts/CHANGELOG.md).
+Message from Henry: `pytest -q` from the root currently fails 2 of your tests: test_profiles.py::test_check_search_queries_retrieve_their_cited_page[bme280] (i2c_sda check: top hit page '33', profile says '32'; hits were ['33','32','38']) and test_search.py::test_bme280_i2c_address_mentions_0x76_0x77 (top hit is the BMP280 SDO-floating paragraph, not the 0x76/0x77 address text). Fix the queries or the cited pages, and update your NOTES_T4.md status block — it still says Step 1.
+Message from T3 (via Henry): the supply check query "supply voltage VDD maximum operating" returns the absolute-maximum table in the top 3 but not the 3.6 V operating-range page; if that page reaches the top 3 the 5V card's citation gets stronger.
+Message from T5 (via Henry): knowledge/embeddings.py pulls torch, first search() takes seconds and telemetry shows search_timeout at 250 ms; T5 pre-warms at server start, but a search timeout leaves cards without datasheet pages. Consider a lighter embedder or a persisted index.
+Message from T2 (via Henry): the normalizer already picks up your new esp32-devkit-v1 and arduino-uno profiles and the BMP280 alias.
+Adapt your work accordingly, then continue.

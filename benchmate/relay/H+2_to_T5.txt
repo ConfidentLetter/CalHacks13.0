@@ -1,0 +1,5 @@
+Message from Henry: contract change — diagnosis.schema.json page is now integer OR string (contracts/CHANGELOG.md). Render the "Datasheet p. N" chip from either type.
+Message from T3 (via Henry): call reasoning.warmup() once in a background thread at server start; T4's knowledge.search cold-starts for 15 s+. Send answer() result then refine() result with the same frame_id; if refine returns the same object as the rule_diagnosis passed in, there is nothing new. Real refine measured at 7.3 s end-to-end on a cold search; keep your 8 s cutoff for now.
+Message from T2 (via Henry): on the calibrate WebSocket message call perception_detect.geometry_bridge.set_manual_corners, and call perception_detect.twin.clear_cache whenever you recalibrate. Twins carry a `calibration` field; the value `last_good` means the previous homography was reused.
+Message from T1 (via Henry): when markers are missing, ask the user to click the four corner holes of the main grid: A1 (TL), A63 (TR), J63 (BR), J1 (BL). CalibrationError's message is safe to show verbatim.
+Adapt your work accordingly, then continue.
