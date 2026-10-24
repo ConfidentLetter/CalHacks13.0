@@ -1,0 +1,20 @@
+# DRAFT copied from contracts/profile.example.yaml by T4 (Step 1). VERIFY against real hardware in Step 2.
+# ---------- example 2: mcu ----------
+part_id: esp32-devkitc
+role: mcu
+aliases: ["ESP32-WROOM-32", "ESP32 DevKitC", "ESP32-DEVKITC-32E", "ESP32 DEVKIT V1"]
+datasheet: knowledge/datasheets/esp32-devkitc.pdf
+roles:                                # role -> pin name on this board
+  i2c_sda: GPIO21                     # Arduino-ESP32 default Wire pins
+  i2c_scl: GPIO22
+  gnd: GND
+sources:                              # pins that supply power, with their voltage
+  3V3: 3.3
+  5V: 5.0
+footprint:
+  rows:                               # VERIFY pin order on your exact board; DevKit variants differ
+    - pins: [3V3, EN, VP, VN, GPIO34, GPIO35, GPIO32, GPIO33, GPIO25, GPIO26, GPIO27, GPIO14, GPIO12, GND, GPIO13, SD2, SD3, CMD, 5V]
+      axis: number
+    - pins: [GND, GPIO23, GPIO22, TX, RX, GPIO21, GND, GPIO19, GPIO18, GPIO5, GPIO17, GPIO16, GPIO4, GPIO0, GPIO2, GPIO15, SD1, SD0, CLK]
+      axis: number
+checks: []

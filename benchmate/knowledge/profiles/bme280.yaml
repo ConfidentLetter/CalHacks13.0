@@ -1,0 +1,49 @@
+# DRAFT copied from contracts/profile.example.yaml by T4 (Step 1). VERIFY against real hardware in Step 2.
+# knowledge/profiles/<part_id>.yaml — one file per component (the "blueprint" idea from the NeMo poster).
+# T4 writes the files. T3 executes `checks`. T2 uses `footprint` to lay out pins.
+# Checks are STRUCTURED (kind + args), not free text, so T3 can run them as code.
+#
+# Two profile types: role "mcu" (the board that supplies power and buses) and role "peripheral".
+
+# ---------- example 1: peripheral ----------
+part_id: bme280
+role: peripheral
+aliases: ["BME280", "BME 280", "GY-BME280", "GYBMEP"]
+datasheet: knowledge/datasheets/bme280.pdf
+interface: i2c
+i2c_addresses: ["0x76", "0x77"]      # 0x76 when SDO -> GND, 0x77 when SDO -> VDDIO
+supply:
+  max_v: 3.6                          # VERIFY for your module: boards with an onboard regulator accept 5V
+  datasheet_page: null                # page label as shown in a PDF viewer; T4 fills from search()
+footprint:
+  rows:                               # one entry per physical pin row; the user registers the FIRST pin of each row
+    - pins: [VIN, GND, SCL, SDA]      # order as they appear along the row (VERIFY on your module's silkscreen)
+      axis: number                    # pins run along the numbered axis (1..63) of the breadboard
+checks:
+  - id: supply_voltage
+    kind: max_supply                  # every power source on net(VIN) must be <= supply.max_v
+    pin: VIN
+    severity: error
+    search_query: "supply voltage VDD maximum operating"
+    question: "Which power rail is the sensor's VIN wire connected to?"
+  - id: ground
+    kind: same_net                    # net(pin) must contain the MCU pin playing `target_role`
+    pin: GND
+    target_role: gnd
+    severity: error
+    search_query: "GND ground pin"
+    question: "Is the sensor's GND connected to the board's ground?"
+  - id: i2c_sda
+    kind: same_net
+    pin: SDA
+    target_role: i2c_sda
+    severity: error
+    search_query: "I2C SDA serial data pin"
+    question: "Which board pin is the sensor's SDA wire connected to?"
+  - id: i2c_scl
+    kind: same_net
+    pin: SCL
+    target_role: i2c_scl
+    severity: error
+    search_query: "I2C SCL serial clock pin"
+    question: "Which board pin is the sensor's SCL wire connected to?"

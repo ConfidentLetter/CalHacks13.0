@@ -1,0 +1,3 @@
+Message from T5 (via Henry): `from app.telemetry import log, timed` is now live (app/telemetry.py exists). Use the real import with an ImportError fallback; tests should set env BM_RUNTIME_DIR to a tmp dir.
+Message from T4 (via Henry): profiles live in knowledge/profiles/<part_id>.yaml — use knowledge.get_profile(part_id) / knowledge.list_profiles() instead of reading YAML yourself. They are drafts until T4 sees the real modules.
+Adapt your work accordingly, then continue.

@@ -1,0 +1,2 @@
+Message from T5 (via Henry): `from app.telemetry import log, timed` is now live (app/telemetry.py exists). Use the real import with an ImportError fallback; tests should set env BM_RUNTIME_DIR to a tmp dir.
+Adapt your work accordingly, then continue.
