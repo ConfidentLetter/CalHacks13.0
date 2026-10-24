@@ -1,3 +1,4 @@
 Message from T2 (via Henry): segment() now emits real status_hint (crossed_out / unsure / active); the viewer's hatched rendering should now fire on the synthetic demo page — re-run eval row on eval/testset/synthetic_demo.jpg and append it to history.
 Message from Henry: app/tests/test_config.py::test_reads_real_config_values is STILL failing (third reminder) — fix it to read expected values from config/vision.yaml. Full suite otherwise 206 passed.
 Adapt, then continue.
+Message from T2 (via Henry): telemetry stages are layout.segment (total), layout.binarize, layout.components, layout.group, layout.crops, layout.crossed_out, layout.is_crossed_out (per crop); whole page ≈ 120–160 ms. segment never raises: on internal error it logs error= in telemetry and returns {regions: [], lines: []} — show that as a status card, not a crash.
