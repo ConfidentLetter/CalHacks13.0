@@ -33,6 +33,7 @@ PREVIEW_FPS = 5.0
 PREVIEW_SIZE = (160, 120)
 CLOCK_EPSILON_S = 1e-6
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+BLACK_FRAME_MEAN = 6.0   # a camera that "works" but returns black frames is a virtual/inactive device
 
 
 class SourceError(RuntimeError):
@@ -310,14 +311,15 @@ def list_sources(max_index: int = 5) -> dict[str, str | None]:
                 frame = cam.read()
                 path = debug / f"source_webcam{idx}_{cam.width}x{cam.height}.jpg"
                 _write_jpeg(frame, path)
-                out[f"webcam:{idx}"] = str(path)
+                black = float(frame.mean()) < BLACK_FRAME_MEAN
+                out[f"webcam:{idx}"] = f"{repo_relative(path)}{'  (BLACK frame: virtual or inactive camera, do not use)' if black else ''}"
         except SourceError:
             out[f"webcam:{idx}"] = None
     try:
         frame = _grab_pi()
         path = debug / f"source_pi_{frame.shape[1]}x{frame.shape[0]}.jpg"
         _write_jpeg(frame, path)
-        out["pi"] = str(path)
+        out["pi"] = repo_relative(path)
     except SourceError:
         out["pi"] = None
     release_webcam()

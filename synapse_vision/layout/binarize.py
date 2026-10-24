@@ -18,7 +18,10 @@ MIN_INK_CONTRAST = 20          # pixel must be this much darker than the local m
 RULE_MIN_CONTRAST = 8          # lenient contrast used only to *find* faint printed rules
 WINDOW_PER_LINE_HEIGHT = 1.5
 MAX_LINE_HEIGHT_FRAC = 0.10    # of page height, for the line-height estimate
-RULE_MIN_SPAN_FRAC = 0.75      # a rule spans at least this fraction of the page
+RULE_SEED_MIN_SPAN_FRAC = 0.2  # a seed piece must be at least this long to be fitted as a rule
+RULE_MIN_COVERAGE = 0.5        # ink found along the fitted line over this fraction of the page ...
+RULE_EDGE_ZONE_FRAC = 0.12     # ... and over RULE_MIN_EDGE_COVERAGE of both outer zones (rules run edge to edge)
+RULE_MIN_EDGE_COVERAGE = 0.3
 RULE_MAX_THICKNESS_PX = 6      # thicker horizontal structures are handwriting (strikes, bars)
 RULE_SEED_RUN_FRAC = 1 / 40    # minimum straight run to seed a rule candidate
 RULE_BRIDGE_FRAC = 1 / 100     # bridge gaps along a slightly tilted rule
@@ -85,24 +88,59 @@ def _rule_mask(binary: np.ndarray, lenient: np.ndarray, horizontal: bool) -> np.
     mask = np.zeros_like(binary)
     for i in range(1, n):
         extent = stats[i, cv2.CC_STAT_WIDTH] if horizontal else stats[i, cv2.CC_STAT_HEIGHT]
-        if extent >= RULE_MIN_SPAN_FRAC * span:
-            _paint_rule_band(mask, np.argwhere(labels == i), horizontal)
+        if extent < RULE_SEED_MIN_SPAN_FRAC * span:
+            continue
+        band = _fit_band(np.argwhere(labels == i), mask.shape, horizontal)
+        if band is not None and not _already_painted(mask, band, horizontal) and _is_page_rule(thin, band, horizontal):
+            _paint(mask, band, horizontal)
     # erase only thin pixels inside the rule band so crossing handwriting survives
     return cv2.bitwise_and(_thin_structures(binary, horizontal), mask)
 
 
-def _paint_rule_band(mask: np.ndarray, pts: np.ndarray, horizontal: bool) -> None:
-    """Fit a straight line through the rule pixels and paint a thin band along it across the whole page."""
-    H, W = mask.shape
+def _fit_band(pts: np.ndarray, shape: tuple[int, int], horizontal: bool) -> tuple[np.ndarray, int] | None:
+    """Least-squares line through a rule piece -> (centre position per column/row, half thickness)."""
+    H, W = shape
     along, across = (pts[:, 1], pts[:, 0]) if horizontal else (pts[:, 0], pts[:, 1])
+    if len(np.unique(along)) < 2:
+        return None
     slope, intercept = np.polyfit(along.astype(np.float64), across.astype(np.float64), 1)
     spread = float(np.percentile(np.abs(across - (slope * along + intercept)), 95))
     half = int(min(RULE_MAX_THICKNESS_PX, max(1.0, spread))) + 1
-    extent = W if horizontal else H
-    xs = np.arange(extent)
-    centre = np.round(slope * xs + intercept).astype(int)
+    xs = np.arange(W if horizontal else H)
+    centre = np.clip(np.round(slope * xs + intercept).astype(int), 0, (H if horizontal else W) - 1)
+    return centre, half
+
+
+def _coverage(thin: np.ndarray, band: tuple[np.ndarray, int], horizontal: bool, sl: slice) -> float:
+    centre, half = band
+    xs = np.arange(len(centre))[sl]
+    hit = np.zeros(len(xs), dtype=bool)
+    limit = (thin.shape[0] if horizontal else thin.shape[1]) - 1
     for off in range(-half, half + 1):
-        rows = np.clip(centre + off, 0, (H if horizontal else W) - 1)
+        rows = np.clip(centre[sl] + off, 0, limit)
+        hit |= (thin[rows, xs] if horizontal else thin[xs, rows]) > 0
+    return float(hit.mean()) if len(hit) else 0.0
+
+
+def _is_page_rule(thin: np.ndarray, band: tuple[np.ndarray, int], horizontal: bool) -> bool:
+    """A printed rule has ink along most of the fitted line AND reaches both page edges; a strike does not."""
+    n = len(band[0])
+    edge = max(1, int(RULE_EDGE_ZONE_FRAC * n))
+    return (_coverage(thin, band, horizontal, slice(0, n)) >= RULE_MIN_COVERAGE
+            and _coverage(thin, band, horizontal, slice(0, edge)) >= RULE_MIN_EDGE_COVERAGE
+            and _coverage(thin, band, horizontal, slice(n - edge, n)) >= RULE_MIN_EDGE_COVERAGE)
+
+
+def _already_painted(mask: np.ndarray, band: tuple[np.ndarray, int], horizontal: bool) -> bool:
+    return _coverage(mask, band, horizontal, slice(0, len(band[0]))) > 0.9
+
+
+def _paint(mask: np.ndarray, band: tuple[np.ndarray, int], horizontal: bool) -> None:
+    centre, half = band
+    xs = np.arange(len(centre))
+    limit = (mask.shape[0] if horizontal else mask.shape[1]) - 1
+    for off in range(-half, half + 1):
+        rows = np.clip(centre + off, 0, limit)
         if horizontal:
             mask[rows, xs] = 255
         else:

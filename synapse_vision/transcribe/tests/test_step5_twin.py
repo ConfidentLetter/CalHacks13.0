@@ -63,7 +63,7 @@ def test_removed_lines_and_new_page(fake_pipeline):
     fake_pipeline["lines"] = [_line(0, "x=9", y=900), _line(1, "y=8", y=1300)]
     third = twin_mod.build_page_twin("c.jpg", first)
     assert third["page_id"] != first["page_id"]
-    assert third["changes"]["added"] == ["L4", "L5"] and third["changes"]["removed"] == []
+    assert third["changes"]["added"] == ["L0", "L1"] and third["changes"]["removed"] == []  # fresh ids on a new page
 
 
 def test_shifted_line_matches_by_order_and_text(fake_pipeline):

@@ -1,15 +1,34 @@
 # NOTES_T1 — Capture
 
-**Done:** Step 1 (stubs with exact contract signatures, `upload:<path>` works, synthetic photo bench `capture/tests/synth.py`, 20 tests green). Step 2 source code written (pi/webcam/stability state machine), untested on hardware.
-**Next:** Step 3 real page detection + dewarp + lighting + quality gate in `capture/page.py`, measured on 100 synthetic photos.
-**Blocked:** nothing. `eval/calibration/` is still empty — using synthetic photos until real ones appear.
+**Done:** Steps 1–4. All four contract functions real: `get_snapshot` (pi/webcam/upload), `wait_for_stable` (STILL→CHANGING→STILL state machine), `detect_and_dewarp` (edges+threshold quad search, sub-pixel edge refinement, ArUco fallback, Letter/A4 snap, lighting flattening + CLAHE, 7-issue quality gate, debug panel), `tile` (ink-balanced bands). 39 tests green (`pytest capture/tests`, ~30 s). Synthetic bench: 100/100 photos within 1.5 % corner error (median 0.06 %), all quality flags verified per class. Live webcam sanity run on this Mac works (no false page on a room photo).
+**Next:** Step 5 — tune on real photos as soon as `eval/calibration/` has any; 10-trial hand test of `wait_for_stable` with Henry at the mount; document the final mount in `hardware/README.md`.
+**Blocked:** no real photos yet (`eval/calibration/` empty). Need Henry for two config edits below (I can't write `config/`).
+
+## For Henry (config/vision.yaml — please apply)
+1. `capture.webcam_index: 2` — on this Mac indices 0/1 return black frames; 2 is the built-in camera (`python -m capture.source --list` shows it). Rerun `--list` after plugging the Pi or activating the phone camera.
+2. `page.blur_threshold: 1500` — my blur score is variance-of-Laplacian **on the lighting-normalized gray, measured near ink only, at 1100 px long side** (resolution- and pencil-darkness-independent; a blank page is never "blurry"). Synthetic: sharp 1800–29000, σ=4–6 blur 300–1200. With the current `80` the blur gate never fires. Will re-tune on real photos.
+3. Optional keys I read with safe defaults (add only if you want to tune them): `page.dark_median_max: 70`, `page.skew_max_deg: 35`, `page.hand_fraction_max: 0.03`, `page.glare_pixel_min: 250`, `page.edge_margin_fraction: 0.01`, `page.focal_px_factor: 0.9` (aspect estimate), `page.landscape_top: left|right` (which frame edge is the page top when the sheet lies landscape), `page.tile_overlap_px: 60`, `page.tile_quiet_search_px: 40`.
+4. Pages smaller than `page.min_page_area_fraction` (25 % of the frame) are rejected on purpose. If the camera has to sit far away, lower it to 0.15.
+5. T4's `app/tests/test_config.py::test_reads_real_config_values` fails since your H+2 budget change (expects 8000, config says 15000) — T4's file, not mine.
 
 ## For other terminals
-- `from capture import get_snapshot, detect_and_dewarp, tile, wait_for_stable` works now. `get_snapshot("upload:<path>")` copies into `runtime/snapshots/<timestamp>.jpg`.
-- `detect_and_dewarp(path)` currently (Step 1 stub) returns the input as `dewarped_path`, `quality.ok=True`, identity homography. When Step 3 lands it writes `<snapshot>_dewarped.jpg` (color, lighting-normalized) and `<snapshot>_dewarped_gray.png` next to it under `runtime/dewarped/`. All bboxes downstream are in the dewarped image's pixels.
-- `quality.issues` values come from the schema enum: `no_page, partial_page, blur, glare, too_dark, hand_in_frame, skew_extreme`. `ok=False` for `no_page | partial_page | blur | hand_in_frame`; `glare`, `too_dark`, `skew_extreme` are warnings (`ok` stays True) — lower confidence, don't skip.
-- T2: synthetic photos for your own tests: `from capture.tests.synth import render, save` (`render(seed, crossed_out=True, pencil=True, ruled=True)` → `.image`, `.page` (flat page), `.corners`).
-- T4: I read config through `capture.compat.cfg(key, default)` which calls `app.config.get` when it exists, else PyYAML; telemetry via `capture.compat.log` → `app.telemetry.log` when it exists. Stage names: `capture.snapshot`, `capture.wait_for_stable`, `capture.page`, `capture.tile`.
+- `from capture import get_snapshot, detect_and_dewarp, tile, wait_for_stable` (lazy exports). All returned paths are **repo-relative** (`runtime/snapshots/…`, `runtime/dewarped/<stem>_dewarped.jpg`, `runtime/dewarped/<stem>_dewarped_gray.png`, `runtime/tiles/<stem>_tile_NN.jpg`, `runtime/debug/page_<stem>.png`), so T4's `/files/` can serve them. Inputs may be repo-relative or absolute.
+- `detect_and_dewarp` returns the contract keys plus extras: `dewarped_gray_path` (lighting-flattened + CLAHE, best input for T2's ink masks), `debug_path`, `detection: {method: edges|threshold|aruco|none, quad: [[x,y]×4] in original px (TL,TR,BR,BL), aspect}`. Output is always portrait, long side `page.output_long_side` (2200), width 1700 for Letter.
+- Quality semantics: `ok=False` ⇔ any of `no_page, partial_page, blur, hand_in_frame`. `glare, too_dark, skew_extreme` are warnings (ok stays True) — T3 please lower confidence, don't skip. On `no_page` the `dewarped_path` is the original snapshot and `homography` is identity (never raises). ~120–160 ms per call at 1600×1200 (detect 25 ms; the rest is warp + lighting + hand check + debug PNG).
+- The flattened color page has paper pushed to ~235 gray and ink colors preserved (blue/red/pencil), for T2's crossed-out logic.
+- T2/T3/T4 synthetic photos: `from capture.tests.synth import render, save` — `render(seed, crossed_out=True, pencil=True, ruled=True, blur=…, glare=…, hand=…, no_page=…, partial=…, aruco=…, weak_edges=…)` → `.image` (camera frame), `.page` (flat page canvas), `.corners`. `python -m capture.tests.synth --n 8 --flag aruco` writes samples to `runtime/debug/synth/`.
+- Telemetry stage names: `capture.grab`, `capture.wait_for_stable`, `capture.page` (+ `capture.detect`, `capture.dewarp`, `capture.quality`), `capture.tile`, `capture.page_error`.
+
+## Tuning log (before → after, synthetic bench unless noted)
+- Detector: initial edge-only search found 50/100 pages — misses were all pages < 25 % of the frame (bench framed too small; real mount is sheet + 2–3 cm margin). Bench fixed to realistic fill → 100/100, median corner error 0.05 % of the diagonal (sub-pixel edge-line refinement).
+- Dark exposures: 0/8 detected → 8/8 after a 1–99 percentile contrast stretch before Canny/thresholds; flagged `too_dark` as a warning.
+- Hand check: 3/16 false `hand_in_frame` on clean pages (brown desk ring + red ink are "skin" in YCrCb) → 0/16 after measuring only inside the page polygon eroded by 1.2 %, requiring blobs ≥ 3 % of page width, and Y in 80–235. Hands still 14/14 flagged (live webcam: a face is flagged too — correct).
+- No-page honesty: empty-desk frames produced a frame-spanning quad → rejected quads > 92 % of the frame and quads not brighter inside than outside; 7/8 empty desks now say `no_page` (1 says `partial_page`; both block).
+- ArUco fallback: markers' **inner** corners define the mat region, then the page is searched inside the flattened mat; 8/8 white-desk+marker photos produce a usable region (5/8 the exact page, 3/8 the inner-marker region). Plain white desk without markers: 4/8 detected — use the dark mat or the markers (hardware/README.md).
+- Blur metric: raw-gray Laplacian variance overlapped (dark-but-sharp 500–950 vs blurred 400–650) → normalized-gray near-ink variance separates (sharp ≥ 1812, blur ≤ 1176). Needs `page.blur_threshold: 1500`.
+- Glare: synthetic paper was saturating (28 % "glare" on a clean page) because the bench paper was 245 + lighting; bench paper now 222–240 ×0.97 (realistic). Glare blob still saturates → 4/4 flagged at 0.15–0.8 fraction, 0/4 clean.
+- Lighting normalization: background estimated at quarter scale (median 11 + Gaussian) → `detect_and_dewarp` 350–450 ms → 120–160 ms.
 
 ## Log
-- H+0: read everything; no NOTES from others yet. Wrote `capture/compat.py`, `capture/source.py`, `capture/page.py` (stub), `capture/tests/synth.py` + tests. `python -m capture.tests.synth --n 6 --flag aruco` renders samples to `runtime/debug/synth/`.
+- H+0: read everything; wrote `capture/compat.py` (config/telemetry shims, repo-relative paths), `capture/source.py`, `capture/page.py` stub, `capture/tests/synth.py` + Step 1 tests (20 green).
+- H+1: `capture/detect.py`, `capture/dewarp.py`, `capture/quality.py`, `capture/tiling.py`, real `capture/page.py`; Step 3/4 tests (39 green). Webcam probe + live sanity run (`runtime/debug/source_sheet.jpg`, `runtime/debug/page_*.png`). hardware/README.md updated with the camera findings.

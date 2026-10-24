@@ -18,6 +18,7 @@
 - Structured outputs are on (`output_config.format`); the API prefix cache is per call kind (line/page/reread/crossed-out), so the first call of each kind after a restart pays a cache write.
 
 ## Log
+- H+4.5: code review pass — fixed: agreement is now exact after normalization (a single digit/sign difference always re-reads and flags the span; similarity threshold only picks the fallback confidence), failed model calls are never cached and never overwrite a good previous reading, `\left`/`\leq` no longer break `parse_ok`, bigger max_tokens under adaptive thinking (tiny calls were truncating), page reading used when a line pass fails, kind-mismatch comparison, new-page decision before any carry-over, SymPy under a 3 s timeout, oversized tiles downscaled, malformed T2 lines tolerated, zoom crops go to `runtime/debug/zoom/`. 70 tests.
 - H+0: read contracts, config, mock. Step 1 stubs + tests.
 - H+1.5: Step 2 prompt + bank + client; live smoke OK (mistake verbatim, blank → illegible, cache hit).
 - H+3: Step 3 `transcribe_page` live on a 6-line synthetic page: all verbatim, crossed-out detected, blank skipped. Fixed renderer superscript bug; mixed-prose lines now compared by `text` (models differ in how much prose they wrap in `\text{}`); prompt states "latex holds only the math on mixed lines".
