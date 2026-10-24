@@ -7,7 +7,7 @@
 Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「page twin」（错误原样保留、绝不纠正；划掉的行标出；置信度诚实）→ HTTP/WebSocket 交给 Tutor 队。详见 `README.md`、`contracts/`。
 
 ## 运行方式
-- 五个 Claude Code 终端并行，各写各的文件夹：T4 `app/ eval/`、T1 `capture/ hardware/`、T2 `layout/`、T3 `transcribe/`、**T5 `bridge/ docs/CONNECTIONS.md`（H+6 新增：对接队友前端）**。首条消息在 `launch_T*.txt`，顺序 T4→T1→T2→T3→T5。
+- 六个 Claude Code 终端并行（T6 UI 在 H+9 加入，团队已同意改前端），各写各的文件夹：T4 `app/ eval/`、T1 `capture/ hardware/`、T2 `layout/`、T3 `transcribe/`、**T5 `bridge/ docs/CONNECTIONS.md`（H+6 新增：对接队友前端）**。首条消息在 `launch_T*.txt`，顺序 T4→T1→T2→T3→T5。
 - 队友 Micha 的前端/扩展在仓库根 `../frontend/`、`../extension/`，契约在 `../docs/BACKEND_INTEGRATION.md` + `BACKEND_CONTRACT.md`（PR #1 已合入 main）。前端只认 `http://localhost:8000/api/*`，T5 的 `bridge.server:app` 导入并扩展 T4 的 app 后接管 8000 端口。
 - 只有 Henry（或接手的 integrator）跑 git；AI 终端禁止 git（`.claude/settings.json` 已 deny）。
 - 环境：`source .venv/bin/activate && source env.sh`（env.sh 不入库，从 shell 取 ANTHROPIC_API_KEY）。
@@ -18,6 +18,7 @@ Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「p
 | 终端 | 进度 | 下一步 |
 |---|---|---|
 | T4 | 全完成；eval 9 行，合成页干净跑 10.7 s（预算 15） | 等真实照片 → prelabel → /label → run_eval |
+| T6 | H+9 新增（prompts/T6_ui.md）：在 `../frontend/` 内把笔记本页围绕识别结果重设计（页面图 + 行框 + 逐行 LaTeX + 置信度 + 行检查器），保留 Micha 文具风；只写 frontend/src、docs/UI_DESIGN.md、NOTES_T6.md | Step 1 设计说明 → 识别视图 → 全站打磨 → 端到端验证 |
 | T5 | Steps 1–3 完成：`docs/CONNECTIONS.md`（模块分析 + 13 端点映射 + 19 个缺口），`bridge/` 实现前端全部 `/api/*`（含本地 faster-whisper 语音）。**13:50 起 bridge 接管 :8000**（`uvicorn bridge.server:app --host 0.0.0.0 --port 8000`，日志 runtime/server.log） | 装 Chrome 扩展验证阅读记录；维护 CONNECTIONS.md |
 | T3 | 全完成；H+7 查出延迟根因（每次调用都重发 8 张示例图，改为文本示例后 3 s/次） | 等真实照片 |
 | T1 | Steps 1–4 全完成（检测/去畸变/质量门/tiling，合成 100/100） | Step 5 在真实照片上调参 |
