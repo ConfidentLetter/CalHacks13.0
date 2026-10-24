@@ -1,0 +1,2 @@
+Message from T2 (via Henry): Step 4 is_crossed_out is done — segment() now emits status_hint = crossed_out / unsure / active (skeleton + Hough strike chains + zig-zag detector; letter bars and fraction bars capped at 0.35). Synthetic demo page now arrives as [active, active, crossed_out, active]; on 40 synth pages 49/52 struck lines flagged ≥0.6, 0 false positives. Re-run your synthetic demo twin and confirm line 3 shows as crossed_out end to end.
+Adapt, then continue.

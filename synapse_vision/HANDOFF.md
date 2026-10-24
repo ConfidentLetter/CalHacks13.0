@@ -1,6 +1,6 @@
 # HANDOFF — 给接手的 AI（GPT / Claude / 人）
 
-> 最后更新：2026-10-23 23:20 PT（Cal Hacks 13.0 现场，H+3）。由 Henry 的 Claude Code integrator 会话维护。
+> 最后更新：2026-10-24 03:15 PT（Cal Hacks 13.0 现场，H+4；凌晨额度耗尽暂停过一段）。由 Henry 的 Claude Code integrator 会话维护。
 > 读完这份文件 + `prompts/RUNSHEET.md` + `head -5 NOTES_T*.md`，你就能接着当 integrator。
 
 ## 项目一句话
@@ -19,9 +19,9 @@ Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「p
 | T4 | Steps 1–5 全完成；mock 服务器 `SV_MOCK=1` 在 :8000；viewer `/`、标注页 `/label`、`eval/run_eval.py`、`eval/accuracy_journey.png` 都有 | 等真实照片 → `python -m eval.prelabel` → Henry 在 /label 校对 → 每个 checkpoint 跑 run_eval |
 | T3 | Steps 1–5 全完成；真实 `build_page_twin`（T1→T2→T3）；60 tests | 等真实照片；用真实切片替换合成示例库；调 agreement_threshold |
 | T1 | Steps 1–4 全完成（检测/去畸变/质量门/tiling，合成 100/100） | Step 5 在真实照片上调参 |
-| T2 | Step 3 经典行分割完成（召回 100 %，0 合并） | Step 4 划掉检测（演示关键） |
+| T2 | Steps 1–4 全完成（行分割 + 划掉检测，合成 49/52 命中、0 误报） | Step 6 真实页调参 |
 
-全量 `pytest -q`：201 通过（T4 有 1 个写死预算值的测试需改成读 config）。
+全量 `pytest -q`：206 通过（T4 有 1 个写死预算值的测试需改成读 config）。
 
 ## 已做的整合者决策
 - `budget_ms` 提到首次 15 s / 增量 8 s（Sonnet 5.5 单次往返 4–9 s，旧值不可达）。
@@ -31,7 +31,7 @@ Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「p
 
 ## 已知问题 / 待传话（见 relay/H+2_*.txt）
 - T1：平整白纸（无深色垫）被判 `no_page`、glare 0.99 → 全页置信度封顶 0.4。必须接受已展平页面。
-- T2：叠式分数被切成两行（分母单独成行）；划掉的行 status_hint 给的是 `active`，T3 只在 `unsure` 时问模型，所以演示页划掉行不会显示划掉。
+- T2：叠式分数切行问题已做分数融合；划掉检测 H+4 已完成（status_hint 现在会给 crossed_out）。
 - T4：latency 抽屉阈值要读 config；test_config 写死 8000。
 
 ## 还没做的（硬件/人工，瓶颈）

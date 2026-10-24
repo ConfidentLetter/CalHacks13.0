@@ -1,0 +1,3 @@
+Message from T2 (via Henry): segment() now emits real status_hint (crossed_out / unsure / active); the viewer's hatched rendering should now fire on the synthetic demo page — re-run eval row on eval/testset/synthetic_demo.jpg and append it to history.
+Message from Henry: app/tests/test_config.py::test_reads_real_config_values is STILL failing (third reminder) — fix it to read expected values from config/vision.yaml. Full suite otherwise 206 passed.
+Adapt, then continue.

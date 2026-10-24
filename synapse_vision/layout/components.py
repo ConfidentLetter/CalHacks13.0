@@ -14,6 +14,9 @@ import numpy as np
 SPECK_AREA_PER_PIXEL = 4e-6     # speck threshold = this x page area (≈15 px on 1700x2200)
 SPECK_AREA_MIN = 6
 GIANT_FRAC = 0.9                # components this big are borders, not ink
+EDGE_BAND_FRAC = 0.02           # ink lying entirely within this outer band of the page is a dewarp border artifact
+FAINT_CONTRAST_FRAC = 0.5       # components lighter than this x the page's strong-ink contrast are bleed-through
+STRONG_INK_PERCENTILE = 90      # "strong ink" contrast = this percentile over components (bleed may outnumber ink)
 BAR_MIN_LEN_CHARS = 1.0         # a bar is a horizontal run at least this many char widths long
 BAR_MIN_LEN_PX = 12
 BAR_MAX_WIDTH_FRAC = 0.5        # of page width (longer = rule, not a fraction)
@@ -62,12 +65,35 @@ def find_components(binary: np.ndarray) -> list[Component]:
     min_area = speck_area(binary.shape)
     n, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
     comps: list[Component] = []
+    bx, by = int(EDGE_BAND_FRAC * W), int(EDGE_BAND_FRAC * H)
     for i in range(1, n):
         x, y, w, h, area = (int(v) for v in stats[i])
         if area < min_area or w >= GIANT_FRAC * W or h >= GIANT_FRAC * H:
             continue
+        if x + w <= bx or x >= W - bx or y + h <= by or y >= H - by:
+            continue  # sliver of desk/shadow left along the page edge by an imperfect dewarp
         comps.append(Component(x, y, w, h, area))
     return comps
+
+
+def component_contrast(c: Component, gray: np.ndarray, binary: np.ndarray, background: float) -> float:
+    """Background minus the mean gray of the component's ink pixels (bbox approximation)."""
+    region = gray[c.y : c.y1, c.x : c.x1]
+    mask = binary[c.y : c.y1, c.x : c.x1] > 0
+    if not mask.any():
+        return 0.0
+    return float(background - region[mask].mean())
+
+
+def drop_faint_components(comps: list[Component], gray: np.ndarray, binary: np.ndarray) -> list[Component]:
+    """Ink bleeding through from the back of the page is much lighter than the page's own ink: drop it."""
+    if len(comps) < 2:
+        return comps
+    background = float(np.median(gray))
+    contrasts = np.array([component_contrast(c, gray, binary, background) for c in comps])
+    strong = float(np.percentile(contrasts, STRONG_INK_PERCENTILE))
+    keep = contrasts >= FAINT_CONTRAST_FRAC * strong
+    return [c for c, k in zip(comps, keep) if k]
 
 
 def median_component_size(comps: list[Component]) -> tuple[float, float]:

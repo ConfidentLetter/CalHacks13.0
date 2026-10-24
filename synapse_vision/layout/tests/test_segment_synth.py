@@ -104,6 +104,51 @@ def test_ruled_and_pencil_pages_still_segment():
     assert len(specs) == len(page.lines)
 
 
+def _count_matched(page, img) -> tuple[int, int]:
+    _, specs = detect_lines(img)
+    matched = sum(any(iou(s["bbox"], l.bbox) >= IOU_MATCH for s in specs) for l in page.lines)
+    return matched, len(specs)
+
+
+def test_graph_paper_grid_is_ignored():
+    import cv2
+    from layout.tests.synth import PAGE_H, PAGE_W
+
+    page = render_page(5, ruled=False, margin_note=False)
+    img = page.image.copy()
+    for xx in range(40, PAGE_W, 42):
+        cv2.line(img, (xx, 0), (xx, PAGE_H), (225, 210, 200), 1)
+    for yy in range(30, PAGE_H, 42):
+        cv2.line(img, (0, yy), (PAGE_W, yy), (225, 210, 200), 1)
+    assert _count_matched(page, img) == (len(page.lines), len(page.lines))
+
+
+@pytest.mark.parametrize("bleed_gray", [218, 200, 185])
+def test_bleed_through_from_back_of_page_is_ignored(bleed_gray):
+    import cv2
+    import numpy as np
+
+    page = render_page(6, ruled=False, margin_note=False)
+    ghost = cv2.flip(render_page(9, ruled=False, margin_note=False).image, 1).mean(axis=2) < 160
+    img = page.image.copy()
+    faint = img.copy()
+    faint[ghost] = (bleed_gray, bleed_gray - 2, bleed_gray - 4)
+    img = np.where(page.image.mean(axis=2, keepdims=True) < 200, page.image, faint).astype(np.uint8)
+    assert _count_matched(page, img) == (len(page.lines), len(page.lines))
+
+
+def test_dark_dewarp_border_slivers_are_ignored():
+    import cv2
+    from layout.tests.synth import PAGE_H, PAGE_W
+
+    page = render_page(8, ruled=False, margin_note=False)
+    img = page.image.copy()
+    cv2.rectangle(img, (0, 0), (7, PAGE_H), (40, 40, 40), -1)            # left sliver
+    cv2.rectangle(img, (PAGE_W - 5, 300), (PAGE_W, PAGE_H), (60, 60, 60), -1)  # partial right sliver
+    cv2.rectangle(img, (0, PAGE_H - 9), (PAGE_W, PAGE_H), (50, 50, 50), -1)    # bottom sliver
+    assert _count_matched(page, img) == (len(page.lines), len(page.lines))
+
+
 def test_segment_output_validates_against_schema(tmp_path):
     import cv2
     from layout import segment

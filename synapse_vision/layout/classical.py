@@ -6,7 +6,7 @@ import numpy as np
 
 from layout._compat import REPO_ROOT, config_get, timed
 from layout.binarize import binarize_page, to_gray
-from layout.components import find_components, fuse_fractions, median_component_size, speck_area
+from layout.components import drop_faint_components, find_components, fuse_fractions, median_component_size, speck_area
 from layout.crops import snapshot_id_from_path, write_all_crops
 from layout.crossed_out import is_crossed_out
 from layout.debug import write_debug_overlay
@@ -33,7 +33,7 @@ def detect_lines(img: np.ndarray) -> tuple[list[dict], list[dict]]:
     with timed("layout.binarize"):
         binary, _ = binarize_page(gray)
     with timed("layout.components") as info:
-        comps = find_components(binary)
+        comps = drop_faint_components(find_components(binary), gray, binary)
         med_char_w, med_comp_h = median_component_size(comps)
         comps = fuse_fractions(comps, binary, med_char_w, med_comp_h, W)
         info["n_components"] = len(comps)
