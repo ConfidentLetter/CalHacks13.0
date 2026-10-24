@@ -15,6 +15,7 @@ import { RecognitionView } from '../components/recognition/RecognitionView'
 import { SummaryStrip } from '../components/recognition/SummaryStrip'
 import { useConnection } from '../hooks/useConnection'
 import { formatClock, timeAgo } from '../utils/format'
+import { isDeskView } from '../utils/camera'
 
 const STATE_COPY = {
   off: ['camera off', 'Press Start to see your notebook. Nothing turns on until you do.'],
@@ -109,12 +110,19 @@ export function NotebookObserver() {
 
             <div className="flex flex-wrap items-end gap-3">
               <label className="min-w-0 flex-1">
-                <span className="mb-1 block text-[11px] font-bold tracking-[0.16em] text-olive/60 uppercase">camera</span>
+                <span className="mb-1 flex items-center gap-2 text-[11px] font-bold tracking-[0.16em] text-olive/60 uppercase">
+                  camera
+                  {camera.isDeskView && (
+                    <span className="inline-flex items-center gap-1 border border-sage-deep bg-sage/60 px-1.5 py-px text-[10px] tracking-wider text-sage-ink normal-case">
+                      <StatusDot state="online" /> desk view
+                    </span>
+                  )}
+                </span>
                 <select className="input h-10 py-0" value={camera.source} onChange={(e) => camera.setSource(e.target.value)}>
                   <option value="">Default webcam</option>
                   {camera.devices.map((d, i) => (
                     <option key={d.deviceId || i} value={d.deviceId}>
-                      {d.label || `Camera ${i + 1}`}
+                      {d.label ? (isDeskView(d.label) ? `${d.label} · desk view` : d.label) : `Camera ${i + 1}`}
                     </option>
                   ))}
                   <option value={HARDWARE_SOURCE}>Overhead camera (Pi / ESP32 stream)</option>
@@ -130,6 +138,13 @@ export function NotebookObserver() {
                 </Button>
               )}
             </div>
+
+            {!camera.isDeskView && !isHardware && (
+              <p className="text-[13px] leading-relaxed text-olive/60">
+                No overhead camera? Open <strong className="font-semibold text-olive/80">Desk View</strong> from the camera menu in the
+                macOS menu bar, then pick the Desk View camera here. Your choice is remembered.
+              </p>
+            )}
 
             <p className="border-l-2 border-sage-deep pl-3 text-sm leading-relaxed text-olive/70">
               This is a preview only — nothing is recorded or saved. Pip doesn’t watch the video; when you ask a question

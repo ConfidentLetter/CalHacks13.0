@@ -1,8 +1,9 @@
-"""T1 — snapshot sources (pi | webcam | upload:<path>) and the scene-stability trigger.
+"""T1 — snapshot sources (pi | webcam | avf:<device> | upload:<path>) and the scene-stability trigger.
 
-    python -m capture.source --list        # probe webcam indices 0-5 and the Pi URL, save frames to runtime/debug/
+    python -m capture.source --list        # probe webcam indices 0-5, list ffmpeg/AVFoundation cameras, try the Pi URL
     python -m capture.source --snap        # one full-resolution snapshot from the configured source
     python -m capture.source --wait 30     # block until the scene settles, then snapshot
+    python -m capture.source --snap --source "avf:桌上视角"   # macOS Desk View via ffmpeg (see capture/avf.py)
 """
 from __future__ import annotations
 
@@ -21,7 +22,8 @@ from typing import Callable
 import cv2
 import numpy as np
 
-from capture.compat import cfg, log, repo_relative, runtime_dir, timed
+from capture import avf
+from capture.compat import SourceError, cfg, log, repo_relative, runtime_dir, timed
 
 SNAPSHOT_DIR = "snapshots"
 DEBUG_DIR = "debug"
@@ -36,9 +38,7 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 BLACK_FRAME_MEAN = 6.0   # a camera that "works" but returns black frames is a virtual/inactive device
 
 
-class SourceError(RuntimeError):
-    """Raised when a snapshot cannot be taken from the requested source."""
-
+__all__ = ["SourceError", "get_snapshot", "wait_for_stable", "live_frame", "list_sources", "release_cameras", "release_webcam"]
 
 # ----------------------------------------------------------------------------- helpers
 
@@ -191,17 +191,42 @@ def _webcam() -> Webcam:
     return _shared_webcam
 
 
-def release_webcam() -> None:
+_shared_avf: tuple[str, avf.AvfStream] | None = None   # (source spec, stream)
+
+
+def _avf(spec: str) -> avf.AvfStream:
+    """Shared ffmpeg stream for `avf:<spec>`; reopened if the device changes or the process died."""
+    global _shared_avf
+    if _shared_avf is not None and (_shared_avf[0] != spec or not _shared_avf[1].alive):
+        _release_avf()
+    if _shared_avf is None:
+        _shared_avf = (spec, avf.AvfStream.open(spec))
+    return _shared_avf[1]
+
+
+def _release_avf() -> None:
+    global _shared_avf
+    if _shared_avf is not None:
+        _shared_avf[1].close()
+        _shared_avf = None
+
+
+def release_cameras() -> None:
+    """Close the shared webcam and the shared ffmpeg stream (call between demos or at shutdown)."""
     global _shared_webcam
     if _shared_webcam is not None:
         _shared_webcam.close()
         _shared_webcam = None
+    _release_avf()
+
+
+release_webcam = release_cameras   # older name
 
 
 # ----------------------------------------------------------------------------- public API
 
 def get_snapshot(source: str | None = None) -> str:
-    """Grab a full-resolution still. source = 'pi' | 'webcam' | 'upload:<path>' (default from env SV_SOURCE).
+    """Grab a full-resolution still. source = 'pi' | 'webcam' | 'avf:<device>' | 'upload:<path>' (default from env SV_SOURCE).
     Returns path under runtime/snapshots/."""
     chosen = _resolve_source(source)
     with timed("capture.grab", source=chosen.split(":", 1)[0]):
@@ -213,7 +238,24 @@ def get_snapshot(source: str | None = None) -> str:
             return repo_relative(_write_jpeg(_grab_pi(), _snapshot_path()))
         if chosen == "webcam":
             return repo_relative(_write_jpeg(_webcam().read(), _snapshot_path()))
-    raise SourceError(f"unknown source {chosen!r} (expected pi | webcam | upload:<path>)")
+        if chosen.startswith("avf:"):
+            return repo_relative(_write_jpeg(_avf(chosen[len("avf:"):]).read(), _snapshot_path()))
+        if chosen == "avf":
+            raise SourceError("source 'avf' needs a device: avf:<index> or avf:<name substring> (python -m capture.avf lists them)")
+    raise SourceError(f"unknown source {chosen!r} (expected pi | webcam | avf:<device> | upload:<path>)")
+
+
+def live_frame(source: str | None = None) -> np.ndarray:
+    """A fresh full-resolution BGR frame from the configured live source (webcam | avf:<device> | pi), for T5's
+    MJPEG stream. Thread-safe for avf (one shared ffmpeg stream, frames handed out under a lock); upload raises."""
+    chosen = _resolve_source(source)
+    if chosen == "webcam":
+        return _webcam().read()
+    if chosen.startswith("avf:"):
+        return _avf(chosen[len("avf:"):]).read()
+    if chosen == "pi":
+        return _grab_pi()
+    raise SourceError(f"live_frame needs a live source (webcam | avf:<device> | pi), got {chosen!r}")
 
 
 def _preview_grabber(source: str) -> Callable[[], np.ndarray]:
@@ -221,8 +263,16 @@ def _preview_grabber(source: str) -> Callable[[], np.ndarray]:
         return _grab_pi_preview
     if source == "webcam":
         cam = _webcam()
-        return lambda: cv2.resize(cam.read(), (640, 480), interpolation=cv2.INTER_AREA)
-    raise SourceError(f"wait_for_stable needs a live source (pi|webcam), got {source!r}")
+        return lambda: _preview_resize(cam.read())
+    if source.startswith("avf:"):
+        stream = _avf(source[len("avf:"):])
+        return lambda: _preview_resize(stream.read())
+    raise SourceError(f"wait_for_stable needs a live source (pi|webcam|avf:<device>), got {source!r}")
+
+
+def _preview_resize(frame: np.ndarray, width: int = 640) -> np.ndarray:
+    h = max(1, round(frame.shape[0] * width / frame.shape[1]))
+    return cv2.resize(frame, (width, h), interpolation=cv2.INTER_AREA)
 
 
 def _small_gray(frame: np.ndarray) -> np.ndarray:
@@ -302,7 +352,8 @@ def wait_for_stable(timeout_s: float = 30.0) -> str | None:
 # ----------------------------------------------------------------------------- CLI
 
 def list_sources(max_index: int = 5) -> dict[str, str | None]:
-    """Try webcam indices 0..max_index and the Pi URL; save one frame each to runtime/debug/. Returns {name: path|None}."""
+    """Try webcam indices 0..max_index and the Pi URL (one frame each saved to runtime/debug/), and list ffmpeg's
+    AVFoundation cameras by name (not grabbed: that would wake every paired iPhone). Returns {name: path|None}."""
     out: dict[str, str | None] = {}
     debug = runtime_dir(DEBUG_DIR)
     for idx in range(max_index + 1):
@@ -316,22 +367,27 @@ def list_sources(max_index: int = 5) -> dict[str, str | None]:
         except SourceError:
             out[f"webcam:{idx}"] = None
     try:
+        for dev in avf.list_devices():
+            out[f"avf:{dev.index}"] = f"{dev.name}  (ffmpeg/AVFoundation; use --source 'avf:{dev.index}' or a unique name substring)"
+    except SourceError as exc:
+        out["avf"] = f"not available ({exc})"
+    try:
         frame = _grab_pi()
         path = debug / f"source_pi_{frame.shape[1]}x{frame.shape[0]}.jpg"
         _write_jpeg(frame, path)
         out["pi"] = repo_relative(path)
     except SourceError:
         out["pi"] = None
-    release_webcam()
+    release_cameras()
     return out
 
 
 def _main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--list", action="store_true", help="probe webcams 0-5 and the Pi")
+    ap.add_argument("--list", action="store_true", help="probe webcams 0-5, list AVFoundation cameras, try the Pi")
     ap.add_argument("--snap", action="store_true", help="take one snapshot from the configured source")
     ap.add_argument("--wait", type=float, metavar="SECONDS", help="wait for a stable scene, then snapshot")
-    ap.add_argument("--source", help="pi | webcam | upload:<path>")
+    ap.add_argument("--source", help="pi | webcam | avf:<device index or name substring> | upload:<path>")
     args = ap.parse_args(argv)
     if args.list:
         for name, path in list_sources().items():
@@ -341,8 +397,10 @@ def _main(argv: list[str] | None = None) -> int:
         if args.source:
             os.environ["SV_SOURCE"] = args.source
         print(wait_for_stable(args.wait) or "timeout: scene never changed and settled")
+        release_cameras()
         return 0
     print(get_snapshot(args.source))
+    release_cameras()
     return 0
 
 

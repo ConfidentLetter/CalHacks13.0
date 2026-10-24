@@ -4,6 +4,8 @@
 capture:
   source: webcam            # pi | webcam | upload
   pi_url: http://raspberrypi.local:8080/snapshot.jpg
+  avf_device: "MacBook Air桌上视角相机"   # H+12: macOS Desk View virtual camera via ffmpeg avfoundation (T1 `avf` source); iPhone: "“Haoze的iPhone”的桌上视角相机"
+  avf_ffmpeg: /opt/homebrew/bin/ffmpeg
   webcam_index: 2           # H+3 (Henry): on this Mac 0/1 are idle iPhone Continuity cams (black); 2 = built-in. Re-run `python -m capture.source --list` after mounting the phone/Pi
   stable_seconds: 1.0       # scene must be still this long before we analyse
   change_threshold: 0.02    # mean abs diff on 160x120 grayscale

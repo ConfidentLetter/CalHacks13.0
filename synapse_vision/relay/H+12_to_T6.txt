@@ -1,0 +1,2 @@
+Message from Henry: correction to H+11 — Chrome cannot see the Desk View camera, so the demo uses the "Overhead camera (hardware)" mode, which streams from the backend (/api/camera/stream) and analyzes by snapshotId. Make that mode the default and the hero on the notebook page: label it "Desk View · overhead" when /api/status reports camera.source == "avf" (T5 is adding it), show the LIVE MJPEG large, and put the browser-webcam mode second. Keep the H+11 picker behaviour for the webcam mode as a fallback.
+Adapt, then continue.

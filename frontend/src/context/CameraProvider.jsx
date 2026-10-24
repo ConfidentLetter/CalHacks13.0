@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CameraContext } from './contexts'
 import * as api from '../services/api'
+import { findDeskView } from '../utils/camera'
 
 // Live notebook camera.
 //
@@ -47,10 +48,25 @@ export function CameraProvider({ children }) {
 
   const supported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
 
+  // True once the student picked a camera themselves (or a choice was saved earlier); then we never auto-switch.
+  const explicitRef = useRef(Boolean(readDevice()))
+  const sourceRef = useRef(source)
+  const startRef = useRef(null)
+  useEffect(() => {
+    sourceRef.current = source
+  }, [source])
+
   const refreshDevices = useCallback(async () => {
     if (!navigator.mediaDevices?.enumerateDevices) return
-    const all = await navigator.mediaDevices.enumerateDevices()
-    setDevices(all.filter((d) => d.kind === 'videoinput'))
+    const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput')
+    setDevices(all)
+    // Default to macOS Desk View (top-down desk camera) when present and nothing was chosen explicitly.
+    // Labels only exist after camera permission, so this also runs right after the first Start.
+    if (explicitRef.current) return
+    const deskView = findDeskView(all)
+    if (!deskView || deskView.deviceId === sourceRef.current) return
+    setSourceState(deskView.deviceId)
+    if (streamRef.current) startRef.current?.(deskView.deviceId)
   }, [])
 
   const release = useCallback(() => {
@@ -122,8 +138,13 @@ export function CameraProvider({ children }) {
     [source, supported, release, refreshDevices],
   )
 
+  useEffect(() => {
+    startRef.current = start
+  }, [start])
+
   const setSource = useCallback(
     (id) => {
+      explicitRef.current = true
       setSourceState(id)
       try {
         localStorage.setItem(DEVICE_KEY, id)
@@ -198,6 +219,8 @@ export function CameraProvider({ children }) {
       error,
       devices,
       source,
+      deskViewAvailable: Boolean(findDeskView(devices)),
+      isDeskView: Boolean(findDeskView(devices.filter((d) => d.deviceId === source))),
       setSource,
       supported,
       stream,

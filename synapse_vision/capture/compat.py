@@ -16,6 +16,10 @@ RUNTIME_DIR = REPO_ROOT / "runtime"
 _yaml_cache: dict[str, Any] = {"mtime": None, "data": {}}
 
 
+class SourceError(RuntimeError):
+    """Raised when a snapshot cannot be taken from the requested source (shared by source.py and avf.py)."""
+
+
 def _load_yaml() -> dict:
     """Read config/vision.yaml, re-parsing only when the file's mtime changes."""
     try:
