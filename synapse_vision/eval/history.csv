@@ -6,3 +6,5 @@ ts,note,pages,reviewed_pages,lines_truth,page_ok_rate,line_precision,line_recall
 2026-10-24T12:53:34-07:00,H+5 scan path (flat synthetic_demo),1,1,4,1.0,1.0,1.0,0,1.0,0.75,0.0909,1.0,1,1,1.0,0,0,0.75,,,33266.1,33266.1,28.883,claude-sonnet-5-5
 2026-10-24T12:54:07-07:00,"H+5 camera path (synthetic_demo_mat, dark mat)",1,1,4,1.0,1.0,1.0,0,1.0,1.0,0.0,1.0,1,1,1.0,0,0,1.0,,,25646.8,25646.8,28.883,claude-sonnet-5-5
 2026-10-24T13:13:48-07:00,latency re-measure (quiet),1,1,4,1.0,1.0,1.0,0,1.0,0.75,0.1429,1.0,1,1,1.0,0,0,1.0,,0.0,64817.5,64817.5,28.883,claude-sonnet-5-5
+2026-10-24T13:20:25-07:00,latency re-measure 2,1,1,4,1.0,1.0,1.0,0,1.0,0.75,0.1429,1.0,1,1,1.0,0,0,1.0,,0.0,63411.6,63411.6,29.048,claude-sonnet-5-5
+2026-10-24T13:24:51-07:00,latency re-measure 3 (right after fast direct probes),1,1,4,1.0,1.0,1.0,0,1.0,0.75,0.0179,1.0,1,1,1.0,0,0,0.75,,,10651.1,10651.1,29.248,claude-sonnet-5-5

@@ -1,0 +1,2 @@
+Message from T5 (via Henry): capture.source.Webcam.read() is not thread-safe and three readers can hit the shared singleton concurrently (wait_for_stable preview loop, T4's /snapshot worker thread, T5's MJPEG grabber). Please wrap cap.read() in Webcam.read() with a threading.Lock. Until then T5 holds its own lock and the demo must not run the watch loop while the live stream is open.
+Adapt, then continue.

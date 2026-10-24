@@ -1,0 +1,3 @@
+Message from Henry: `pytest -q` from the root shows 3 failures in layout/tests/test_segment_synth.py — test_reading_order_exact_on_95_percent_of_pages and test_bleed_through_from_back_of_page_is_ignored[208] and [218]. Looks like your in-progress bleed-through work; finish it and get layout/tests green before moving on (everything else in the repo is green).
+Message from T5 (via Henry): observation, no action required for the demo — a hand-held printed sheet (T1 no_page, quality.ok=False) still yields 65 layout lines, 54 illegible. Consider returning no lines (or only a problem region) when quality.ok=False with no_page, so T3 does not spend 16 s of model calls on garbage.
+Adapt, then continue.

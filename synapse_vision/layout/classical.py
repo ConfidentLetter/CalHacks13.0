@@ -8,11 +8,13 @@ import numpy as np
 
 from layout._compat import REPO_ROOT, config_get, timed
 from layout.binarize import binarize_page, to_gray
-from layout.components import drop_faint_components, find_components, fuse_fractions, median_component_size, speck_area, split_tall_components
+from layout.components import (drop_faint_components, drop_texture_specks, find_components_with_labels, fuse_fractions, ink_mask,
+                               median_component_size, speck_area, split_tall_components)
 from layout.crops import snapshot_id_from_path, write_all_crops
 from layout.crossed_out import is_crossed_out
 from layout.debug import write_debug_overlay
-from layout.lines import drop_noise_lines, group_into_lines, median_line_height, merge_duplicates, merge_fragments, split_columns
+from layout.lines import (drop_noise_lines, group_into_lines, median_line_height, merge_adjacent, merge_duplicates,
+                          merge_fragments, split_columns)
 from layout.order import order_and_regionize
 
 UNSURE_MIN_CONF = 0.4
@@ -49,15 +51,19 @@ def detect_lines(img: np.ndarray, gray: np.ndarray | None = None) -> tuple[list[
     with timed("layout.binarize"):
         binary, _ = binarize_page(gray)
     with timed("layout.components") as info:
-        comps = drop_faint_components(find_components(binary), gray, binary)
+        comps, labels = find_components_with_labels(binary)
+        comps = drop_faint_components(comps, gray, binary)
         med_char_w, med_comp_h = median_component_size(comps)
+        comps = drop_texture_specks(comps, med_char_w, med_comp_h)
         comps, tall = split_tall_components(comps, med_comp_h)
-        comps = fuse_fractions(comps, binary, med_char_w, med_comp_h, W)
+        clean = ink_mask(labels, comps)   # bleed-through, texture and drawings no longer confuse the fraction probes
+        comps = fuse_fractions(comps, clean, med_char_w, med_comp_h, W)
         info["n_components"], info["n_tall"] = len(comps), len(tall)
     with timed("layout.group") as info:
         lines = group_into_lines(comps, med_char_w, med_comp_h)
         med_line_h = max(median_line_height(lines), float(config_get("layout.min_line_height_px", 28)))
-        lines = merge_fragments(lines, med_line_h, med_char_w)
+        lines = merge_fragments(lines, med_line_h, med_char_w, med_comp_h)
+        lines = merge_adjacent(lines, med_char_w)
         lines = split_columns(lines, med_line_h, med_char_w, W)
         lines = merge_duplicates(lines)
         lines = drop_noise_lines(lines, speck_area(binary.shape), float(config_get("layout.min_line_height_px", 28)))

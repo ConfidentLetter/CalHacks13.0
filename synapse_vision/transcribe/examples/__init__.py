@@ -1,9 +1,10 @@
 """The few-shot example bank: (crop image, exact JSON) pairs, assembled into a cacheable prefix.
 
-Layout of every model call (prompt caching = stable prefix, volatile suffix):
-    system      = [SYSTEM_PROMPT  (cache_control)]
-    messages    = [ex1 user(img+ask), ex1 assistant(json), ..., exN assistant(json, cache_control),
-                   <the real request>]
+Default layout (text examples — measured H+7: the 8 example *images* in the history cost 8–35 s per call
+even on cache hits, text examples cost nothing):
+    system      = [SYSTEM_PROMPT, EXAMPLES_AS_TEXT (cache_control)]
+    messages    = [<the real request>]
+Opt-in (`transcribe.image_examples: true`): the images as user/assistant turns before the request.
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+from transcribe.compat import cfg
 from transcribe.prompts import LINE_PASS_PROMPT_NO_CONTEXT, SYSTEM_PROMPT
 
 HERE = Path(__file__).resolve().parent
@@ -63,7 +65,23 @@ def dumps_stable(obj) -> str:
 
 
 @lru_cache(maxsize=1)
+def examples_text() -> str:
+    """The bank as text: what the handwriting shows → the exact JSON. Same verbatim-examples idea, zero image cost."""
+    parts = ["Examples of correct output (each shows what the handwriting literally says, then the exact JSON):"]
+    for i, ex in enumerate(load_bank(), 1):
+        parts.append(f"{i}. Handwriting shows: {ex['shows']}\n   Output: {dumps_stable(ex['output'])}")
+    return "\n".join(parts)
+
+
+@lru_cache(maxsize=1)
 def system_blocks() -> tuple[dict, ...]:
+    """SYSTEM_PROMPT + text examples; cache_control on the last block (the whole system is the stable prefix)."""
+    return ({"type": "text", "text": SYSTEM_PROMPT},
+            {"type": "text", "text": examples_text(), "cache_control": CACHE_CONTROL})
+
+
+@lru_cache(maxsize=1)
+def system_blocks_for_image_mode() -> tuple[dict, ...]:
     return ({"type": "text", "text": SYSTEM_PROMPT, "cache_control": CACHE_CONTROL},)
 
 
@@ -84,4 +102,6 @@ def example_messages() -> tuple[dict, ...]:
 
 def prefix() -> tuple[list[dict], list[dict]]:
     """(system, messages) to prepend to every call. Fresh lists so callers may extend them."""
-    return [dict(b) for b in system_blocks()], [dict(m) for m in example_messages()]
+    if cfg("transcribe.image_examples", False):
+        return [dict(b) for b in system_blocks_for_image_mode()], [dict(m) for m in example_messages()]
+    return [dict(b) for b in system_blocks()], []

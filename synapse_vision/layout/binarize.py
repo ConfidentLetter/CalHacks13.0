@@ -24,6 +24,7 @@ RULE_DASH_BRIDGE_FRAC = 1 / 40  # dashed/broken rules (JPEG, dewarp) are bridged
 RULE_EDGE_ZONE_FRAC = 0.12     # ... and over RULE_MIN_EDGE_COVERAGE of both outer zones (rules run edge to edge)
 RULE_MIN_EDGE_COVERAGE = 0.3
 RULE_MAX_THICKNESS_PX = 6      # thicker horizontal structures are handwriting (strikes, bars)
+RULE_RECONNECT_PX = 7           # close gaps up to this many px across an erased rule (sliced glyph strokes)
 RULE_SEED_RUN_FRAC = 1 / 40    # minimum straight run to seed a rule candidate
 RULE_BRIDGE_FRAC = 1 / 100     # bridge gaps along a slightly tilted rule
 
@@ -96,7 +97,16 @@ def _rule_mask(binary: np.ndarray, lenient: np.ndarray, horizontal: bool) -> np.
         if band is not None and not _already_painted(mask, band, horizontal) and _is_page_rule(bridged_thin, band, horizontal):
             _paint(mask, band, horizontal)
     # erase only thin pixels inside the rule band so crossing handwriting survives
-    return cv2.bitwise_and(_thin_structures(binary, horizontal), mask)
+    return cv2.bitwise_and(_thin_structures(binary, horizontal), mask), mask
+
+
+def _reconnect_across(cleaned: np.ndarray, band: np.ndarray, horizontal: bool) -> np.ndarray:
+    """Strokes sliced by an erased rule leave a 1-3 px gap; close such gaps across the band only
+    (a closing along the rule direction would bring the rule back)."""
+    k = (1, RULE_RECONNECT_PX) if horizontal else (RULE_RECONNECT_PX, 1)
+    closed = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, k))
+    near_band = cv2.dilate(band, cv2.getStructuringElement(cv2.MORPH_RECT, k))
+    return cv2.bitwise_or(cleaned, cv2.bitwise_and(closed, near_band))
 
 
 def _fit_band(pts: np.ndarray, shape: tuple[int, int], horizontal: bool) -> tuple[np.ndarray, int] | None:
@@ -159,8 +169,11 @@ def _paint(mask: np.ndarray, band: tuple[np.ndarray, int], horizontal: bool) -> 
 def remove_rules(binary: np.ndarray, lenient: np.ndarray | None = None) -> np.ndarray:
     """Erase notebook rules (horizontal) and margin / grid rules (vertical)."""
     lenient = binary if lenient is None else lenient
-    rules = cv2.bitwise_or(_rule_mask(binary, lenient, horizontal=True), _rule_mask(binary, lenient, horizontal=False))
-    return cv2.bitwise_and(binary, cv2.bitwise_not(rules))
+    h_rules, h_band = _rule_mask(binary, lenient, horizontal=True)
+    v_rules, v_band = _rule_mask(binary, lenient, horizontal=False)
+    cleaned = cv2.bitwise_and(binary, cv2.bitwise_not(cv2.bitwise_or(h_rules, v_rules)))
+    cleaned = _reconnect_across(cleaned, h_band, horizontal=True)
+    return _reconnect_across(cleaned, v_band, horizontal=False)
 
 
 def binarize_page(gray: np.ndarray) -> tuple[np.ndarray, int]:

@@ -114,12 +114,15 @@ def test_graph_paper_grid_is_ignored():
     import cv2
     from layout.tests.synth import PAGE_H, PAGE_W
 
+    import numpy as np
+
     page = render_page(5, ruled=False, margin_note=False)
-    img = page.image.copy()
+    grid = page.image.copy()
     for xx in range(40, PAGE_W, 42):
-        cv2.line(img, (xx, 0), (xx, PAGE_H), (225, 210, 200), 1)
+        cv2.line(grid, (xx, 0), (xx, PAGE_H), (225, 210, 200), 1)
     for yy in range(30, PAGE_H, 42):
-        cv2.line(img, (0, yy), (PAGE_W, yy), (225, 210, 200), 1)
+        cv2.line(grid, (0, yy), (PAGE_W, yy), (225, 210, 200), 1)
+    img = np.minimum(page.image, grid)  # printed grid lies under the ink, it never erases it
     assert _count_matched(page, img) == (len(page.lines), len(page.lines))
 
 

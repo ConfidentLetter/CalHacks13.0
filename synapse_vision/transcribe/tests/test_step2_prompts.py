@@ -39,14 +39,28 @@ def test_mistake_examples_are_wrong_math_kept_verbatim():
     assert by["ex_blank"] == ""
 
 
-def test_prefix_is_stable_and_cached_at_the_end():
+def test_prefix_is_text_examples_by_default(monkeypatch):
+    import transcribe.examples as ex_mod
+
+    monkeypatch.setattr(ex_mod, "cfg", lambda k, d=None: False)
     sys1, msgs1 = prefix()
     sys2, msgs2 = prefix()
-    assert json.dumps(sys1) == json.dumps(sys2) and json.dumps(msgs1) == json.dumps(msgs2)
+    assert json.dumps(sys1) == json.dumps(sys2) and msgs1 == [] and msgs2 == []
+    assert len(sys1) == 2 and "cache_control" not in sys1[0] and sys1[-1]["cache_control"] == {"type": "ephemeral"}
+    text = sys1[1]["text"]
+    for ex in load_bank():
+        assert ex["shows"] in text and json.dumps(ex["output"], sort_keys=True, separators=(",", ":"), ensure_ascii=False) in text
+    assert all(b["type"] == "text" for b in sys1)
+
+
+def test_image_examples_opt_in_keeps_one_cache_breakpoint_at_the_end(monkeypatch):
+    import transcribe.examples as ex_mod
+
+    monkeypatch.setattr(ex_mod, "cfg", lambda k, d=None: True if k == "transcribe.image_examples" else d)
+    sys1, msgs1 = prefix()
     assert sys1[0]["cache_control"] == {"type": "ephemeral"}
     assert msgs1[0]["role"] == "user" and msgs1[-1]["role"] == "assistant"
     cached = [b for m in msgs1 for b in m["content"] if b.get("cache_control")]
     assert len(cached) == 1 and cached[0] is msgs1[-1]["content"][0]
     assert all(msgs1[i]["role"] == ("user" if i % 2 == 0 else "assistant") for i in range(len(msgs1)))
-    # at most 4 breakpoints per request: system + last example leaves room for 2 more
     assert len(cached) + sum(1 for b in sys1 if b.get("cache_control")) <= 4

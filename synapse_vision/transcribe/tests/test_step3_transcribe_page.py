@@ -221,8 +221,9 @@ TEXT_LINE = str(HERE / "ex_text_line.png")
 
 
 def test_prime_added_by_page_pass_on_a_mixed_line_is_never_silent(fake):
-    """T4 H+5: 'Find f'(x) if f(x) = x^2 sin x' — page pass read f'(x)=..., line pass f(x)=...; text identical."""
-    fake.page_override[TEXT_LINE] = {"latex": "f'(x)=x^{2}\\sin x", "text": "Find f'(x) if f(x) = x^2 sin x",
+    """T4 H+5: page pass read f'(x)=..., line pass f(x)=... (prose read differently too, so the
+    prose-consistency rule cannot settle it and the re-read path must run)."""
+    fake.page_override[TEXT_LINE] = {"latex": "f'(x)=x^{2}\\sin x", "text": "Find f'(x) iff f(x) = x^2 sin x",
                                      "kind": "mixed", "illegible": False, "uncertain": []}
     fake.reread_choice = "A"
     line = _run(fake)[NAMES.index("ex_text_line")]
@@ -249,7 +250,7 @@ def test_page_reading_never_gets_agreement_confidence_with_different_latex(fake)
 
 def test_reread_neither_cannot_outvote_both_passes(fake):
     """Live H+5: re-read answered 'neither' with f'(x)x^2\\sin x (dropped '='); it must not win alone."""
-    fake.page_override[TEXT_LINE] = {"latex": "f'(x)=x^{2}\\sin x", "text": "Find f'(x) if f(x) = x^2 sin x",
+    fake.page_override[TEXT_LINE] = {"latex": "f'(x)=x^{2}\\sin x", "text": "Find f'(x) iff f(x) = x^2 sin x",
                                      "kind": "mixed", "illegible": False, "uncertain": []}
     fake.reread_choice = "neither"
     fake.reread_own = {"latex": "f'(x)x^{2}\\sin x", "text": "Find f'(x) if f(x) x^2 sin x", "kind": "mixed",

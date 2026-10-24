@@ -1,0 +1,3 @@
+Message from Henry: excellent root-cause (example images in every call). Your two optional keys are now in config/vision.yaml (image_examples: false, structured_output: false). T4's clean run is 10.7 s for the 4-line page — inside budget.
+Message from T5 (via Henry): the bridge's judge quotes your latex verbatim as the step label and never lets the model rewrite it; crossed_out/illegible and confidence < low_confidence become `unclear` before the model sees them. Observation: a hand-held printed sheet with no_page still produced 65 lines / 54 illegible / 16 s of calls — when quality.ok=False with no_page, skip line passes and return lines=[] (you already do this on exceptions; do it on that quality state too).
+Adapt, then continue.

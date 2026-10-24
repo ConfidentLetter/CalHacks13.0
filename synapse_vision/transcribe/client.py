@@ -21,6 +21,7 @@ from transcribe.examples import prefix
 DEFAULT_MODEL = "claude-sonnet-5-5"
 DEFAULT_EFFORT = "medium"
 DEFAULT_THINKING = "adaptive"
+DEFAULT_STRUCTURED = False  # measured H+7: +1.2 s per call; the validator + one retry already guarantees the shape
 DEFAULT_CALL_TIMEOUT_S = 60.0  # measured tail under API throttling is ~27 s per call; keep well above it
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.S)
 _structured_ok = {"value": True}
@@ -81,7 +82,7 @@ def _create(client, *, system, messages, schema, max_tokens):
     thinking = cfg("transcribe.thinking", DEFAULT_THINKING)  # "adaptive" | "between_tools" (= off on Sonnet 5.5)
     if thinking in ("adaptive", "between_tools"):
         kwargs["thinking"] = {"type": thinking}
-    if _structured_ok["value"]:
+    if _structured_ok["value"] and cfg("transcribe.structured_output", DEFAULT_STRUCTURED):
         kwargs["output_config"] = {**kwargs["output_config"],
                                    "format": {"type": "json_schema", "schema": _strict(schema)}}
         try:
@@ -103,9 +104,9 @@ def ask_json(content: list[dict], schema: dict, *, stage: str, max_tokens: int =
     client = get_client()
     system, messages = prefix() if use_prefix else ([], [])
     if not use_prefix:
-        from transcribe.examples import system_blocks
+        from transcribe.examples import system_blocks_for_image_mode
 
-        system = [dict(b) for b in system_blocks()]
+        system = [dict(b) for b in system_blocks_for_image_mode()]
     messages = messages + [{"role": "user", "content": content}]
     validator = Draft202012Validator(schema)
     last_error = ""
@@ -118,7 +119,10 @@ def ask_json(content: list[dict], schema: dict, *, stage: str, max_tokens: int =
         log(stage, (time.perf_counter() - t0) * 1000.0, attempt=attempt,
             cache_read=getattr(usage, "cache_read_input_tokens", None),
             cache_write=getattr(usage, "cache_creation_input_tokens", None),
-            input_tokens=getattr(usage, "input_tokens", None), output_tokens=getattr(usage, "output_tokens", None))
+            input_tokens=getattr(usage, "input_tokens", None), output_tokens=getattr(usage, "output_tokens", None),
+            structured=bool(_structured_ok["value"] and cfg("transcribe.structured_output", DEFAULT_STRUCTURED)), thinking=cfg("transcribe.thinking", DEFAULT_THINKING),
+            effort=cfg("transcribe.effort", DEFAULT_EFFORT), stop=getattr(response, "stop_reason", None),
+            request_id=getattr(response, "_request_id", None))
         if response.stop_reason == "refusal":
             raise ModelResponseError(f"model refused ({stage})")
         text = _text_of(response)

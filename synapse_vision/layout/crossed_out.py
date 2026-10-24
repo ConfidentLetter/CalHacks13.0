@@ -22,6 +22,8 @@ INK_PERCENTILE = (1.0, 99.0)     # robust ink bbox
 FAINT_MIN_SEPARATION = 50        # gray levels between ink and a lighter "rule" class
 FAINT_RULE_MIN_RUN_FRAC = 0.3    # a faint horizontal run this long (of crop width) is a printed rule
 MIN_INK_PIXELS = 30
+TEXTURE_MIN_PIECES = 25          # ink made of at least this many pieces ...
+TEXTURE_MAX_PIECE_AREA = 4.0     # ... whose median area is below this x stroke thickness^2 is halftone shading, not writing
 MIDDLE_BAND = (0.25, 0.75)       # a strike's midpoint lies in this vertical band of the ink ...
 ENDPOINT_BAND = (0.05, 0.95)     # ... and its ends stay inside this one (tilted strikes)
 STRIKE_MIN_CONTINUITY = 0.9      # ink present along this fraction of the stroke (letter chains have gaps)
@@ -229,11 +231,22 @@ def _zigzag_conf(ink: np.ndarray, skel: np.ndarray, bbox: tuple[int, int, int, i
     return min(1.0, 0.5 + 0.3 * min(1.0, (span - ZIGZAG_MIN_SPAN_FRAC) / 0.3) + 0.2 * min(1.0, alternations / 10))
 
 
+def _is_halftone(ink: np.ndarray, thickness: float) -> bool:
+    """Shaded blocks of a printed figure: many tiny ink specks instead of a few letter-sized pieces."""
+    n, _, stats, _ = cv2.connectedComponentsWithStats((ink > 0).astype(np.uint8), connectivity=8)
+    if n - 1 < TEXTURE_MIN_PIECES:
+        return False
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    return float(np.median(areas)) <= TEXTURE_MAX_PIECE_AREA * max(1.0, thickness) ** 2
+
+
 def crossed_out_confidence(ink: np.ndarray) -> float:
     bbox = _ink_bbox(ink)
     if bbox is None:
         return 0.0
     skel = skeletonize(ink)
+    if _is_halftone(ink, _stroke_thickness(ink, skel)):
+        return 0.0
     return max(_straight_strike_conf(ink, skel, bbox), _zigzag_conf(ink, skel, bbox))
 
 

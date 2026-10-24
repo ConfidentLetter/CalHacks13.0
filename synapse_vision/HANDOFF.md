@@ -1,6 +1,6 @@
 # HANDOFF — 给接手的 AI（GPT / Claude / 人）
 
-> 最后更新：2026-10-24 13:30 PT（Cal Hacks 13.0 现场，H+6）。由 Henry 的 Claude Code integrator 会话维护。
+> 最后更新：2026-10-24 13:55 PT（Cal Hacks 13.0 现场，H+8）。由 Henry 的 Claude Code integrator 会话维护。
 > 读完这份文件 + `prompts/RUNSHEET.md` + `head -5 NOTES_T*.md`，你就能接着当 integrator。
 
 ## 项目一句话
@@ -14,15 +14,16 @@ Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「p
 - integrator 循环（每 30–60 分钟）：`head -5 NOTES_T*.md` → `grep -A8 "For other terminals" NOTES_T*.md` → 写 `relay/H+N_to_T*.txt` 让 Henry 贴到对应窗口 → `pytest -q` → `git add -A && git commit && git push`。
 - 只有 integrator 改 `contracts/`、`config/vision.yaml`、`main.py`；每次改动写进 `contracts/CHANGELOG.md`。
 
-## 当前状态（H+2）
+## 当前状态（H+8）
 | 终端 | 进度 | 下一步 |
 |---|---|---|
-| T4 | Steps 1–5 全完成；mock 服务器 `SV_MOCK=1` 在 :8000；viewer `/`、标注页 `/label`、`eval/run_eval.py`、`eval/accuracy_journey.png` 都有 | 等真实照片 → `python -m eval.prelabel` → Henry 在 /label 校对 → 每个 checkpoint 跑 run_eval |
-| T3 | Steps 1–5 全完成；真实 `build_page_twin`（T1→T2→T3）；60 tests | 等真实照片；用真实切片替换合成示例库；调 agreement_threshold |
+| T4 | 全完成；eval 9 行，合成页干净跑 10.7 s（预算 15） | 等真实照片 → prelabel → /label → run_eval |
+| T5 | Steps 1–3 完成：`docs/CONNECTIONS.md`（模块分析 + 13 端点映射 + 19 个缺口），`bridge/` 实现前端全部 `/api/*`（含本地 faster-whisper 语音）。**13:50 起 bridge 接管 :8000**（`uvicorn bridge.server:app --host 0.0.0.0 --port 8000`，日志 runtime/server.log） | 装 Chrome 扩展验证阅读记录；维护 CONNECTIONS.md |
+| T3 | 全完成；H+7 查出延迟根因（每次调用都重发 8 张示例图，改为文本示例后 3 s/次） | 等真实照片 |
 | T1 | Steps 1–4 全完成（检测/去畸变/质量门/tiling，合成 100/100） | Step 5 在真实照片上调参 |
 | T2 | Steps 1–4 全完成（行分割 + 划掉检测，合成 49/52 命中、0 误报） | Step 6 真实页调参 |
 
-全量 `pytest -q`：214 通过，1 失败（T3 test_step5_twin 对 T1 平页尺寸写死 600，已传话）（T4 有 1 个写死预算值的测试需改成读 config）。
+全量 `pytest -q`：275 通过，3 失败（T2 正在做的透印测试，进行中）（T4 有 1 个写死预算值的测试需改成读 config）。
 
 ## 已做的整合者决策
 - `budget_ms` 提到首次 15 s / 增量 8 s（Sonnet 5.5 单次往返 4–9 s，旧值不可达）。

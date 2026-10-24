@@ -32,6 +32,8 @@ transcribe:
   empty_ink_density: 0.004  # below this a crop is blank -> no model call  (T3)
   page_pass_skip_below: 2   # incremental updates touching <= N lines skip the whole-page pass  (T3)
   sdk_max_retries: 2
+  image_examples: false     # H+8: few-shot bank as text in the system prompt (true = old image mode, 8-35 s/call)
+  structured_output: false  # H+8: structured outputs off (on added ~10 s/call)
 
 budget_ms:
   # H+2 (Henry): raised to what one Sonnet 5.5 round trip actually costs (4-9 s per call, measured by T3).

@@ -15,11 +15,22 @@ SPECK_AREA_PER_PIXEL = 4e-6     # speck threshold = this x page area (≈15 px o
 SPECK_AREA_MIN = 6
 GIANT_FRAC = 0.9                # components this big are borders, not ink
 EDGE_BAND_FRAC = 0.02           # ink lying entirely within this outer band of the page is a dewarp border artifact
-FAINT_CONTRAST_FRAC = 0.25      # components lighter than this x the page's strong-ink contrast are bleed-through
+FAINT_CONTRAST_FRAC = 0.5       # components lighter than this x the page's strong-ink contrast are bleed-through
 FAINT_KEEP_ABS = 60             # ... and never drop anything with at least this much contrast (light pencil)
 TALL_COMP_FRAC = 5.0            # a component taller than this x the typical glyph height is drawing, not writing
-BAR_FLANK_FRAC = 0.75           # flank width (x bar width) checked beside a fraction stack ...
-BAR_FLANK_MAX_RATIO = 0.5       # ... ink there must be below this fraction of the stack's ink (else it is a text line)
+BAR_FLANK_FRAC = 1.5            # flank width (x bar width) checked beside a fraction stack ...
+BAR_FLANK_MAX_RATIO = 0.5       # ... ink in the OUTER half-rows there (where inline text never reaches, but a
+                                #     neighbouring text line does) must stay below this fraction of the stack's ink
+TEXTURE_MAX_FRAC = 0.8          # a component smaller than this x glyph size in both directions is a speck ...
+TEXTURE_RADIUS_GLYPHS = 1.5     # ... and with at least TEXTURE_MIN_NEIGHBOURS specks within this radius it is
+TEXTURE_MIN_NEIGHBOURS = 5      #     halftone texture of a printed figure, not an i-dot or a decimal point
+TEXTURE_MIN_Y_SPREAD = 0.4      # ... and those neighbours are spread vertically by this x glyph height (text rows are flat)
+TEXTURE_MAX_DROP_FRAC = 0.5     # never drop more than this share of all components as texture (bad glyph estimate)
+GLYPH_MAX_ASPECT = 4.0          # wider than this x its height is not a glyph (rule, bar, chained letters)
+GLYPH_MIN_H_FRAC = 0.4          # glyph candidates are at least this x the typical component height (not dots)
+GLYPH_MIN_H_PX = 5              # and at least this tall in pixels (rule remnants are 1-3 px)
+GLYPH_MIN_SHARE = 0.3           # fewer single glyphs than this share of components = chained writing ...
+GLYPH_W_PER_H = 0.9             # ... then a char is about this x its height wide
 STRONG_INK_PERCENTILE = 90      # "strong ink" contrast = this percentile over components (bleed may outnumber ink)
 BAR_MIN_LEN_CHARS = 1.0         # a bar is a horizontal run at least this many char widths long
 BAR_MIN_LEN_PX = 12
@@ -28,8 +39,10 @@ BAR_PROBE_FRAC = 0.9            # probe this many comp heights above/below the b
 BAR_MIN_STACK_INK = 0.5         # pixels of ink needed in a probe zone, x bar width
 BAR_REACH_FRAC = 1.3            # how far above/below a numerator/denominator may extend, x comp height
 BAR_X_SLACK_FRAC = 0.15         # numerator/denominator centers may overhang the bar by this
-EQUALS_MAX_GAP_FRAC = 0.6       # two similar bars this close (x comp height) are an '=' sign
-STACK_MAX_HEIGHT_FRAC = 3.5     # a fused fraction taller than this x comp height is two lines, not a fraction
+EQUALS_MAX_GAP_FRAC = 0.6       # two similar bars this close (x comp height) are an '=' sign ...
+EQUALS_MAX_WIDTH_FRAC = 2.0     # ... when no wider than this x glyph height (a stacked pair of fraction bars is not)
+EQUALS_MAX_THICKNESS_DIFF = 3   # ... and equally thick (px)
+STACK_MAX_HEIGHT_FRAC = 4.5     # a fused fraction taller than this x comp height is two lines, not a fraction
 
 
 @dataclass(frozen=True)
@@ -39,6 +52,7 @@ class Component:
     w: int
     h: int
     area: int
+    label: int = -1   # id in the label image of find_components_with_labels (-1 when unknown)
 
     @property
     def x1(self) -> int:
@@ -66,9 +80,19 @@ def speck_area(shape: tuple[int, ...]) -> int:
 
 
 def find_components(binary: np.ndarray) -> list[Component]:
+    return find_components_with_labels(binary)[0]
+
+
+def ink_mask(labels: np.ndarray, comps: list[Component]) -> np.ndarray:
+    """Binary mask of exactly these components (what survives the speck / faint / texture filters)."""
+    keep = np.isin(labels, [c.label for c in comps if c.label >= 0])
+    return keep.astype(np.uint8) * 255
+
+
+def find_components_with_labels(binary: np.ndarray) -> tuple[list[Component], np.ndarray]:
     H, W = binary.shape[:2]
     min_area = speck_area(binary.shape)
-    n, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
     comps: list[Component] = []
     bx, by = int(EDGE_BAND_FRAC * W), int(EDGE_BAND_FRAC * H)
     for i in range(1, n):
@@ -77,8 +101,8 @@ def find_components(binary: np.ndarray) -> list[Component]:
             continue
         if x + w <= bx or x >= W - bx or y + h <= by or y >= H - by:
             continue  # sliver of desk/shadow left along the page edge by an imperfect dewarp
-        comps.append(Component(x, y, w, h, area))
-    return comps
+        comps.append(Component(x, y, w, h, area, i))
+    return comps, labels
 
 
 def component_contrast(c: Component, gray: np.ndarray, binary: np.ndarray, background: float) -> float:
@@ -101,27 +125,46 @@ def drop_faint_components(comps: list[Component], gray: np.ndarray, binary: np.n
     return [c for c, k in zip(comps, keep) if k]
 
 
+def drop_texture_specks(comps: list[Component], med_char_w: float, med_h: float) -> list[Component]:
+    """Remove halftone texture: clusters of specks far smaller than a glyph (shaded blocks in a printed
+    figure).  Isolated small marks (dots, commas, decimal points, dashes) have few speck neighbours."""
+    small = [i for i, c in enumerate(comps) if c.w < TEXTURE_MAX_FRAC * med_char_w and c.h < TEXTURE_MAX_FRAC * med_h]
+    if len(small) <= TEXTURE_MIN_NEIGHBOURS:
+        return comps
+    pts = np.array([(comps[i].cx, comps[i].cy) for i in small], dtype=np.float32)
+    radius = TEXTURE_RADIUS_GLYPHS * max(med_char_w, med_h)
+    d2 = ((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1)
+    near = d2 <= radius * radius
+    neighbours = near.sum(1) - 1
+    ys = np.where(near, pts[None, :, 1], np.nan)
+    y_spread = np.nanstd(ys, axis=1)
+    texture = {small[k] for k in np.flatnonzero((neighbours >= TEXTURE_MIN_NEIGHBOURS)
+                                                & (y_spread >= TEXTURE_MIN_Y_SPREAD * med_h))}
+    if len(texture) > TEXTURE_MAX_DROP_FRAC * len(comps):
+        return comps
+    return [c for i, c in enumerate(comps) if i not in texture]
+
+
 def split_tall_components(comps: list[Component], med_h: float) -> tuple[list[Component], list[Component]]:
     """(writing-sized components, tall drawing components such as free-body diagrams and big circled answers)."""
     limit = TALL_COMP_FRAC * med_h
     return [c for c in comps if c.h <= limit], [c for c in comps if c.h > limit]
 
 
-def _area_weighted_median(values: np.ndarray, weights: np.ndarray) -> float:
-    order = np.argsort(values)
-    cum = np.cumsum(weights[order])
-    return float(values[order][np.searchsorted(cum, 0.5 * cum[-1])])
-
-
 def median_component_size(comps: list[Component]) -> tuple[float, float]:
-    """Typical glyph (width, height): medians weighted by ink area, so specks, dashes, grid pieces and
-    a paragraph of small print cannot outvote the handwriting that carries most of the ink."""
+    """Typical glyph (width, height): medians over letter-like components, ignoring specks and long thin
+    pieces (rule remnants, bars, arrows, letters chained by a rule) that are not single glyphs."""
     if not comps:
         return 10.0, 10.0
-    hs = np.array([c.h for c in comps], dtype=float)
-    ws = np.array([c.w for c in comps], dtype=float)
-    areas = np.array([c.area for c in comps], dtype=float)
-    return _area_weighted_median(ws, areas), _area_weighted_median(hs, areas)
+    letters = [c for c in comps if c.h >= GLYPH_MIN_H_PX and c.w <= GLYPH_MAX_ASPECT * c.h] or comps
+    hs_all = np.array([c.h for c in letters], dtype=float)
+    med_h = float(np.median(hs_all[hs_all >= np.percentile(hs_all, 40)]))
+    glyphs = [c for c in letters if c.h >= GLYPH_MIN_H_FRAC * med_h]
+    if len(glyphs) < GLYPH_MIN_SHARE * len(comps):   # letters chained into word blobs: width ~ height
+        return GLYPH_W_PER_H * med_h, med_h
+    ws = np.array([c.w for c in glyphs], dtype=float)
+    hs = np.array([c.h for c in glyphs], dtype=float)
+    return float(np.median(ws)), float(np.median(hs))
 
 
 def union(comps: list[Component]) -> Component:
@@ -142,8 +185,11 @@ def _find_bars(binary: np.ndarray, med_char_w: float, page_w: int) -> list[Compo
 
 
 def _is_equals_half(bar: Component, bars: list[Component], med_h: float) -> bool:
+    """One of the two short, equally thick, stacked bars of an '=' sign (a fraction bar is far wider)."""
+    if bar.w > EQUALS_MAX_WIDTH_FRAC * med_h:
+        return False
     for other in bars:
-        if other is bar or abs(other.w - bar.w) > 0.5 * max(bar.w, other.w):
+        if other is bar or abs(other.w - bar.w) > 0.5 * max(bar.w, other.w) or abs(other.h - bar.h) > EQUALS_MAX_THICKNESS_DIFF:
             continue
         if abs(other.cx - bar.cx) <= 0.5 * bar.w and 0 < abs(other.cy - bar.cy) <= EQUALS_MAX_GAP_FRAC * med_h:
             return True
@@ -169,9 +215,10 @@ def _is_fraction_bar(bar: Component, binary: np.ndarray, med_h: float) -> bool:
     below = _ink_rows(binary, x0, x1, bar.y1 + 1, bar.y1 + reach)
     if above < need or below < need:
         return False
-    flank = max(4, int(BAR_FLANK_FRAC * bar.w))
-    beside = (_ink_rows(binary, bar.x - flank, bar.x, bar.y - reach, bar.y1 + reach)
-              + _ink_rows(binary, bar.x1, bar.x1 + flank, bar.y - reach, bar.y1 + reach))
+    flank, half = max(4, int(BAR_FLANK_FRAC * bar.w)), reach // 2
+    beside = sum(_ink_rows(binary, fx0, fx1, fy0, fy1)
+                 for fx0, fx1 in ((bar.x - flank, bar.x), (bar.x1, bar.x1 + flank))
+                 for fy0, fy1 in ((bar.y - reach, bar.y - half), (bar.y1 + half, bar.y1 + reach)))
     return beside <= BAR_FLANK_MAX_RATIO * (above + below)
 
 
