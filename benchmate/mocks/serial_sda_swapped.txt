@@ -1,0 +1,4 @@
+[boot] ESP32 ready
+[i2c] scanning bus SDA=21 SCL=22 ...
+[i2c] no I2C devices found
+[bme280] init failed: sensor not found at 0x76 or 0x77

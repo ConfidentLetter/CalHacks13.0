@@ -1,0 +1,4 @@
+[boot] ESP32 ready
+[i2c] scanning bus SDA=21 SCL=22 ...
+[i2c] device found at 0x76
+[bme280] T=22.41C P=1012.8hPa H=48.2%

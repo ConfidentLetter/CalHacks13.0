@@ -1,0 +1,1 @@
+You are T5 (Shell) in the BenchMate project. Read AGENTS.md, README.md, HARDWARE.md, everything in contracts/, and then prompts/T5_shell.md in full. Follow prompts/T5_shell.md exactly, starting with Step 1. Write only inside app/ and NOTES_T5.md. After each step, run its tests, update NOTES_T5.md, and continue to the next step without waiting for me unless you are blocked.

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Circuit digital twin — what the camera believes is on the board",
+  "type": "object",
+  "required": ["frame_id", "timestamp", "board", "components", "wires", "nets"],
+  "properties": {
+    "frame_id": {"type": "string"},
+    "timestamp": {"type": "string", "description": "ISO 8601"},
+    "board": {
+      "type": "object",
+      "required": ["type", "homography"],
+      "properties": {
+        "type": {"type": "string", "enum": ["breadboard_830", "breadboard_400"]},
+        "homography": {"type": "array", "description": "3x3 pixel -> board matrix", "items": {"type": "array", "items": {"type": "number"}}}
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "part_id", "bbox", "pins", "confidence"],
+        "properties": {
+          "id": {"type": "string", "description": "e.g. esp32_1, bme280_1"},
+          "part_id": {"type": ["string", "null"], "description": "normalized id, matches knowledge/profiles/<part_id>.yaml"},
+          "label_text": {"type": "string", "description": "raw text read off the part"},
+          "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4, "description": "[x, y, w, h] pixels"},
+          "pins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "hole"],
+              "properties": {"name": {"type": "string"}, "hole": {"type": ["string", "null"]}}
+            }
+          },
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "color", "end_a", "end_b", "confidence"],
+        "properties": {
+          "id": {"type": "string"},
+          "color": {"type": "string"},
+          "end_a": {"$ref": "#/$defs/end"},
+          "end_b": {"$ref": "#/$defs/end"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "nets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "holes", "members"],
+        "properties": {
+          "id": {"type": "string"},
+          "holes": {"type": "array", "items": {"type": "string"}},
+          "members": {"type": "array", "items": {"type": "string"}, "description": "component pins on this net, e.g. esp32_1.GPIO21"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "end": {
+      "type": "object",
+      "required": ["hole", "pixel"],
+      "properties": {
+        "hole": {"type": ["string", "null"], "description": "e.g. A20, RAIL_TOP_PLUS"},
+        "pixel": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+      }
+    }
+  }
+}

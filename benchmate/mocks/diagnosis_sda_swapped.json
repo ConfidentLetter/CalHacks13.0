@@ -1,0 +1,23 @@
+{
+  "frame_id": "twin_sda_swapped",
+  "mode": "answer",
+  "question": "Why isn't the sensor reading?",
+  "findings": [
+    {
+      "id": "i2c_sda",
+      "severity": "error",
+      "title": "SDA and SCL are swapped",
+      "explanation": "The sensor's SDA (yellow wire) lands on GPIO22 and its SCL (green wire) on GPIO21. The ESP32's default I2C pins are SDA=GPIO21, SCL=GPIO22, which is why the bus scan finds no device.",
+      "fix": "Swap the yellow and green wires at I15 and I18.",
+      "evidence": {
+        "wires": ["w_yellow_1", "w_green_1"],
+        "components": ["bme280_1", "esp32_1"],
+        "serial_lines": ["[i2c] no I2C devices found"],
+        "datasheet": [{"part_id": "bme280", "page": 0, "quote": "MOCK page — real page comes from knowledge.search()"}]
+      },
+      "confidence": 0.86
+    }
+  ],
+  "needs_user_confirmation": [],
+  "latency_ms": {"twin": 0, "reasoning": 0}
+}

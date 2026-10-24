@@ -1,0 +1,271 @@
+{
+  "frame_id": "twin_sda_swapped",
+  "timestamp": "2026-10-24T10:00:00-07:00",
+  "board": {
+    "type": "breadboard_830",
+    "homography": [
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "components": [
+    {
+      "id": "esp32_1",
+      "part_id": "esp32-devkitc",
+      "label_text": "ESP32-WROOM-32",
+      "bbox": [
+        120,
+        80,
+        260,
+        520
+      ],
+      "confidence": 0.95,
+      "pins": [
+        {
+          "name": "3V3",
+          "hole": "C1"
+        },
+        {
+          "name": "GND",
+          "hole": "C14"
+        },
+        {
+          "name": "5V",
+          "hole": "C19"
+        },
+        {
+          "name": "GPIO21",
+          "hole": "J15"
+        },
+        {
+          "name": "GPIO22",
+          "hole": "J18"
+        }
+      ]
+    },
+    {
+      "id": "bme280_1",
+      "part_id": "bme280",
+      "label_text": "GY-BME280",
+      "bbox": [
+        620,
+        300,
+        90,
+        70
+      ],
+      "confidence": 0.88,
+      "pins": [
+        {
+          "name": "VIN",
+          "hole": "B40"
+        },
+        {
+          "name": "GND",
+          "hole": "B41"
+        },
+        {
+          "name": "SCL",
+          "hole": "B42"
+        },
+        {
+          "name": "SDA",
+          "hole": "B43"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "w_red_1",
+      "color": "red",
+      "end_a": {
+        "hole": "A1",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "end_b": {
+        "hole": "RAIL_TOP_PLUS",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "confidence": 0.9
+    },
+    {
+      "id": "w_red_2",
+      "color": "red",
+      "end_a": {
+        "hole": "A40",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "end_b": {
+        "hole": "RAIL_TOP_PLUS",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "confidence": 0.9
+    },
+    {
+      "id": "w_black_1",
+      "color": "black",
+      "end_a": {
+        "hole": "A14",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "end_b": {
+        "hole": "RAIL_TOP_MINUS",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "confidence": 0.9
+    },
+    {
+      "id": "w_black_2",
+      "color": "black",
+      "end_a": {
+        "hole": "A41",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "end_b": {
+        "hole": "RAIL_TOP_MINUS",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "confidence": 0.9
+    },
+    {
+      "id": "w_yellow_1",
+      "color": "yellow",
+      "end_a": {
+        "hole": "A43",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "end_b": {
+        "hole": "I18",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "w_green_1",
+      "color": "green",
+      "end_a": {
+        "hole": "A42",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "end_b": {
+        "hole": "I15",
+        "pixel": [
+          0,
+          0
+        ]
+      },
+      "confidence": 0.84
+    }
+  ],
+  "nets": [
+    {
+      "id": "net_1",
+      "holes": [
+        "A14",
+        "A41",
+        "B41",
+        "C14",
+        "RAIL_TOP_MINUS"
+      ],
+      "members": [
+        "bme280_1.GND",
+        "esp32_1.GND"
+      ]
+    },
+    {
+      "id": "net_2",
+      "holes": [
+        "A42",
+        "B42",
+        "I15",
+        "J15"
+      ],
+      "members": [
+        "bme280_1.SCL",
+        "esp32_1.GPIO21"
+      ]
+    },
+    {
+      "id": "net_3",
+      "holes": [
+        "A43",
+        "B43",
+        "I18",
+        "J18"
+      ],
+      "members": [
+        "bme280_1.SDA",
+        "esp32_1.GPIO22"
+      ]
+    },
+    {
+      "id": "net_4",
+      "holes": [
+        "A1",
+        "A40",
+        "B40",
+        "C1",
+        "RAIL_TOP_PLUS"
+      ],
+      "members": [
+        "bme280_1.VIN",
+        "esp32_1.3V3"
+      ]
+    },
+    {
+      "id": "net_5",
+      "holes": [
+        "C19"
+      ],
+      "members": [
+        "esp32_1.5V"
+      ]
+    }
+  ]
+}
