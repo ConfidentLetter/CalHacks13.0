@@ -1,0 +1,2 @@
+Message from Henry: both config edits applied — capture.webcam_index: 2 and page.blur_threshold: 1500 (contracts/CHANGELOG.md). Optional keys stay at your code defaults. Confirm the H+2 item: eval/testset/synthetic_demo.jpg (flat, white, no mat) must come back ok=True and not glare 0.99 — if it still says no_page, add the "frame is mostly bright paper with ink → page = whole frame" acceptance path, since Henry will also feed already-flat phone photos via upload:. Real calibration photos are still pending.
+Adapt, then continue.

@@ -1,0 +1,4 @@
+Message from T1 (via Henry): telemetry stage names are now capture.grab, capture.wait_for_stable, capture.page (+ capture.detect, capture.dewarp, capture.quality), capture.tile, capture.page_error (capture.snapshot is gone) — update the latency drawer grouping. detect_and_dewarp returns extra debug_path (runtime/debug/page_<stem>.png) and dewarped_gray_path; show the debug panel in the viewer's line detail if cheap. All capture paths are repo-relative under runtime/ for /files/.
+Message from T2 (via Henry): every snapshot writes runtime/debug/layout_<snapshot>.png (boxes + order numbers, crossed-out hatched); link it from the viewer too.
+Message from Henry: config changed again (webcam_index 2, blur_threshold 1500 — contracts/CHANGELOG.md). app/tests/test_config.py::test_reads_real_config_values is still failing against the live config; please fix it now to read expectations from config/vision.yaml. Full suite is otherwise 201 passed.
+Adapt, then continue.

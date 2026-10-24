@@ -1,6 +1,6 @@
 # HANDOFF — 给接手的 AI（GPT / Claude / 人）
 
-> 最后更新：2026-10-23 23:10 PT（Cal Hacks 13.0 现场，H+2 左右）。由 Henry 的 Claude Code integrator 会话维护。
+> 最后更新：2026-10-23 23:20 PT（Cal Hacks 13.0 现场，H+3）。由 Henry 的 Claude Code integrator 会话维护。
 > 读完这份文件 + `prompts/RUNSHEET.md` + `head -5 NOTES_T*.md`，你就能接着当 integrator。
 
 ## 项目一句话
@@ -18,14 +18,15 @@ Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「p
 |---|---|---|
 | T4 | Steps 1–5 全完成；mock 服务器 `SV_MOCK=1` 在 :8000；viewer `/`、标注页 `/label`、`eval/run_eval.py`、`eval/accuracy_journey.png` 都有 | 等真实照片 → `python -m eval.prelabel` → Henry 在 /label 校对 → 每个 checkpoint 跑 run_eval |
 | T3 | Steps 1–5 全完成；真实 `build_page_twin`（T1→T2→T3）；60 tests | 等真实照片；用真实切片替换合成示例库；调 agreement_threshold |
-| T1 | Step 2 完成（源、稳定触发） | Step 3 页面检测 + 去畸变 + 质量门 |
-| T2 | Step 2 完成（合成页生成器） | Step 3 经典行分割；Step 4 划掉检测 |
+| T1 | Steps 1–4 全完成（检测/去畸变/质量门/tiling，合成 100/100） | Step 5 在真实照片上调参 |
+| T2 | Step 3 经典行分割完成（召回 100 %，0 合并） | Step 4 划掉检测（演示关键） |
 
-全量 `pytest -q`：181 通过（T4 有 1 个写死预算值的测试需改成读 config）。
+全量 `pytest -q`：201 通过（T4 有 1 个写死预算值的测试需改成读 config）。
 
 ## 已做的整合者决策
 - `budget_ms` 提到首次 15 s / 增量 8 s（Sonnet 5.5 单次往返 4–9 s，旧值不可达）。
 - `transcribe.*` 加入 T3 的可调项（effort/thinking/empty_ink_density/page_pass_skip_below/sdk_max_retries）。
+- H+3：`capture.webcam_index` 0→2，`page.blur_threshold` 80→1500（按 T1 实测）。
 - `eval/runs/` git-ignore。模型保持 `claude-sonnet-5-5`；演示嫌慢再试 haiku。
 
 ## 已知问题 / 待传话（见 relay/H+2_*.txt）

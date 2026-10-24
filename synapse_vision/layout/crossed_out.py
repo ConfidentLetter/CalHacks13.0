@@ -19,22 +19,31 @@ import numpy as np
 from layout.skeleton import skeletonize
 
 INK_PERCENTILE = (1.0, 99.0)     # robust ink bbox
+FAINT_MIN_SEPARATION = 50        # gray levels between ink and a lighter "rule" class
+FAINT_RULE_MIN_RUN_FRAC = 0.3    # a faint horizontal run this long (of crop width) is a printed rule
 MIN_INK_PIXELS = 30
-MIDDLE_BAND = (0.2, 0.8)         # strike must pass through this vertical band of the ink
+MIDDLE_BAND = (0.25, 0.75)       # a strike's midpoint lies in this vertical band of the ink ...
+ENDPOINT_BAND = (0.05, 0.95)     # ... and its ends stay inside this one (tilted strikes)
+STRIKE_MIN_CONTINUITY = 0.9      # ink present along this fraction of the stroke (letter chains have gaps)
 STRAIGHT_MAX_ANGLE_DEG = 18.0
 MIN_SPAN_FRAC = 0.45             # below this a stroke is not even a weak candidate
 FULL_SPAN_FRAC = 0.8             # at/above this span the span term saturates
 HOUGH_MIN_LEN_FRAC = 0.25        # of ink width, per segment (segments are chained by collinearity)
 HOUGH_GAP_FRAC = 0.06
 COLLINEAR_TOL_PX = 6
-CROSSING_PROBE_PX = 3            # look this far beyond the stroke's own thickness for other ink
+CROSSING_PROBE_MARGIN_PX = 3     # skip the stroke's own anti-aliased edge ...
+CROSSING_PROBE_PX = 4            # ... then look this far beyond it for other ink
 FULL_CREDIT_CROSSINGS = 4
 MIN_CROSSINGS_FOR_STRIKE = 2     # fewer -> looks like a fraction bar / underline, confidence capped
 CAPPED_CONF = 0.35
 ZIGZAG_MIN_SEGMENTS = 6
 ZIGZAG_ANGLE_DEG = (20.0, 75.0)
 ZIGZAG_MIN_SPAN_FRAC = 0.6
-ZIGZAG_MIN_LEN_FRAC = 0.35       # of ink height
+ZIGZAG_MIN_LEN_FRAC = 0.25       # of ink height
+ZIGZAG_HOUGH_THRESHOLD = 6
+ZIGZAG_HOUGH_GAP = 4
+ZIGZAG_MIN_COVERAGE = 0.85       # a zig-zag strike leaves almost no empty column in the middle band
+ZIGZAG_MIN_ALTERNATIONS = 3
 CONF_BASE, CONF_SPAN, CONF_CROSS = 0.3, 0.5, 0.2
 
 
@@ -43,7 +52,24 @@ def _load_ink(crop_path: str) -> np.ndarray | None:
     if img is None or img.size == 0 or img.min() == img.max():
         return None
     _, ink = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    return ink
+    return _drop_faint_rules(img, ink)
+
+
+def _drop_faint_rules(gray: np.ndarray, ink: np.ndarray) -> np.ndarray:
+    """Printed rules are much lighter than pen/pencil: split the dark pixels a second time and
+    drop the lighter class where it forms long horizontal runs (a rule through the crop)."""
+    dark = gray[ink > 0]
+    if dark.size < MIN_INK_PIXELS:
+        return ink
+    t2, _ = cv2.threshold(dark.reshape(-1, 1), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    heavy, light = dark[dark < t2], dark[dark >= t2]
+    if heavy.size == 0 or light.size == 0 or light.mean() - heavy.mean() < FAINT_MIN_SEPARATION:
+        return ink
+    faint = ((gray >= t2) & (ink > 0)).astype(np.uint8) * 255
+    run = max(8, int(FAINT_RULE_MIN_RUN_FRAC * gray.shape[1]))
+    rules = cv2.morphologyEx(faint, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (run, 1)))
+    rules = cv2.dilate(rules, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    return cv2.bitwise_and(ink, cv2.bitwise_not(cv2.bitwise_and(rules, faint)))
 
 
 def _ink_bbox(ink: np.ndarray) -> tuple[int, int, int, int] | None:
@@ -59,8 +85,9 @@ def _stroke_thickness(ink: np.ndarray, skel: np.ndarray) -> float:
     return float(np.count_nonzero(ink)) / max(1.0, float(np.count_nonzero(skel)))
 
 
-def _hough(skel: np.ndarray, min_len: int, max_gap: int) -> list[tuple[int, int, int, int]]:
-    seg = cv2.HoughLinesP(skel, 1, np.pi / 180, threshold=max(10, min_len // 2), minLineLength=min_len, maxLineGap=max_gap)
+def _hough(skel: np.ndarray, min_len: int, max_gap: int, threshold: int | None = None) -> list[tuple[int, int, int, int]]:
+    threshold = max(10, min_len // 2) if threshold is None else threshold
+    seg = cv2.HoughLinesP(skel, 1, np.pi / 180, threshold=threshold, minLineLength=min_len, maxLineGap=max_gap)
     return [tuple(int(v) for v in s) for s in np.asarray(seg).reshape(-1, 4)] if seg is not None else []
 
 
@@ -68,8 +95,11 @@ def _angle_deg(s: tuple[int, int, int, int]) -> float:
     return math.degrees(math.atan2(s[3] - s[1], s[2] - s[0]))
 
 
-def _chain_collinear(segments: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
-    """Merge near-horizontal segments lying on the same line into one long stroke."""
+Segment = tuple[int, int, int, int]
+
+
+def _chain_collinear(segments: list[Segment]) -> list[tuple[Segment, list[Segment]]]:
+    """Merge near-horizontal segments lying on the same line: [(straight stroke, its ordered pieces)]."""
     strokes: list[list[tuple[int, int, int, int]]] = []
     for s in sorted(segments, key=lambda s: min(s[0], s[2])):
         for group in strokes:
@@ -83,10 +113,43 @@ def _chain_collinear(segments: list[tuple[int, int, int, int]]) -> list[tuple[in
             strokes.append([s])
     out = []
     for group in strokes:
-        pts = [(s[0], s[1]) for s in group] + [(s[2], s[3]) for s in group]
+        pieces = [s if s[0] <= s[2] else (s[2], s[3], s[0], s[1]) for s in group]
+        pieces.sort()
+        pts = [(s[0], s[1]) for s in pieces] + [(s[2], s[3]) for s in pieces]
         left, right = min(pts), max(pts)
-        out.append((left[0], left[1], right[0], right[1]))
+        out.append(((left[0], left[1], right[0], right[1]), pieces))
     return out
+
+
+def _ink_along(ink: np.ndarray, seg: Segment, reach: int) -> tuple[int, int]:
+    """(points with ink within ``reach`` px perpendicular, points sampled) along a segment."""
+    x0, y0, x1, y1 = seg
+    length = max(1.0, math.hypot(x1 - x0, y1 - y0))
+    nx, ny = -(y1 - y0) / length, (x1 - x0) / length
+    H, W = ink.shape
+    hits, n = 0, max(1, int(length))
+    for t in np.linspace(0, 1, n):
+        px, py = x0 + t * (x1 - x0), y0 + t * (y1 - y0)
+        for d in range(-reach, reach + 1):
+            qx, qy = int(round(px + d * nx)), int(round(py + d * ny))
+            if 0 <= qx < W and 0 <= qy < H and ink[qy, qx]:
+                hits += 1
+                break
+    return hits, n
+
+
+def _continuity(ink: np.ndarray, pieces: list[Segment], thickness: float) -> float:
+    """Ink presence along the Hough pieces AND the connectors between them (letter chains have empty connectors)."""
+    reach = int(math.ceil(thickness / 2)) + 2
+    path = list(pieces)
+    for a, b in zip(pieces, pieces[1:]):
+        if b[0] > a[2]:
+            path.append((a[2], a[3], b[0], b[1]))
+    hits = n = 0
+    for seg in path:
+        h, k = _ink_along(ink, seg, reach)
+        hits, n = hits + h, n + k
+    return hits / max(1, n)
 
 
 def _crossings(ink: np.ndarray, stroke: tuple[int, int, int, int], thickness: float) -> int:
@@ -94,7 +157,7 @@ def _crossings(ink: np.ndarray, stroke: tuple[int, int, int, int], thickness: fl
     x0, y0, x1, y1 = stroke
     length = max(1.0, math.hypot(x1 - x0, y1 - y0))
     nx, ny = -(y1 - y0) / length, (x1 - x0) / length  # unit normal
-    d0 = int(round(thickness / 2)) + 1
+    d0 = int(math.ceil(thickness / 2)) + CROSSING_PROBE_MARGIN_PX
     H, W = ink.shape
     both = []
     for t in np.linspace(0, 1, int(length)):
@@ -118,25 +181,36 @@ def _straight_strike_conf(ink: np.ndarray, skel: np.ndarray, bbox: tuple[int, in
                 if abs(_angle_deg(s)) <= STRAIGHT_MAX_ANGLE_DEG]
     best = 0.0
     lo, hi = y + MIDDLE_BAND[0] * h, y + MIDDLE_BAND[1] * h
-    for stroke in _chain_collinear(segments):
+    elo, ehi = y + ENDPOINT_BAND[0] * h, y + ENDPOINT_BAND[1] * h
+    for stroke, pieces in _chain_collinear(segments):
         sx0, sy0, sx1, sy1 = stroke
         span = (sx1 - sx0) / max(1, w)
-        if span < MIN_SPAN_FRAC or not (lo <= sy0 <= hi and lo <= sy1 <= hi):
+        mid_ok = lo <= (sy0 + sy1) / 2 <= hi and elo <= sy0 <= ehi and elo <= sy1 <= ehi
+        if span < MIN_SPAN_FRAC or not mid_ok:
             continue
         span_term = min(1.0, (span - MIN_SPAN_FRAC) / (FULL_SPAN_FRAC - MIN_SPAN_FRAC))
         crossings = _crossings(ink, stroke, thickness)
         conf = CONF_BASE + CONF_SPAN * span_term + CONF_CROSS * min(1.0, crossings / FULL_CREDIT_CROSSINGS)
-        if crossings < MIN_CROSSINGS_FOR_STRIKE:
-            conf = min(conf, CAPPED_CONF)
+        if crossings < MIN_CROSSINGS_FOR_STRIKE or _continuity(ink, pieces, thickness) < STRIKE_MIN_CONTINUITY:
+            conf = min(conf, CAPPED_CONF)  # fraction bar, underline, or a chain of letter bars
         best = max(best, conf)
     return best
 
 
-def _zigzag_conf(skel: np.ndarray, bbox: tuple[int, int, int, int]) -> float:
+def _band_coverage(ink: np.ndarray, bbox: tuple[int, int, int, int], x_range: tuple[int, int] | None = None) -> float:
+    """Fraction of columns (across the ink width, or ``x_range``) that carry ink inside the middle band."""
+    x, y, w, h = bbox
+    lo, hi = int(y + MIDDLE_BAND[0] * h), int(y + MIDDLE_BAND[1] * h)
+    x0, x1 = x_range if x_range else (x, x + w)
+    band = ink[lo:hi, x0:x1]
+    return float((band > 0).any(axis=0).mean()) if band.size else 0.0
+
+
+def _zigzag_conf(ink: np.ndarray, skel: np.ndarray, bbox: tuple[int, int, int, int]) -> float:
     x, y, w, h = bbox
     lo, hi = y + MIDDLE_BAND[0] * h, y + MIDDLE_BAND[1] * h
     diag = []
-    for s in _hough(skel, max(6, int(ZIGZAG_MIN_LEN_FRAC * h)), 3):
+    for s in _hough(skel, max(6, int(ZIGZAG_MIN_LEN_FRAC * h)), ZIGZAG_HOUGH_GAP, ZIGZAG_HOUGH_THRESHOLD):
         a = abs(_angle_deg(s))
         if ZIGZAG_ANGLE_DEG[0] <= a <= ZIGZAG_ANGLE_DEG[1] and lo <= (s[1] + s[3]) / 2 <= hi:
             diag.append(s)
@@ -145,9 +219,12 @@ def _zigzag_conf(skel: np.ndarray, bbox: tuple[int, int, int, int]) -> float:
     diag.sort(key=lambda s: (s[0] + s[2]) / 2)
     signs = [np.sign((s[3] - s[1]) * (s[2] - s[0])) for s in diag]
     alternations = sum(1 for a, b in zip(signs, signs[1:]) if a != b)
-    span = (max(max(s[0], s[2]) for s in diag) - min(min(s[0], s[2]) for s in diag)) / max(1, w)
-    if span < ZIGZAG_MIN_SPAN_FRAC or alternations < ZIGZAG_MIN_SEGMENTS - 2:
+    zx0, zx1 = min(min(s[0], s[2]) for s in diag), max(max(s[0], s[2]) for s in diag)
+    span = (zx1 - zx0) / max(1, w)
+    if span < ZIGZAG_MIN_SPAN_FRAC or alternations < ZIGZAG_MIN_ALTERNATIONS:
         return 0.0
+    if _band_coverage(ink, bbox, (zx0, zx1)) < ZIGZAG_MIN_COVERAGE:
+        return 0.0  # letters with diagonals but gaps between them, not one continuous zig-zag
     return min(1.0, 0.5 + 0.3 * min(1.0, (span - ZIGZAG_MIN_SPAN_FRAC) / 0.3) + 0.2 * min(1.0, alternations / 10))
 
 
@@ -156,7 +233,7 @@ def crossed_out_confidence(ink: np.ndarray) -> float:
     if bbox is None:
         return 0.0
     skel = skeletonize(ink)
-    return max(_straight_strike_conf(ink, skel, bbox), _zigzag_conf(skel, bbox))
+    return max(_straight_strike_conf(ink, skel, bbox), _zigzag_conf(ink, skel, bbox))
 
 
 def is_crossed_out(crop_path: str) -> tuple[bool, float]:

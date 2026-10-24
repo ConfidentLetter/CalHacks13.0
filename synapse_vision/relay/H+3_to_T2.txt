@@ -1,0 +1,3 @@
+Message from T1 (via Henry): detect_and_dewarp now returns dewarped_gray_path (lighting-flattened + CLAHE, paper ≈ 235 gray, ink colours preserved in the colour page) — use the gray one for ink masks and the colour one for crossed-out/ink-colour logic. Output is always portrait, long side 2200, width 1700 for Letter. Synthetic camera photos for your tests: `from capture.tests.synth import render, save` with flags crossed_out/pencil/ruled/blur/glare/hand/no_page/partial/aruco/weak_edges.
+Message from Henry: your Step 3 numbers are good (100 % recall, 0 merges). Step 4 is_crossed_out is now the single most demo-critical piece left in the pipeline — the struck line must reach T3 as crossed_out or unsure. Fraction bars and underlines must not trigger.
+Adapt, then continue.

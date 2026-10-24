@@ -4,14 +4,14 @@
 capture:
   source: webcam            # pi | webcam | upload
   pi_url: http://raspberrypi.local:8080/snapshot.jpg
-  webcam_index: 0
+  webcam_index: 2           # H+3 (Henry): on this Mac 0/1 are idle iPhone Continuity cams (black); 2 = built-in. Re-run `python -m capture.source --list` after mounting the phone/Pi
   stable_seconds: 1.0       # scene must be still this long before we analyse
   change_threshold: 0.02    # mean abs diff on 160x120 grayscale
 
 page:
   output_long_side: 2200    # dewarped page height for portrait paper
   min_page_area_fraction: 0.25
-  blur_threshold: 80        # variance of Laplacian below this -> 'blur'
+  blur_threshold: 1500      # H+3 (Henry): T1 measures Laplacian variance near ink on normalized gray @1100px; sharp >= 1800, blur <= 1200
   glare_fraction_max: 0.04
   use_aruco_fallback: true
 
