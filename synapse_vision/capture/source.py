@@ -1,4 +1,4 @@
-"""T1 — snapshot sources (pi | webcam | avf:<device> | upload:<path>) and the scene-stability trigger.
+"""T1 — snapshot sources (pi | webcam | avf[:<device>] | upload:<path>) and the scene-stability trigger.
 
     python -m capture.source --list        # probe webcam indices 0-5, list ffmpeg/AVFoundation cameras, try the Pi URL
     python -m capture.source --snap        # one full-resolution snapshot from the configured source
@@ -38,7 +38,8 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 BLACK_FRAME_MEAN = 6.0   # a camera that "works" but returns black frames is a virtual/inactive device
 
 
-__all__ = ["SourceError", "get_snapshot", "wait_for_stable", "live_frame", "list_sources", "release_cameras", "release_webcam"]
+__all__ = ["SourceError", "get_snapshot", "wait_for_stable", "latest_frame", "live_frame", "list_sources",
+           "release_cameras", "release_webcam"]
 
 # ----------------------------------------------------------------------------- helpers
 
@@ -238,24 +239,43 @@ def get_snapshot(source: str | None = None) -> str:
             return repo_relative(_write_jpeg(_grab_pi(), _snapshot_path()))
         if chosen == "webcam":
             return repo_relative(_write_jpeg(_webcam().read(), _snapshot_path()))
-        if chosen.startswith("avf:"):
-            return repo_relative(_write_jpeg(_avf(chosen[len("avf:"):]).read(), _snapshot_path()))
-        if chosen == "avf":
-            raise SourceError("source 'avf' needs a device: avf:<index> or avf:<name substring> (python -m capture.avf lists them)")
-    raise SourceError(f"unknown source {chosen!r} (expected pi | webcam | avf:<device> | upload:<path>)")
+        if _is_avf(chosen):
+            return repo_relative(_write_jpeg(_avf(_avf_spec(chosen)).read(), _snapshot_path()))
+    raise SourceError(f"unknown source {chosen!r} (expected pi | webcam | avf | avf:<device> | upload:<path>)")
 
 
-def live_frame(source: str | None = None) -> np.ndarray:
-    """A fresh full-resolution BGR frame from the configured live source (webcam | avf:<device> | pi), for T5's
-    MJPEG stream. Thread-safe for avf (one shared ffmpeg stream, frames handed out under a lock); upload raises."""
+def _is_avf(source: str) -> bool:
+    return source == "avf" or source.startswith("avf:")
+
+
+def _avf_spec(source: str) -> str:
+    """`avf` → device from config capture.avf_device; `avf:<index or name substring>` → that."""
+    spec = source[len("avf:"):].strip() if source.startswith("avf:") else ""
+    return spec or avf.default_device()
+
+
+def latest_frame(source: str | None = None) -> np.ndarray:
+    """The newest full-resolution BGR frame from the configured live source (webcam | avf | pi) for T5's MJPEG
+    grabber: returns at once with whatever the avf stream holds (no wait for a newer frame). Thread-safe for avf
+    (one shared ffmpeg process, frames handed out under a lock); an upload source raises."""
     chosen = _resolve_source(source)
     if chosen == "webcam":
         return _webcam().read()
-    if chosen.startswith("avf:"):
-        return _avf(chosen[len("avf:"):]).read()
+    if _is_avf(chosen):
+        return _avf(_avf_spec(chosen)).latest()
+    if chosen == "pi":
+        return _grab_pi_preview()
+    raise SourceError(f"latest_frame needs a live source (webcam | avf | pi), got {chosen!r}")
+
+
+def live_frame(source: str | None = None) -> np.ndarray:
+    """A frame guaranteed newer than the last one handed out (avf), else same as latest_frame."""
+    chosen = _resolve_source(source)
+    if _is_avf(chosen):
+        return _avf(_avf_spec(chosen)).read()
     if chosen == "pi":
         return _grab_pi()
-    raise SourceError(f"live_frame needs a live source (webcam | avf:<device> | pi), got {chosen!r}")
+    return latest_frame(chosen)
 
 
 def _preview_grabber(source: str) -> Callable[[], np.ndarray]:
@@ -264,10 +284,10 @@ def _preview_grabber(source: str) -> Callable[[], np.ndarray]:
     if source == "webcam":
         cam = _webcam()
         return lambda: _preview_resize(cam.read())
-    if source.startswith("avf:"):
-        stream = _avf(source[len("avf:"):])
-        return lambda: _preview_resize(stream.read())
-    raise SourceError(f"wait_for_stable needs a live source (pi|webcam|avf:<device>), got {source!r}")
+    if _is_avf(source):
+        spec = _avf_spec(source)
+        return lambda: _preview_resize(_avf(spec).read())   # _avf() reopens the stream if ffmpeg died
+    raise SourceError(f"wait_for_stable needs a live source (pi|webcam|avf), got {source!r}")
 
 
 def _preview_resize(frame: np.ndarray, width: int = 640) -> np.ndarray:
@@ -387,7 +407,7 @@ def _main(argv: list[str] | None = None) -> int:
     ap.add_argument("--list", action="store_true", help="probe webcams 0-5, list AVFoundation cameras, try the Pi")
     ap.add_argument("--snap", action="store_true", help="take one snapshot from the configured source")
     ap.add_argument("--wait", type=float, metavar="SECONDS", help="wait for a stable scene, then snapshot")
-    ap.add_argument("--source", help="pi | webcam | avf:<device index or name substring> | upload:<path>")
+    ap.add_argument("--source", help="pi | webcam | avf | avf:<device index or name substring> | upload:<path>")
     args = ap.parse_args(argv)
     if args.list:
         for name, path in list_sources().items():

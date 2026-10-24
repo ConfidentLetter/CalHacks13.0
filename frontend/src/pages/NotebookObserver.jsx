@@ -48,6 +48,10 @@ export function NotebookObserver() {
   const [zoom, setZoom] = useState(false)
 
   const isHardware = camera.source === HARDWARE_SOURCE
+  const backendCamera = status.data?.camera
+  // T5 reports camera.source == "avf" when the backend grabs macOS Desk View (the demo rig).
+  const isDeskViewRig = backendCamera?.source === 'avf'
+  const overheadLabel = isDeskViewRig ? 'Desk View · overhead' : 'Overhead camera · backend stream'
   const canGrab = camera.isLive
   const frame = analysis.frame
   // after a reload the frame is gone but the result knows which still it came from
@@ -70,12 +74,16 @@ export function NotebookObserver() {
 
   return (
     <div className="space-y-10">
-      <div className="grid gap-8 xl:grid-cols-[1.25fr_1fr]">
+      <div className={isHardware ? 'grid gap-8 xl:grid-cols-[1.6fr_1fr]' : 'grid gap-8 xl:grid-cols-[1.25fr_1fr]'}>
         {/* ---- live preview (Micha's card, untouched) ---- */}
         <Card className="sheet rounded-none">
           <CardHeader
-            title="Live camera"
-            subtitle={isHardware ? 'Overhead Pi / ESP32 stream' : 'Laptop or USB webcam'}
+            title={isHardware ? (isDeskViewRig ? 'Desk View' : 'Overhead camera') : 'Live camera'}
+            subtitle={
+              isHardware
+                ? `top-down view of the desk, streamed from the backend${backendCamera?.detail ? ` · ${backendCamera.detail}` : ''}`
+                : 'Laptop or USB webcam'
+            }
             action={
               <Toggle
                 checked={camera.isLive || camera.status === 'starting'}
@@ -87,7 +95,7 @@ export function NotebookObserver() {
           />
           <CardBody className="space-y-4">
             {isHardware && camera.isLive ? (
-              <LiveFeed camera={status.data?.camera} enabled backendOnline={backendOnline} />
+              <LiveFeed camera={backendCamera} enabled backendOnline={backendOnline} />
             ) : (
               <div className="relative aspect-video w-full overflow-hidden border border-olive/70 bg-olive">
                 {camera.isLive && camera.stream && <LiveVideo stream={camera.stream} />}
@@ -119,13 +127,13 @@ export function NotebookObserver() {
                   )}
                 </span>
                 <select className="input h-10 py-0" value={camera.source} onChange={(e) => camera.setSource(e.target.value)}>
-                  <option value="">Default webcam</option>
+                  <option value={HARDWARE_SOURCE}>{overheadLabel}</option>
+                  <option value="">Browser webcam (default)</option>
                   {camera.devices.map((d, i) => (
                     <option key={d.deviceId || i} value={d.deviceId}>
                       {d.label ? (isDeskView(d.label) ? `${d.label} · desk view` : d.label) : `Camera ${i + 1}`}
                     </option>
                   ))}
-                  <option value={HARDWARE_SOURCE}>Overhead camera (Pi / ESP32 stream)</option>
                 </select>
               </label>
               {camera.isLive || camera.status === 'starting' ? (
@@ -139,11 +147,20 @@ export function NotebookObserver() {
               )}
             </div>
 
-            {!camera.isDeskView && !isHardware && (
+            {isHardware ? (
               <p className="text-[13px] leading-relaxed text-olive/60">
-                No overhead camera? Open <strong className="font-semibold text-olive/80">Desk View</strong> from the camera menu in the
-                macOS menu bar, then pick the Desk View camera here. Your choice is remembered.
+                {isDeskViewRig
+                  ? 'macOS Desk View, grabbed by the backend; one still is taken from this stream when you press Analyze.'
+                  : 'Streamed from the backend camera; one still is taken from this stream when you press Analyze.'}{' '}
+                Browser webcams are the fallback, second in the list.
               </p>
+            ) : (
+              !camera.isDeskView && (
+                <p className="text-[13px] leading-relaxed text-olive/60">
+                  No overhead camera? Open <strong className="font-semibold text-olive/80">Desk View</strong> from the camera menu
+                  in the macOS menu bar, then pick the Desk View camera here. Your choice is remembered.
+                </p>
+              )
             )}
 
             <p className="border-l-2 border-sage-deep pl-3 text-sm leading-relaxed text-olive/70">
@@ -190,7 +207,7 @@ export function NotebookObserver() {
                   {stillAt ? (
                     <>
                       captured {formatClock(stillAt)} · {timeAgo(stillAt)}
-                      {frame ? (frame.source === 'hardware' ? ' · overhead camera' : ' · webcam') : ''}
+                      {frame ? (frame.source === 'hardware' ? (isDeskViewRig ? ' · Desk View' : ' · overhead camera') : ' · webcam') : ''}
                     </>
                   ) : (
                     'the still Pip looked at'

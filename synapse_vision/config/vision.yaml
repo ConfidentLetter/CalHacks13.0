@@ -2,7 +2,7 @@
 # app.config.get("section.key") reads this; edits take effect without restarting.
 
 capture:
-  source: webcam            # pi | webcam | upload
+  source: "avf:MacBook Air桌上视角"   # H+12: Desk View overhead camera (pi | webcam | upload | avf:<name substring>)
   pi_url: http://raspberrypi.local:8080/snapshot.jpg
   avf_device: "MacBook Air桌上视角相机"   # H+12: macOS Desk View virtual camera via ffmpeg avfoundation (T1 `avf` source); iPhone: "“Haoze的iPhone”的桌上视角相机"
   avf_ffmpeg: /opt/homebrew/bin/ffmpeg

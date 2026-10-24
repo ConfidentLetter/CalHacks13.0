@@ -28,11 +28,19 @@ const ERROR_STATES = {
   AbortError: 'busy',
 }
 
+/** Saved camera choice. Nothing saved → the overhead (backend-streamed) camera: the demo's Desk View rig (H+12). */
 function readDevice() {
   try {
-    return localStorage.getItem(DEVICE_KEY) || ''
+    return localStorage.getItem(DEVICE_KEY) || HARDWARE_SOURCE
   } catch {
-    return ''
+    return HARDWARE_SOURCE
+  }
+}
+function hasSavedDevice() {
+  try {
+    return Boolean(localStorage.getItem(DEVICE_KEY))
+  } catch {
+    return false
   }
 }
 
@@ -49,7 +57,7 @@ export function CameraProvider({ children }) {
   const supported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
 
   // True once the student picked a camera themselves (or a choice was saved earlier); then we never auto-switch.
-  const explicitRef = useRef(Boolean(readDevice()))
+  const explicitRef = useRef(hasSavedDevice())
   const sourceRef = useRef(source)
   const startRef = useRef(null)
   useEffect(() => {
@@ -62,7 +70,7 @@ export function CameraProvider({ children }) {
     setDevices(all)
     // Default to macOS Desk View (top-down desk camera) when present and nothing was chosen explicitly.
     // Labels only exist after camera permission, so this also runs right after the first Start.
-    if (explicitRef.current) return
+    if (explicitRef.current || sourceRef.current === HARDWARE_SOURCE) return
     const deskView = findDeskView(all)
     if (!deskView || deskView.deviceId === sourceRef.current) return
     setSourceState(deskView.deviceId)
@@ -197,6 +205,14 @@ export function CameraProvider({ children }) {
     v.srcObject = stream
     if (stream) v.play().catch(() => {})
   }, [stream])
+
+  // Overhead mode needs no browser permission, so the demo page opens live (once per session; Stop is respected).
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (autoStarted.current || source !== HARDWARE_SOURCE || status !== 'off') return
+    autoStarted.current = true
+    start(HARDWARE_SOURCE)
+  }, [source, status, start])
 
   // Keep the device list fresh (plug/unplug), and always release the camera on unload.
   useEffect(() => {

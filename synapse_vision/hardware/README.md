@@ -43,7 +43,7 @@ SV_SOURCE="avf:MacBook Air桌上视角" python -m capture.source --wait 20  # st
   snapshots both come from it (device opened once, no second client). Desk View delivers 1920×1440 at 30 fps.
 - Measured on this MacBook Air: first `get_snapshot` 2.5 s (ffmpeg start 0.7 s + 1.5 s exposure warm-up: frame mean
   rises 81 → 96 and is flat after ~1.4 s), later snapshots 70 ms; `wait_for_stable` polls at the stream's 5 fps.
-- ffmpeg is found via env `SV_FFMPEG`, `capture.ffmpeg_bin`, `PATH`, then `/opt/homebrew/bin/ffmpeg`. Optional keys with
+- ffmpeg is found via env `SV_FFMPEG`, `capture.avf_ffmpeg`, `PATH`, then `/opt/homebrew/bin/ffmpeg`. Optional keys with
   defaults in code: `capture.avf_fps` 5, `capture.avf_warmup_s` 1.5, `capture.avf_frame_timeout_s` 5,
   `capture.avf_device_framerate` 30, `capture.avf_pixel_format` uyvy422.
 - The ffmpeg process is killed by `capture.source.release_cameras()` (also called at the end of every CLI run).

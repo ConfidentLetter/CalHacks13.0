@@ -4,10 +4,12 @@ Why: macOS "Desk View" virtual cameras (MacBook Air桌上视角相机, iPhone �
 avfoundation backend but are invisible to OpenCV's VideoCapture index enumeration. One ffmpeg process streams
 raw BGR frames at a low rate (``capture.avf_fps``, default 5) over a pipe; previews for ``wait_for_stable``
 and full-resolution snapshots both come from that one stream, so the device is opened once and auto-exposure
-has settled (``capture.avf_warmup_s``) by the time the first frame is returned.
+has settled (``capture.avf_warmup_s``) by the time the first frame is returned. The process is restarted by the
+owner (``capture.source._avf``) if it dies and stopped after ``capture.avf_idle_stop_s`` without a reader.
 
     python -m capture.avf                 # list AVFoundation video devices
-    python -m capture.source --snap --source "avf:桌上视角"   # Desk View still (unique name substring or index)
+    python -m capture.source --snap --source avf              # device from config capture.avf_device
+    python -m capture.source --snap --source "avf:桌上视角"   # or an explicit unique name substring / index
 """
 from __future__ import annotations
 
@@ -27,7 +29,9 @@ from capture.compat import SourceError, cfg
 
 FFMPEG_FALLBACKS = ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg")
 DEFAULTS = {
-    "capture.ffmpeg_bin": "ffmpeg",          # or env SV_FFMPEG
+    "capture.avf_ffmpeg": "ffmpeg",          # H+12 config key (env SV_FFMPEG wins)
+    "capture.avf_device": "MacBook Air桌上视角相机",   # used by plain `source: avf`; `avf:<spec>` overrides
+    "capture.avf_idle_stop_s": 30.0,         # kill ffmpeg after this long with no reader; reopened on next use
     "capture.avf_fps": 5.0,                  # frames per second delivered over the pipe (previews + snapshots)
     "capture.avf_device_framerate": 30,      # framerate requested from the device (clamped to its supported range)
     "capture.avf_warmup_s": 1.5,             # seconds after the first frame; Desk View auto-exposure settles in ~1.4 s (mean 81 -> 96)
@@ -61,8 +65,8 @@ class AvfMode:
 # ----------------------------------------------------------------------------- ffmpeg discovery
 
 def ffmpeg_bin() -> str:
-    """env SV_FFMPEG → config capture.ffmpeg_bin → PATH → Homebrew locations."""
-    candidates = (os.environ.get("SV_FFMPEG"), str(_opt("capture.ffmpeg_bin")), *FFMPEG_FALLBACKS)
+    """env SV_FFMPEG → config capture.avf_ffmpeg → PATH → Homebrew locations."""
+    candidates = (os.environ.get("SV_FFMPEG"), str(_opt("capture.avf_ffmpeg")), *FFMPEG_FALLBACKS)
     for cand in candidates:
         if not cand:
             continue
@@ -71,7 +75,11 @@ def ffmpeg_bin() -> str:
             return found
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
-    raise SourceError("ffmpeg not found: set env SV_FFMPEG or capture.ffmpeg_bin, or `brew install ffmpeg`")
+    raise SourceError("ffmpeg not found: set env SV_FFMPEG or capture.avf_ffmpeg, or `brew install ffmpeg`")
+
+
+def default_device() -> str:
+    return str(_opt("capture.avf_device"))
 
 
 def parse_devices(text: str) -> tuple[AvfDevice, ...]:
@@ -156,9 +164,12 @@ def _pick_framerate(mode: AvfMode | None) -> float:
 class AvfStream:
     """One long-lived ffmpeg process delivering bgr24 frames; `read()` always returns a frame newer than the last."""
 
-    def __init__(self, cmd: list[str], width: int, height: int, device: AvfDevice, warmup_s: float):
+    def __init__(self, cmd: list[str], width: int, height: int, device: AvfDevice, warmup_s: float,
+                 idle_stop_s: float | None = None):
         self.cmd, self.width, self.height, self.device = cmd, width, height, device
         self._warmup_s = warmup_s
+        self._idle_stop_s = idle_stop_s
+        self._last_used = time.monotonic()
         self._ready_at: float | None = None   # set when the first frame arrives: warm-up counts from there
         self._frame_bytes = width * height * 3
         self._cond = threading.Condition()
@@ -173,6 +184,8 @@ class AvfStream:
             raise SourceError(f"could not start ffmpeg for {device}: {exc}") from exc
         threading.Thread(target=self._pump_frames, name="avf-frames", daemon=True).start()
         threading.Thread(target=self._pump_stderr, name="avf-stderr", daemon=True).start()
+        if idle_stop_s:
+            threading.Thread(target=self._idle_watch, name="avf-idle", daemon=True).start()
 
     @classmethod
     def open(cls, spec: str, ffmpeg: str | None = None) -> "AvfStream":
@@ -187,7 +200,8 @@ class AvfStream:
                "-framerate", f"{framerate:g}", "-video_size", f"{mode.width}x{mode.height}",
                "-pixel_format", str(_opt("capture.avf_pixel_format")), "-i", str(device.index),
                "-vf", f"fps={float(_opt('capture.avf_fps')):g}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
-        return cls(cmd, mode.width, mode.height, device, float(_opt("capture.avf_warmup_s")))
+        return cls(cmd, mode.width, mode.height, device, float(_opt("capture.avf_warmup_s")),
+                   idle_stop_s=float(_opt("capture.avf_idle_stop_s")) or None)
 
     # -- threads
     def _pump_frames(self) -> None:
@@ -211,20 +225,41 @@ class AvfStream:
         for raw in iter(err.readline, b"") if err else ():
             self._stderr.append(raw.decode("utf-8", "replace").rstrip())
 
+    def _idle_watch(self) -> None:
+        """Stop ffmpeg when nobody has asked for a frame for `idle_stop_s`; the owner reopens on the next call."""
+        assert self._idle_stop_s is not None
+        while not self._dead:
+            time.sleep(min(1.0, self._idle_stop_s / 4))
+            if time.monotonic() - self._last_used >= self._idle_stop_s and not self._dead:
+                self.idle_stopped = True
+                self.close()
+                return
+
+    idle_stopped = False
+
     # -- API
     def read(self, timeout_s: float | None = None) -> np.ndarray:
         """Next frame not yet handed out, after the warm-up window; raises SourceError if ffmpeg stops."""
+        return self._wait_frame(timeout_s, fresh=True)
+
+    def latest(self, timeout_s: float | None = None) -> np.ndarray:
+        """The newest frame in memory right now (same frame may be returned twice); waits only for warm-up."""
+        return self._wait_frame(timeout_s, fresh=False)
+
+    def _wait_frame(self, timeout_s: float | None, fresh: bool) -> np.ndarray:
         timeout_s = float(_opt("capture.avf_frame_timeout_s")) if timeout_s is None else timeout_s
         deadline = time.monotonic() + timeout_s
         with self._cond:
+            self._last_used = time.monotonic()
             while True:
                 now = time.monotonic()
                 warm = self._ready_at is not None and now >= self._ready_at
-                if self._latest is not None and self._seq > self._served and warm:
+                if self._latest is not None and warm and (self._seq > self._served or not fresh):
                     self._served = self._seq
                     return self._latest.copy()
                 if self._dead:
-                    raise SourceError(f"ffmpeg stream for {self.device} ended: {' | '.join(self._stderr) or 'no output'}")
+                    why = "stopped after idle timeout" if self.idle_stopped else (' | '.join(self._stderr) or 'no output')
+                    raise SourceError(f"ffmpeg stream for {self.device} ended: {why}")
                 if now >= deadline:
                     raise SourceError(f"no frame from {self.device} within {timeout_s:g} s: {' | '.join(self._stderr)}")
                 wake = deadline if self._ready_at is None else min(deadline, max(now, self._ready_at))

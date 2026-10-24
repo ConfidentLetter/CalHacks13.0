@@ -5,6 +5,7 @@ import os
 import stat
 import sys
 import textwrap
+import time
 
 import numpy as np
 import pytest
@@ -148,9 +149,51 @@ def test_get_snapshot_avf_writes_jpeg_under_runtime(monkeypatch):
     assert os.path.getsize(os.path.join(str(avf.__file__).rsplit("/capture/", 1)[0], out)) > 0
 
 
-def test_get_snapshot_avf_without_device_raises():
-    with pytest.raises(SourceError):
-        source.get_snapshot("avf")
+def test_plain_avf_source_uses_config_device(monkeypatch):
+    seen = []
+    frame = np.full((H, W, 3), 200, np.uint8)
+    monkeypatch.setattr(avf, "cfg", lambda key, default=None: "“iPhone”的桌上视角相机" if key == "capture.avf_device" else default)
+    monkeypatch.setattr(source, "_avf", lambda spec: seen.append(spec) or _StubStream([frame]))
+    assert source.get_snapshot("avf").endswith(".jpg")
+    source.get_snapshot("avf:3")
+    assert seen == ["“iPhone”的桌上视角相机", "3"]
+
+
+def test_latest_frame_returns_newest_without_waiting_and_live_frame_waits(fake_ffmpeg):
+    with avf.AvfStream.open("3") as stream:
+        a = stream.latest(timeout_s=2.0)
+        b = stream.latest(timeout_s=2.0)
+        c = stream.read(timeout_s=2.0)
+        assert a.shape == (H, W, 3)
+        assert int(b[0, 0, 0]) >= int(a[0, 0, 0]), "latest() never goes backwards"
+        assert int(c[0, 0, 0]) > int(b[0, 0, 0]), "read() waits for a frame newer than anything served"
+
+
+def test_idle_stop_kills_ffmpeg_and_owner_reopens(tmp_path, monkeypatch):
+    sleeper = tmp_path / "ffmpeg"
+    sleeper.write_text("#!/bin/sh\nsleep 30\n")
+    sleeper.chmod(sleeper.stat().st_mode | stat.S_IXUSR)
+    opened = []
+
+    def _open(spec, ffmpeg=None):
+        s = avf.AvfStream([str(sleeper)], W, H, avf.AvfDevice(3, "x"), warmup_s=0.0, idle_stop_s=0.3)
+        opened.append(s)
+        return s
+
+    monkeypatch.setattr(avf.AvfStream, "open", staticmethod(_open))
+    monkeypatch.setattr(source, "_shared_avf", None)
+    first = source._avf("3")
+    deadline = time.monotonic() + 3.0
+    while first.alive and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not first.alive and first.idle_stopped and first._proc.poll() is not None, "ffmpeg is killed after the idle window"
+    with pytest.raises(SourceError) as exc:
+        first.read(timeout_s=0.1)
+    assert "idle" in str(exc.value)
+    second = source._avf("3")
+    assert second is not first and second.alive, "a dead stream is replaced on the next use"
+    source.release_cameras()
+    assert second._proc.poll() is not None
 
 
 def test_preview_grabber_avf_downscales_to_640_wide(monkeypatch):
@@ -160,12 +203,19 @@ def test_preview_grabber_avf_downscales_to_640_wide(monkeypatch):
     assert preview.shape == (480, 640, 3)
 
 
-def test_live_frame_uses_shared_avf_stream_and_rejects_upload(monkeypatch):
+def test_latest_frame_and_live_frame_use_shared_avf_stream_and_reject_upload(monkeypatch):
     frame = np.full((H, W, 3), 50, np.uint8)
-    monkeypatch.setattr(source, "_avf", lambda spec: _StubStream([frame]))
-    assert source.live_frame("avf:MacBook Air桌上视角").shape == (H, W, 3)
-    with pytest.raises(SourceError):
-        source.live_frame("upload:/tmp/x.jpg")
+
+    class _S(_StubStream):
+        def latest(self, timeout_s=None):
+            return self._frames[0]
+
+    monkeypatch.setattr(source, "_avf", lambda spec: _S([frame]))
+    assert source.latest_frame("avf:MacBook Air桌上视角").shape == (H, W, 3)
+    assert source.live_frame("avf").shape == (H, W, 3)
+    for fn in (source.latest_frame, source.live_frame):
+        with pytest.raises(SourceError):
+            fn("upload:/tmp/x.jpg")
 
 
 def test_release_cameras_closes_shared_stream(monkeypatch):
