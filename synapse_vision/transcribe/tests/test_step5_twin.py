@@ -96,7 +96,10 @@ def test_missing_t1_t2_modules_still_produce_a_valid_twin(monkeypatch, tmp_path)
     monkeypatch.setattr(twin_mod, "_segment", lambda p: {"regions": [], "lines": []})
     monkeypatch.setattr(twin_mod, "transcribe_page", lambda d, layout, prev=None: [])
     twin = twin_mod.build_page_twin(str(img_path))
-    assert twin_errors(twin) == [] and twin["lines"] == [] and twin["image"]["width"] == 600
+    assert twin_errors(twin) == [] and twin["lines"] == []
+    # T1 may dewarp to a fixed frame or keep a flat upload's size: trust whatever file it hands back.
+    dewarped = cv2.imread(str(twin_mod.resolve(twin["image"]["dewarped_path"])))
+    assert dewarped is not None and (twin["image"]["width"], twin["image"]["height"]) == (dewarped.shape[1], dewarped.shape[0])
     assert twin["latency_ms"]["total"] >= 0
 
 

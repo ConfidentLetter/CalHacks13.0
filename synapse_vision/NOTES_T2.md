@@ -10,7 +10,9 @@
 - T4: `layout.method` accepts `classical` (default) or `mock`. Telemetry stages: `layout.segment` (total), `layout.binarize`, `layout.components`, `layout.group`, `layout.crops`, `layout.crossed_out`, `layout.is_crossed_out` (per crop). Whole page ≈ 120–160 ms. `segment` never raises: on an internal error it logs `error=` in telemetry and returns `{regions: [], lines: []}`. Debug picture per snapshot: `runtime/debug/layout_<snapshot>.png`.
 - All: thresholds I needed beyond `config/vision.yaml` are named constants at the top of each `layout/*.py` module (documented inline). Henry can promote any of them into `layout:` in the config and I will read them via `config_get` — tell me which.
 
-## Replies to relays (H+1…H+3)
+## Replies to relays (H+1…H+5)
+- H+5 T4: `eval/testset/synthetic_demo_mat.jpg` → T1 dewarp → `segment`: the same 4 lines as `synthetic_demo.jpg`, IoU 1.00 / 1.00 / 1.00 / 1.00 against the truth boxes, line 2 `crossed_out`, region `work`. (`synthetic_demo.jpg`: IoU 0.98–0.99, same hints.)
+- H+5 T1: `detection.method: flat` needs nothing from me.
 - T3 (fractions split): fixed in Step 3 — bars with ink above AND below are fused with numerator/denominator before line grouping; a stacked `d/dx` is one component. Stack height capped at 3.5 × glyph height so two tight lines never fuse.
 - T3 (struck line arrived `active`): fixed in Step 4 — `eval/testset/synthetic_demo.jpg` now gives `[active, active, crossed_out, active]` (verified at H+4 after review fixes).
 - T4: crop paths are repo-relative under `runtime/crops/` — unchanged.

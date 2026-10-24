@@ -70,12 +70,26 @@ def finalize(p: Plan, rr: dict | None, *, context: list[str], order: int, qualit
         if choice == "A":
             final, conf = line_r, (compare.CONF_AGREE if p.agree else compare.CONF_REREAD_PICKED_LINE)
         elif choice == "B":
-            final, conf = page_r, (compare.CONF_AGREE if p.agree else compare.CONF_REREAD_PICKED_PAGE)
+            # The page reading never carries agreement-level confidence unless its latex is identical.
+            same_latex = compare.same_latex(line_r, page_r)
+            final, conf = page_r, (compare.CONF_AGREE if p.agree and same_latex else compare.CONF_REREAD_PICKED_PAGE)
         else:
-            final, conf = {k: rr[k] for k in ("latex", "text", "kind", "illegible", "uncertain")}, compare.CONF_REREAD_OWN
+            own = {k: rr.get(k) for k in ("latex", "text", "kind", "illegible", "uncertain")}
+            # A lone third reading never outvotes two readings it matches with neither: if the re-read's own
+            # transcription equals A or B after normalization, that candidate wins; otherwise keep the
+            # line pass (detail crop + context) at low confidence with every differing span flagged.
+            if compare.readings_agree(own, line_r):
+                final, conf, choice = line_r, compare.CONF_REREAD_PICKED_LINE, "neither_matches_A"
+            elif compare.readings_agree(own, page_r):
+                final, conf, choice = page_r, compare.CONF_REREAD_PICKED_PAGE, "neither_matches_B"
+            else:
+                final, conf, choice = line_r, compare.CONF_THREE_WAY, "neither_unmatched"
+                rr = {**rr, "own_reading": own}
         notes.append(f"reread_{choice}")
     final_latex = final.get("latex") or ""
     diff = compare.diff_spans(final_latex, line_r.get("latex") or "") + compare.diff_spans(final_latex, other_latex)
+    if rr and rr.get("own_reading"):
+        diff = diff + compare.diff_spans(final_latex, rr["own_reading"].get("latex") or "")
     mspans, unplaced = compare.model_spans(final)
     spans = compare.merge_spans(mspans, diff)
 

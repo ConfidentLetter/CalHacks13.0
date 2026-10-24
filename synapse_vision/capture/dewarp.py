@@ -15,6 +15,12 @@ ASPECT_SNAP_TOLERANCE = 0.03
 ASPECT_CLAMP = (1.15, 1.60)
 CLAHE_CLIP, CLAHE_GRID = 2.0, (8, 8)
 PAPER_TARGET_LEVEL = 235.0   # flattened paper is pushed to this gray level (ink contrast for T2/T3)
+RULE_MIN_DARKNESS = 6           # below the local paper level; paper noise stays under this, faint rules are 12-40
+RULE_CENTRAL_MARGIN = 0.10      # coverage is measured over the central 80 % of the page
+RULE_COVERAGE_MIN = 0.70        # a row/column dark over this fraction of the central span is printed ruling
+RULE_PAD_PX = 1                 # widen the rule mask to catch anti-aliased edges
+RULE_TILT_TOLERANCE_PX = 3      # rules may drift this many rows across the page after dewarp
+RULE_INK_RATIO, RULE_INK_MARGIN = 2.0, 20   # pixels darker than this (vs the rule level) are writing, kept
 
 
 @dataclass
@@ -87,7 +93,8 @@ def to_portrait(quad: np.ndarray) -> np.ndarray:
 # ----------------------------------------------------------------------------- lighting
 
 def normalize_lighting(color: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Divide by a heavily blurred background (flattens shading), then CLAHE on gray. Returns (color, gray)."""
+    """Divide by a heavily blurred background (flattens shading); gray additionally has printed ruling
+    suppressed, then CLAHE. Color keeps the ruling (T2's crossed-out logic wants the original ink colours)."""
     gray = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
     quarter = cv2.resize(gray, (max(8, gray.shape[1] // 4), max(8, gray.shape[0] // 4)), interpolation=cv2.INTER_AREA)
     sigma = max(4.0, max(quarter.shape) / 40.0)
@@ -97,8 +104,58 @@ def normalize_lighting(color: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     gain = np.clip(PAPER_TARGET_LEVEL / background, 0.5, 4.0)
     flat_color = np.clip(color.astype(np.float32) * gain[:, :, None], 0, 255).astype(np.uint8)
     flat_gray = np.clip(gray.astype(np.float32) * gain, 0, 255).astype(np.uint8)
+    flat_gray, _ = suppress_printed_rules(flat_gray)
     clahe = cv2.createCLAHE(clipLimit=CLAHE_CLIP, tileGridSize=CLAHE_GRID)
     return flat_color, clahe.apply(flat_gray)
+
+
+def _rule_lines(inverted: np.ndarray, axis: int, tol: int) -> np.ndarray:
+    """Boolean per row (axis=1) or column (axis=0): darkness above the floor across most of the central span."""
+    h, w = inverted.shape
+    kernel = (1, tol) if axis == 1 else (tol, 1)
+    fat = cv2.dilate(inverted, cv2.getStructuringElement(cv2.MORPH_RECT, kernel))
+    if axis == 1:
+        x0, x1 = int(w * RULE_CENTRAL_MARGIN), int(w * (1 - RULE_CENTRAL_MARGIN))
+        coverage = (fat[:, x0:x1] >= RULE_MIN_DARKNESS).mean(axis=1)
+    else:
+        y0, y1 = int(h * RULE_CENTRAL_MARGIN), int(h * (1 - RULE_CENTRAL_MARGIN))
+        coverage = (fat[y0:y1, :] >= RULE_MIN_DARKNESS).mean(axis=0)
+    return coverage >= RULE_COVERAGE_MIN
+
+
+def suppress_printed_rules(flat_gray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Remove printed ruling (horizontal rules and vertical margin lines that run across most of the page) from a
+    flattened gray page by filling them with the local paper level. Handwriting rarely spans the page, so fraction
+    bars, underlines and strokes survive; ink much darker than the rule that crosses it is kept.
+    Caveat: a single stroke across > ~55 % of the page width is treated as ruling in the GRAY output only.
+    Returns (gray, mask)."""
+    paper = cv2.medianBlur(flat_gray, 15)                 # local paper level (rules and strokes are thinner than 7 px)
+    inverted = cv2.subtract(paper, flat_gray)             # darkness below the paper, 0 on clean paper
+    tol = 2 * RULE_TILT_TOLERANCE_PX + 1
+    rows, cols = _rule_lines(inverted, 1, tol), _rule_lines(inverted, 0, tol)
+    if not rows.any() and not cols.any():
+        return flat_gray, np.zeros_like(flat_gray)
+    h, w = flat_gray.shape
+    pad = cv2.getStructuringElement(cv2.MORPH_RECT, (1, tol))
+    bands = [cv2.dilate(rows.astype(np.uint8)[:, None] * np.ones((1, w), np.uint8), pad) > 0,
+             cv2.dilate(cols.astype(np.uint8)[None, :] * np.ones((h, 1), np.uint8), pad.T.copy()) > 0]
+    remove = np.zeros((h, w), bool)
+    keep_ink = np.zeros((h, w), bool)
+    for band in bands:                                    # rules and margin lines differ in darkness: cut off per orientation
+        candidates = band & (inverted >= RULE_MIN_DARKNESS)
+        if candidates.sum() < 50:
+            continue
+        rule_level = float(np.median(inverted[candidates]))
+        ink_cutoff = max(rule_level * RULE_INK_RATIO, rule_level + RULE_INK_MARGIN)
+        remove |= candidates & (inverted <= ink_cutoff)
+        keep_ink |= band & (inverted > ink_cutoff)
+    if not remove.any():
+        return flat_gray, np.zeros_like(flat_gray)
+    mask = cv2.dilate(remove.astype(np.uint8) * 255, cv2.getStructuringElement(cv2.MORPH_RECT, (2 * RULE_PAD_PX + 1, 2 * RULE_PAD_PX + 1)))
+    mask[keep_ink] = 0
+    cleaned = flat_gray.copy()
+    cleaned[mask > 0] = paper[mask > 0]
+    return cleaned, mask
 
 
 # ----------------------------------------------------------------------------- warp

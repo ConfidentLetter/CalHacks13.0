@@ -42,6 +42,12 @@ def parse_ok(latex: str) -> bool:
     if not latex or not latex.strip():
         return False
     sides = _EQ_SPLIT_RE.split(latex)
+    # A line that starts or ends with a relation ("= 2\cos x" continuing the line above, "x^{2} =" unfinished)
+    # is normal student work: drop that one empty end. An empty side in the middle ("x==1") is not parseable.
+    if sides and not sides[0].strip():
+        sides = sides[1:]
+    if sides and not sides[-1].strip():
+        sides = sides[:-1]
     if not sides or any(not p.strip() for p in sides):
-        return False  # "x^{2}=" has an empty side: not parseable math
+        return False
     return all(_parse_one(side) for side in sides)

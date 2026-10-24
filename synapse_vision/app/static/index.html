@@ -163,6 +163,8 @@ function renderHeader(twin) {
   const issues = (twin.quality && twin.quality.issues) || [];
   if (twin.quality && twin.quality.ok && !issues.length) q.innerHTML = '<span class="chip ok">quality ok</span>';
   if (twin.quality && !twin.quality.ok) q.innerHTML += '<span class="chip bad">quality: not ok</span> ';
+  const method = twin.detection && twin.detection.method;
+  if (method) q.innerHTML += `<span class="chip dim" title="T1 page detection method">${esc(method)}</span> `;
   for (const i of issues) q.innerHTML += `<span class="chip ${WARN_ISSUES.has(i) ? 'warn' : 'bad'}">${esc(i.replace('_', ' '))}</span> `;
   const lat = twin.latency_ms && (twin.latency_ms.snapshot_to_twin || twin.latency_ms.total);
   const when = twin.captured_at ? new Date(twin.captured_at).toLocaleTimeString() : '';
@@ -251,19 +253,23 @@ function select(id) {
   const pagePass = rd(readings.page ?? readings.page_pass), linePass = rd(readings.line ?? readings.line_pass);
   const notesRaw = readings.notes;
   const notes = notesRaw == null || notesRaw === '[]' || (Array.isArray(notesRaw) && !notesRaw.length) ? '' : (typeof notesRaw === 'string' ? notesRaw : JSON.stringify(notesRaw));
-  const reread = l.reread || (readings.reread != null ? { ran: true, result: rd(readings.reread), reason: notes } : null);
+  // T3 re-read: {choice: 'A'|'B'|'neither', latex, text, zoom_path, candidates: {A: line reading, B: page reading}}
+  const rr = l.reread || readings.reread || null;
+  const reread = rr && typeof rr === 'object' && ('choice' in rr || 'candidates' in rr)
+    ? { ran: true, result: rd(rr), reason: `chose ${rr.choice || '?'}` + (rr.choice === 'A' ? ' (line pass)' : rr.choice === 'B' ? ' (page pass)' : rr.choice === 'neither' ? ' (own reading)' : ''), zoom: rr.zoom_path, cands: rr.candidates }
+    : (rr != null ? { ran: true, result: rd(rr), reason: notes } : null);
   const fig = (cap, p) => `<figure><figcaption>${cap}</figcaption>${p ? `<img src="${esc(fileUrl(p))}" alt="${cap}" onerror="this.outerHTML='<div class=none>missing: ${esc(p)}</div>'">` : '<div class="none">n/a</div>'}</figure>`;
   const code = (v) => v == null ? '<em>n/a</em>' : `<code>${esc(typeof v === 'string' ? v : JSON.stringify(v))}</code>`;
   const alt = (l.uncertain_spans || []).map((s) => `[${s.start},${s.end}) → ${(s.alternatives || []).join(' | ')}`).join('<br>') || '<em>none</em>';
   panel.innerHTML = `<h2><span>${esc(l.id)} · order ${l.order + 1} · ${esc(l.kind)} · ${esc(l.status)}</span><button onclick="select(null)">close</button></h2>
-    <div class="crops">${fig('line crop', l.crop_path)}${fig('context crop (±1 line)', l.context_crop_path)}</div>
+    <div class="crops">${fig('line crop', l.crop_path)}${fig('context crop (±1 line)', l.context_crop_path)}${reread && reread.zoom ? fig('re-read zoom (3×)', reread.zoom) : ''}</div>
     <table class="kv">
       <tr><td>final latex</td><td>${code(l.latex)}</td></tr>
       <tr><td>text</td><td>${esc(l.text)}</td></tr>
       <tr><td>page pass</td><td>${code(pagePass)}</td></tr>
       <tr><td>line pass</td><td>${code(linePass)}</td></tr>
       <tr><td>agreement</td><td>${pagePass != null && linePass != null ? (pagePass.replace(/\s+/g, '') === linePass.replace(/\s+/g, '') ? '<span class="status" style="color:var(--green)">agree</span>' : '<span class="status crossed_out">disagree → re-read</span>') : '<em>n/a</em>'}${readings.cached ? ' · <span class="status">cached (crop unchanged)</span>' : ''}${notes ? `<br><span class="hint">${esc(notes)}</span>` : ''}</td></tr>
-      <tr><td>re-read</td><td>${reread ? `${reread.ran ? 'ran' : 'not run'}${reread.reason ? ' — ' + esc(reread.reason) : ''}${reread.result != null ? ' → ' + code(reread.result) : ''}` : '<em>n/a</em>'}</td></tr>
+      <tr><td>re-read</td><td>${reread ? `${reread.ran ? 'ran' : 'not run'}${reread.reason ? ' — ' + esc(reread.reason) : ''}${reread.result != null ? ' → ' + code(reread.result) : ''}${reread.cands ? `<br><span class="hint">A (line): ${esc(rd(reread.cands.A))} · B (page): ${esc(rd(reread.cands.B))}</span>` : ''}` : '<em>not needed (readings agreed)</em>'}</td></tr>
       <tr><td>confidence</td><td><span class="conf ${confClass(l.confidence)}">${l.confidence.toFixed(2)}</span> &nbsp; parse_ok: ${l.parse_ok}</td></tr>
       <tr><td>uncertain</td><td>${alt}</td></tr>
       <tr><td>latency</td><td>${typeof l.latency_ms === 'number' ? Math.round(l.latency_ms) + ' ms' : (l.latency_ms && typeof l.latency_ms === 'object' ? Object.entries(l.latency_ms).map(([k, v]) => `${k} ${Math.round(v)}`).join(' · ') + ' ms' : null) || (state.twin.latency_ms ? 'page: ' + Object.entries(state.twin.latency_ms).map(([k, v]) => `${k} ${Math.round(v)}`).join(' · ') + ' ms' : '<em>n/a</em>')}${l.status_hint ? ` · layout hint: ${esc(l.status_hint)}` : ''}${l.ink_density != null ? ` · ink ${Number(l.ink_density).toFixed(3)}` : ''}</td></tr>

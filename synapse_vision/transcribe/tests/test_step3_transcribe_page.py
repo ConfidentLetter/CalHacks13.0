@@ -215,3 +215,51 @@ def test_viewer_fields_per_line_and_incremental_stage(fake, monkeypatch):
     _run(fake, previous=previous)
     inc = [(s, kw) for s, _, kw in logged if "incremental" in s]
     assert len(inc) == 1 and inc[0][1]["new_lines"] == 1
+
+
+TEXT_LINE = str(HERE / "ex_text_line.png")
+
+
+def test_prime_added_by_page_pass_on_a_mixed_line_is_never_silent(fake):
+    """T4 H+5: 'Find f'(x) if f(x) = x^2 sin x' — page pass read f'(x)=..., line pass f(x)=...; text identical."""
+    fake.page_override[TEXT_LINE] = {"latex": "f'(x)=x^{2}\\sin x", "text": "Find f'(x) if f(x) = x^2 sin x",
+                                     "kind": "mixed", "illegible": False, "uncertain": []}
+    fake.reread_choice = "A"
+    line = _run(fake)[NAMES.index("ex_text_line")]
+    assert line["latex"] == "f(x)=x^{2}\\sin x" and line["confidence"] < 0.9
+    assert any(s["alternatives"] == ["'"] for s in line["uncertain_spans"])
+    assert TEXT_LINE in {a[0] for a in fake.reread_args}, "a latex disagreement must trigger the re-read"
+    # even when the re-read sides with the page pass, 0.92 is impossible and the span stays flagged
+    fake.reread_choice = "B"
+    fake.reread_args.clear()
+    line = _run(fake)[NAMES.index("ex_text_line")]
+    assert line["latex"] == "f'(x)=x^{2}\\sin x" and line["confidence"] <= 0.78 and line["uncertain_spans"]
+
+
+def test_page_reading_never_gets_agreement_confidence_with_different_latex(fake):
+    fake.page_override[PRODUCT] = {"latex": "\\frac{d}{dx}x^{2}\\sin x=2x\\cos x", "text": "same", "kind": "math",
+                                   "illegible": False, "uncertain": []}
+    fake.reread_choice = "B"
+    pr = _run(fake)[NAMES.index("ex_product_rule_mistake")]
+    assert pr["confidence"] >= 0.9  # identical latex: agreement confidence is fine even when B is picked
+    fake.page_override[PRODUCT]["latex"] = "\\frac{d}{dx}x^{2}\\sin x=2x\\cos x'"
+    pr = _run(fake)[NAMES.index("ex_product_rule_mistake")]
+    assert pr["latex"].endswith("'") and pr["confidence"] <= 0.78 and pr["uncertain_spans"]
+
+
+def test_reread_neither_cannot_outvote_both_passes(fake):
+    """Live H+5: re-read answered 'neither' with f'(x)x^2\\sin x (dropped '='); it must not win alone."""
+    fake.page_override[TEXT_LINE] = {"latex": "f'(x)=x^{2}\\sin x", "text": "Find f'(x) if f(x) = x^2 sin x",
+                                     "kind": "mixed", "illegible": False, "uncertain": []}
+    fake.reread_choice = "neither"
+    fake.reread_own = {"latex": "f'(x)x^{2}\\sin x", "text": "Find f'(x) if f(x) x^2 sin x", "kind": "mixed",
+                       "illegible": False, "uncertain": []}
+    line = _run(fake)[NAMES.index("ex_text_line")]
+    assert line["latex"] == "f(x)=x^{2}\\sin x" and line["confidence"] <= 0.55
+    assert "reread_neither_unmatched" in line["readings"]["notes"]
+    alts = {a for s in line["uncertain_spans"] for a in s["alternatives"]}
+    assert "'" in alts and "" in alts  # prime (vs page) and the dropped '=' (vs re-read) are both flagged
+    # when the re-read's own reading matches one candidate, that candidate wins
+    fake.reread_own = {"latex": "f'(x)=x^{2}\\sin x", "text": "", "kind": "mixed", "illegible": False, "uncertain": []}
+    line = _run(fake)[NAMES.index("ex_text_line")]
+    assert line["latex"] == "f'(x)=x^{2}\\sin x" and "reread_neither_matches_B" in line["readings"]["notes"]

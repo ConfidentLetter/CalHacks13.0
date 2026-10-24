@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from difflib import SequenceMatcher
 
-from transcribe.align import reading_similarity, readings_equal
+from transcribe.align import latex_key, reading_similarity, readings_equal
 
 CONF_AGREE = 0.92
 CONF_REREAD_PICKED_LINE = 0.78
 CONF_REREAD_PICKED_PAGE = 0.72
 CONF_REREAD_OWN = 0.65
+CONF_THREE_WAY = 0.55  # line, page and re-read all differ: keep the line pass, flag everything
 CONF_UNRESOLVED = 0.5
 CONF_SINGLE_PASS_CAP = 0.7
 PARSE_FAIL_PENALTY = 0.1
@@ -20,6 +21,10 @@ UNPLACED_UNCERTAIN_PENALTY = 0.03
 def readings_agree(a: dict, b: dict) -> bool:
     """Exact agreement after normalization. A single digit/sign difference is a disagreement."""
     return readings_equal(a, b)
+
+
+def same_latex(a: dict, b: dict) -> bool:
+    return latex_key(a) == latex_key(b)
 
 
 def readings_near(a: dict, b: dict, threshold: float) -> bool:

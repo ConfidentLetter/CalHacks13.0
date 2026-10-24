@@ -44,11 +44,13 @@ def reading_similarity(a: dict, b: dict) -> float:
 
 
 def readings_equal(a: dict, b: dict) -> bool:
-    """Exact agreement after normalization (kind-robust)."""
-    if a.get("kind") == b.get("kind"):
-        return reading_key(a) == reading_key(b) and reading_key(a) != ""
+    """Exact agreement after normalization: whenever both readings carry latex, the latex must match
+    (a prime or a sign in the math part is a disagreement even when the prose text matches);
+    pure prose (no latex on either side) compares by text."""
     la, lb, ta, tb = latex_key(a), latex_key(b), text_key(a), text_key(b)
-    return (la and la == lb) or (not la and not lb and ta and ta == tb)
+    if la or lb:
+        return bool(la) and la == lb
+    return bool(ta) and ta == tb
 
 
 def similarity(a: str, b: str) -> float:

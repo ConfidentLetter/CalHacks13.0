@@ -41,12 +41,12 @@ def test_normalize_is_idempotent_and_handles_empty():
 
 
 @pytest.mark.parametrize("latex", ["x^{2}", "f'(x)=2x\\cdot\\cos x", "\\frac{x^{2}+1}{2x}", "(x+3)^{2}=x^{2}+9",
-                                   "f'(0)=2\\cdot 0\\cdot\\cos 0=0"])
+                                   "f'(0)=2\\cdot 0\\cdot\\cos 0=0", "=2\\cos x", "x^{2}="])
 def test_parse_ok_true_on_well_formed_including_wrong_math(latex):
     assert parse_ok(latex) is True
 
 
-@pytest.mark.parametrize("latex", ["", "\\frac{1}{", "x^{2}=", "((x"])
+@pytest.mark.parametrize("latex", ["", "\\frac{1}{", "x==1", "((x", "="])
 def test_parse_ok_false_on_broken(latex):
     assert parse_ok(latex) is False
 
@@ -107,3 +107,19 @@ def test_strict_schema_has_no_additional_properties():
 @pytest.mark.parametrize("latex", ["\\left(x+1\\right)^{2}=1", "x\\leq 2", "a\\neq b", "\\left(x+1\\right)^2"])
 def test_parse_ok_handles_left_right_and_relations(latex):
     assert parse_ok(latex) is True
+
+
+def test_client_is_built_with_timeout_and_retries(monkeypatch):
+    import anthropic
+
+    captured = {}
+
+    class FakeAnthropic:
+        def __init__(self, **kw):
+            captured.update(kw)
+
+    monkeypatch.setattr(anthropic, "Anthropic", FakeAnthropic)
+    monkeypatch.setattr(client, "_client", {})
+    monkeypatch.setattr(client, "cfg", lambda k, d=None: {"transcribe.call_timeout_s": 7.5, "transcribe.sdk_max_retries": 1}.get(k, d))
+    client.get_client()
+    assert captured == {"max_retries": 1, "timeout": 7.5}

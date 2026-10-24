@@ -21,6 +21,7 @@ from transcribe.examples import prefix
 DEFAULT_MODEL = "claude-sonnet-5-5"
 DEFAULT_EFFORT = "medium"
 DEFAULT_THINKING = "adaptive"
+DEFAULT_CALL_TIMEOUT_S = 60.0  # measured tail under API throttling is ~27 s per call; keep well above it
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.S)
 _structured_ok = {"value": True}
 _client_lock = threading.Lock()
@@ -42,7 +43,10 @@ def get_client():
         if "c" not in _client:
             import anthropic
 
-            _client["c"] = anthropic.Anthropic(max_retries=int(cfg("transcribe.sdk_max_retries", 2)))
+            # A hung call must not stall the whole snapshot: the SDK raises APITimeoutError, the line degrades
+            # honestly (single pass / no_reading) instead of blocking the budget.
+            _client["c"] = anthropic.Anthropic(max_retries=int(cfg("transcribe.sdk_max_retries", 2)),
+                                               timeout=float(cfg("transcribe.call_timeout_s", DEFAULT_CALL_TIMEOUT_S)))
         return _client["c"]
 
 

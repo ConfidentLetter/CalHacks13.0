@@ -247,3 +247,42 @@ def test_white_paper_is_not_glare_but_a_lamp_blob_is():
     paper = np.full((1100, 850), 205, np.uint8)
     cv2.circle(paper, (425, 550), 120, 255, -1)
     assert 0.02 < Q.glare_fraction(paper) < 0.08
+
+
+# ----------------------------------------------------------------------------- printed ruling (H+5 relay from T2)
+
+def _rule_visibility(gray: np.ndarray, rows: list[int]) -> float:
+    paper = cv2.medianBlur(gray, 15)
+    inverted = cv2.subtract(paper, gray)
+    return float(np.mean([(inverted[max(0, y - 4):y + 5, 300:1400] >= 8).any(axis=0).mean() for y in rows]))
+
+
+def test_printed_rules_suppressed_in_gray_but_kept_in_color():
+    from capture.dewarp import suppress_printed_rules
+
+    s = synth.render(1, ruled=True, n_lines=5)
+    dw = dewarp(s.image, order_corners(s.corners))
+    ph = s.page.shape[0]
+    top, spacing, sy = int(ph * 0.10), int(ph * 0.065), dw.gray.shape[0] / ph
+    rule_rows = [int(round(y * sy)) for y in range(top, ph - int(ph * 0.05), spacing)]
+    raw = cv2.cvtColor(dw.color, cv2.COLOR_BGR2GRAY)
+    assert _rule_visibility(raw, rule_rows) > 0.9, "bench page really has rules"
+    assert _rule_visibility(dw.gray, rule_rows) < 0.15, "gray output: rules suppressed"
+    margin_x = int((int(s.page.shape[1] * 0.10) - 20) * dw.gray.shape[1] / s.page.shape[1])
+    cleaned, _ = suppress_printed_rules(raw)
+    assert (cleaned[300:1900, margin_x - 3:margin_x + 4] < 200).mean() < 0.05, "vertical margin line suppressed"
+
+
+def test_rule_suppression_keeps_handwriting_and_fraction_bars():
+    from capture.dewarp import suppress_printed_rules
+
+    s = synth.render(4, ruled=True, n_lines=0)
+    page = s.page.copy()
+    cv2.putText(page, "f'(x) = 2x cos x", (120, 400), cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, 1.6, (40, 30, 30), 3, cv2.LINE_AA)
+    cv2.line(page, (200, 900), (520, 900), (40, 30, 30), 3)          # a fraction bar / underline, 38 % of the width
+    gray = cv2.cvtColor(page, cv2.COLOR_BGR2GRAY)
+    cleaned, mask = suppress_printed_rules(gray)
+    ink = gray < 120
+    assert (mask[ink] > 0).mean() < 0.10, "at most the anti-aliased edges of strokes crossing a rule are touched"
+    assert (cleaned[898:903, 250:470] < 150).mean() > 0.5, "fraction bar kept"
+    assert mask.sum() > 0, "the rules themselves were found"

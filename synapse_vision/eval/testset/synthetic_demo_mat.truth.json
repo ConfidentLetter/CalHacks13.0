@@ -23,7 +23,7 @@
     74.0
    ],
    "status": "active",
-   "latex": "f(x)=x^{\\wedge}2\\sin x",
+   "latex": "f(x)=x^2\\sin x",
    "text": "Find f'(x) if f(x) = x^2 sin x",
    "confidence_at_prelabel": 0.92,
    "planted_error": false,
