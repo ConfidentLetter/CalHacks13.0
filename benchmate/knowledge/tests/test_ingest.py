@@ -23,6 +23,28 @@ def tmp_index(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(not SMALL_PDF.is_file(), reason="datasheet not downloaded")
+def test_ingest_two_sources_keeps_both_and_aligns_embeddings(tmp_index):
+    other = DATASHEETS_DIR / "arduino-uno-pinout.pdf"
+    n1 = ing.ingest(str(SMALL_PDF), "tmp-part")
+    n2 = ing.ingest(str(other), "tmp-part")
+    chunks = ing.load_chunks("tmp-part")
+    assert len(chunks) == n1 + n2
+    assert len(ing.load_embeddings("tmp-part")) == n1 + n2
+    assert set(ing.load_pages("tmp-part")) == {"knowledge/datasheets/esp32-devkitc-v4.pdf",
+                                               "knowledge/datasheets/arduino-uno-pinout.pdf"}
+    ing.ingest(str(SMALL_PDF), "tmp-part")  # re-ingest one source: counts unchanged
+    assert len(ing.load_chunks("tmp-part")) == n1 + n2
+
+
+@pytest.mark.skipif(not SMALL_PDF.is_file(), reason="datasheet not downloaded")
+def test_search_survives_corrupt_pages_file(tmp_index):
+    ing.ingest(str(SMALL_PDF), "tmp-part")
+    (tmp_index / "tmp-part.pages.json").write_text("{not json")
+    srch.invalidate()
+    assert srch.search("tmp-part", "power supply", k=2) == []  # degraded, but no exception
+
+
+@pytest.mark.skipif(not SMALL_PDF.is_file(), reason="datasheet not downloaded")
 def test_ingest_real_pdf_labels_chunks_embeddings(tmp_index):
     n = ing.ingest(str(SMALL_PDF), "tmp-part")
     assert n > 10

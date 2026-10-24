@@ -1,7 +1,6 @@
 """Every function from contracts/interfaces.md exists with the exact signature and schema-valid output."""
 import inspect
 import json
-import tempfile
 from pathlib import Path
 
 import jsonschema

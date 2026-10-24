@@ -1,0 +1,33 @@
+# All tunables in one place (the "configurable blueprint" idea from the NeMo Agent Toolkit poster).
+# app.config.get("section.key") reads this; edits take effect without restarting.
+
+capture:
+  source: webcam            # pi | webcam | upload
+  pi_url: http://raspberrypi.local:8080/snapshot.jpg
+  webcam_index: 0
+  stable_seconds: 1.0       # scene must be still this long before we analyse
+  change_threshold: 0.02    # mean abs diff on 160x120 grayscale
+
+page:
+  output_long_side: 2200    # dewarped page height for portrait paper
+  min_page_area_fraction: 0.25
+  blur_threshold: 80        # variance of Laplacian below this -> 'blur'
+  glare_fraction_max: 0.04
+  use_aruco_fallback: true
+
+layout:
+  method: classical         # classical | doctr
+  min_line_height_px: 28
+  context_lines: 1          # lines above/below included in context crops
+  crossed_out_min_conf: 0.6
+
+transcribe:
+  model_env: SV_MODEL       # model name read from this env var
+  max_parallel: 6
+  agreement_threshold: 0.92 # normalized-similarity between the two readings to count as agreement
+  low_confidence: 0.6
+  reread_on_disagreement: true
+
+budget_ms:
+  snapshot_to_twin_first: 8000
+  new_line_incremental: 3000

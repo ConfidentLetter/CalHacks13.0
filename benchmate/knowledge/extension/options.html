@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BenchMate Study Mode — options</title>
+<style>
+  body { font: 14px/1.4 -apple-system, system-ui, sans-serif; margin: 0; padding: 16px; max-width: 520px; color: #1b1b1b; background: #fff; }
+  h1 { font-size: 16px; margin: 0 0 8px; }
+  p { margin: 6px 0; color: #444; }
+  textarea { width: 100%; height: 220px; font: 13px/1.4 ui-monospace, Menlo, monospace; box-sizing: border-box; }
+  input[type=text] { width: 100%; box-sizing: border-box; font: 13px ui-monospace, Menlo, monospace; }
+  button { margin-top: 8px; padding: 6px 12px; }
+  .ok { color: #2f9e44; margin-left: 8px; }
+</style>
+</head>
+<body>
+  <h1>Allow-listed sites</h1>
+  <p>Reads are only recorded on these domains (and their subdomains). One per line.</p>
+  <textarea id="allowlist"></textarea>
+  <p>Local BenchMate endpoint (must be localhost):</p>
+  <input type="text" id="endpoint">
+  <div><button id="save">Save</button><button id="reset">Reset to defaults</button><span class="ok" id="saved"></span></div>
+  <script src="common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

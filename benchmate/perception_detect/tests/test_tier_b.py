@@ -115,3 +115,16 @@ def test_tier_b_skipped_when_weights_missing(monkeypatch):
     monkeypatch.setenv("BM_TIER_B", "0")
     info = {}
     assert comps_mod._run_tier_b("f.jpg", None, H, info) == [] and info["tier_b"] == "disabled"
+
+
+def test_board_sized_boxes_are_not_components():
+    from perception_detect.tier_b import component_sized
+    p = pitch_px(H)
+    assert component_sized((0, 0, 19 * p, 10 * p), H)          # ESP32 DevKit footprint
+    assert component_sized((0, 0, 4 * p, 3 * p), H)            # sensor
+    assert not component_sized((0, 0, 50 * p, 12 * p), H)      # most of the board
+    assert not component_sized((0, 0, 10 * p, 20 * p), H)      # taller than the board
+    det = lambda path: [Detection((0, 0, 50 * p, 12 * p), 0.9, "a small electronic sensor breakout board"),
+                        Detection((0, 0, 4 * p, 3 * p), 0.5, "a small electronic sensor breakout board")]
+    out = detect_boxes("f.jpg", None, det, homography=H)
+    assert [d.score for d in out] == [0.5]

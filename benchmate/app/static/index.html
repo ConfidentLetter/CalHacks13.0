@@ -200,7 +200,8 @@
     if (m.stage === 'mock') { S.mock = true; $('mockbadge').classList.add('on'); }
     if (m.stage === 'live') { S.mock = false; $('mockbadge').classList.remove('on'); }
     if (m.stage === 'calibrate') { const mk = m.markers; S.corners = []; setStage(`calibrated (${m.manual ? 'manual corners' : 'ArUco'})${mk ? ` · ${mk.length}/4 markers` : ''}`, ''); return; }
-    if (m.stage === 'markers') { setStage(m.markers == null ? 'marker detection unavailable' : `<b>${m.markers.length}/4 markers</b> visible — click 4 corners (TL, TR, BR, BL) if fewer`); return; }
+    if (m.stage === 'markers') { setStage(m.markers == null ? 'marker detection unavailable' : `<b>${m.markers.length}/4 markers</b> visible — if fewer, click the four corner holes of the main grid: A1 (TL), A63 (TR), J63 (BR), J1 (BL)`); return; }
+    if (m.stage === 'refine' && m.nothing_new) { setStage(`<b>refine</b> ${fmtMs(m.ms)} · nothing new`, ''); S.lastMs.refine = m.ms; renderLatency(); return; }
     if (m.ms != null && m.ms > 0) { S.lastMs[m.stage] = m.ms; setStage(`<b>${m.stage}</b> ${fmtMs(m.ms)}${m.over_budget ? ' <span class="err">over budget</span>' : ''}`, ''); renderLatency(); }
   }
   const fmtMs = ms => ms >= 1000 ? (ms / 1000).toFixed(2) + ' s' : Math.round(ms) + ' ms';
@@ -220,7 +221,7 @@
   // ------------------------------------------------------------------ twin + overlay
   function setTwin(twin) {
     S.twin = twin; S.selected = null; $('popover').style.display = 'none';
-    $('cards-meta').textContent = twin ? `frame ${twin.frame_id}${twin._mock_scenario ? ' · mock ' + twin._mock_scenario : ''}` : '';
+    $('cards-meta').textContent = twin ? `frame ${twin.frame_id}${twin._mock_scenario ? ' · mock ' + twin._mock_scenario : ''}${twin.calibration ? ' · cal ' + twin.calibration : ''}` : '';
     draw();
   }
   // Mock twins carry pixel [0,0]; lay holes out on a synthetic grid so the overlay still means something.

@@ -38,6 +38,8 @@ SETTLE_SECONDS = 0.8                # scene must be still this long before we an
 JPEG_QUALITY_STREAM = 80
 JPEG_QUALITY_STILL = 95
 REOPEN_AFTER_FAILURES = 30
+MIN_BRIGHTNESS = 5.0                # below this the frame is black (Continuity Camera enumerated but not streaming)
+PROBE_INDICES = range(6)
 
 
 def frames_dir() -> Path:
@@ -171,6 +173,51 @@ class Cv2Source(FrameSource):
         self.cap.release()
 
 
+def probe_brightness(src: FrameSource, n_frames: int = 8) -> float:
+    """Mean pixel value of the last good frame out of n (first frames are often dark). -1 if none."""
+    frame = None
+    for _ in range(n_frames):
+        f = src.read()
+        frame = f if f is not None else frame
+    return -1.0 if frame is None else float(frame.mean())
+
+
+def open_best_camera(preferred: int, opener=Cv2Source, candidates=PROBE_INDICES,
+                     min_brightness: float = MIN_BRIGHTNESS) -> Optional[FrameSource]:
+    """Open `preferred`; if it yields a black frame (a phone's Continuity Camera that is enumerated but
+    not streaming), fall through to the first candidate index whose frame is brighter than
+    min_brightness. Logs the choice. Returns None if nothing opens."""
+    first: Optional[FrameSource] = None
+    try:
+        first = opener(preferred)
+        b = probe_brightness(first)
+    except RuntimeError as exc:
+        log("camera_pick", 0, index=preferred, error=str(exc)[:100], action="probing others")
+        b = -1.0
+    if b > min_brightness:
+        log("camera_pick", 0, index=preferred, brightness=round(b, 1), reason="BM_CAMERA_INDEX")
+        return first
+    log("camera_pick", 0, index=preferred, brightness=round(b, 1), reason="black or unopenable, probing others")
+    for i in candidates:
+        if i == preferred:
+            continue
+        try:
+            src = opener(i)
+        except RuntimeError:
+            continue
+        bi = probe_brightness(src)
+        if bi > min_brightness:
+            if first is not None:
+                first.release()
+            log("camera_pick", 0, index=i, brightness=round(bi, 1), reason=f"first bright index (BM_CAMERA_INDEX={preferred} was black)")
+            print(f"[capture] BM_CAMERA_INDEX={preferred} gave a black frame; using index {i} (brightness {bi:.1f})")
+            return src
+        src.release()
+    if first is not None:
+        log("camera_pick", 0, index=preferred, brightness=round(b, 1), reason="no brighter camera found, keeping it")
+    return first
+
+
 # --------------------------------------------------------------------------- camera thread
 class Camera:
     def __init__(self, source_factory: Callable[[], FrameSource] | None = None,
@@ -196,15 +243,14 @@ class Camera:
         index = int(os.environ.get("BM_CAMERA_INDEX", "0"))
         if os.environ.get("BM_NO_CAMERA") == "1":
             return SyntheticSource()
-        try:
-            src = Cv2Source(index)
-            log("camera_open", 0, index=index, requested=[REQUESTED_W, REQUESTED_H],
-                actual=list(src.actual), locks=src.locks)
-            return src
-        except RuntimeError as exc:
-            log("camera_open", 0, index=index, error=str(exc), fallback="synthetic")
-            print(f"[capture] {exc}; using synthetic frames. Try: python -m app.capture --list")
+        src = open_best_camera(index)
+        if src is None:
+            log("camera_open", 0, index=index, error="no camera opened", fallback="synthetic")
+            print(f"[capture] no camera opened; using synthetic frames. Try: python -m app.capture --list")
             return SyntheticSource()
+        log("camera_open", 0, index=getattr(src, "index", None), requested=[REQUESTED_W, REQUESTED_H],
+            actual=list(getattr(src, "actual", (None, None))), locks=getattr(src, "locks", None))
+        return src
 
     def start(self) -> "Camera":
         if self._thread and self._thread.is_alive():

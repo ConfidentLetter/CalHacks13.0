@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeout
 from typing import Any
@@ -10,6 +11,9 @@ from reasoning._telemetry import log as tlog
 from reasoning.config import MAX_QUOTE_CHARS, SEARCH_BUDGET_MS, SEARCH_K_CITATION
 
 _POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="bm-search")
+_LOCK = threading.Lock()
+_INFLIGHT: dict[tuple[str, str, int], Future] = {}
+_WARM = threading.Event()  # set after the first search completes (T4 loads its model on first call)
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
@@ -40,15 +44,31 @@ def safe_search(part_id: str | None, query: str | None, k: int = SEARCH_K_CITATI
     if not part_id or not query:
         return []
     if budget_ms is None:
-        return _raw_search(part_id, query, k)
-    fut: Future = _POOL.submit(_raw_search, part_id, query, k)
+        hits = _raw_search(part_id, query, k)
+        _WARM.set()
+        return hits
+    key = (part_id, query, int(k))
+    with _LOCK:
+        fut = _INFLIGHT.get(key)
+        if fut is None:
+            if not _WARM.is_set() and any(not f.done() for f in _INFLIGHT.values()):
+                tlog("search_skipped_cold", 0, part_id=part_id)  # index still loading; do not queue behind it
+                return []
+            fut = _POOL.submit(_raw_search, part_id, query, k)
+            _INFLIGHT[key] = fut
     try:
-        return fut.result(timeout=budget_ms / 1000.0)
+        hits = fut.result(timeout=budget_ms / 1000.0)
+        _WARM.set()
+        return hits
     except FutureTimeout:
         tlog("search_timeout", budget_ms, part_id=part_id, query=query[:60])
         return []
     except Exception:
         return []
+    finally:
+        if fut.done():
+            with _LOCK:
+                _INFLIGHT.pop(key, None)
 
 
 def page_to_int(page: Any) -> int | None:

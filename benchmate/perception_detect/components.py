@@ -7,7 +7,7 @@ import os
 from typing import Any
 
 from ._telemetry import log, timed
-from .config import tier_b_enabled
+from .config import tier_b_enabled, tier_b_use_tiles
 from .geometry_bridge import calibrate
 from .paths import MOCK_TWIN_OK_PATH
 from .registration import set_current_homography
@@ -54,7 +54,9 @@ def _run_tier_b(frame_path: str, tiles: list[dict] | None, homography: Any, info
         info["tier_b"] = "weights not cached (python -m perception_detect.owl --download)"
         return []
     try:
-        comps, needs = tier_b_components(frame_path, tiles, homography, detector=owl.detect,
+        use_tiles = tiles if tier_b_use_tiles() else None   # default: one pass over the full frame
+        info["tier_b_tiles"] = len(use_tiles or [])
+        comps, needs = tier_b_components(frame_path, use_tiles, homography, detector=owl.detect,
                                          frame_size=_frame_size(frame_path), calibrated=calibrated)
     except Exception as exc:
         info["tier_b"] = f"error {type(exc).__name__}: {exc}"[:160]

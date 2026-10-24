@@ -33,7 +33,9 @@ def test_exact_signatures(fn, sig):
 
 
 def test_public_api_exported():
-    assert set(knowledge.__all__) == {"ingest", "search", "get_profile", "list_profiles", "record_read", "recent_reads"}
+    contract = {"ingest", "search", "get_profile", "list_profiles", "record_read", "recent_reads"}
+    assert contract <= set(knowledge.__all__)
+    assert callable(knowledge.warmup)
 
 
 def test_search_returns_contract_hits():
@@ -46,17 +48,28 @@ def test_search_returns_contract_hits():
         assert len(h["text"]) <= 1200
 
 
-def test_search_falls_back_to_mock_when_no_index(tmp_path, monkeypatch):
-    from knowledge import retrieval
+def test_search_without_index_is_empty_unless_mock_mode(tmp_path, monkeypatch):
+    from knowledge import ingestion, retrieval
+    monkeypatch.setattr(ingestion, "INDEX_DIR", tmp_path)
     monkeypatch.setattr(retrieval, "INDEX_DIR", tmp_path)
+    monkeypatch.delenv("BM_MOCK", raising=False)
     retrieval.invalidate()
     try:
+        assert search("bme280", "maximum supply voltage") == []
+        monkeypatch.setenv("BM_MOCK", "1")
         hits = search("bme280", "maximum supply voltage")
         mock = json.loads((ROOT / "mocks" / "search_bme280_supply.json").read_text())
         assert hits[0]["text"] == mock[0]["text"] and hits[0]["page"] == "0"
         assert search("esp32-devkitc", "anything") == []
     finally:
         retrieval.invalidate()
+
+
+def test_search_rejects_bad_inputs_without_raising():
+    assert search("../contracts/x", "q") == []
+    assert search("bme280", {"not": "a string"}, 3) == []  # type: ignore[arg-type]
+    assert search("bme280", "q", "many") == []  # type: ignore[arg-type]
+    assert search("bme280", "q", k=-2) == []
 
 
 def test_search_respects_k_and_empty_query():
@@ -100,9 +113,12 @@ def test_get_profile_returns_a_copy():
     assert "MUTATED" not in get_profile("bme280")["aliases"]
 
 
-def test_reads_stubs():
-    record_read("https://example.com", "some text", 31.0)
+def test_reads_signatures_work_end_to_end(tmp_path, monkeypatch):
+    from knowledge import reads
+    monkeypatch.setattr(reads, "READS_FILE", tmp_path / "reads.jsonl")
     assert recent_reads() == []
+    record_read("https://example.com", "some text", 31.0)
+    assert len(recent_reads()) == 1
     assert recent_reads("bme280", hours=1) == []
 
 

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Page twin — what the camera believes is written on the page, verbatim",
+  "description": "The hand-off to the Tutor team. Lines are transcribed EXACTLY as written, mistakes included. Never corrected.",
+  "type": "object",
+  "required": ["page_id", "snapshot_id", "captured_at", "source", "image", "quality", "regions", "lines", "changes"],
+  "properties": {
+    "page_id": {"type": "string", "description": "stable across snapshots of the same physical page"},
+    "snapshot_id": {"type": "string"},
+    "captured_at": {"type": "string", "description": "ISO 8601"},
+    "source": {"type": "string", "enum": ["pi", "webcam", "upload", "mock"]},
+    "image": {
+      "type": "object",
+      "required": ["original_path", "dewarped_path", "width", "height"],
+      "properties": {
+        "original_path": {"type": "string"},
+        "dewarped_path": {"type": "string", "description": "flattened, top-down page; all bboxes below are in this image's pixels"},
+        "width": {"type": "integer"},
+        "height": {"type": "integer"},
+        "homography": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}}
+      }
+    },
+    "quality": {
+      "type": "object",
+      "required": ["ok", "issues"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "issues": {"type": "array", "items": {"type": "string", "enum": ["no_page", "partial_page", "blur", "glare", "too_dark", "hand_in_frame", "skew_extreme"]}},
+        "blur_score": {"type": "number"},
+        "glare_fraction": {"type": "number"}
+      }
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "bbox"],
+        "properties": {
+          "id": {"type": "string"},
+          "type": {"type": "string", "enum": ["problem", "work", "diagram", "margin", "other"]},
+          "bbox": {"$ref": "#/$defs/bbox"}
+        }
+      }
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "region_id", "order", "bbox", "status", "kind", "latex", "text", "confidence", "uncertain_spans", "parse_ok", "first_seen", "last_changed"],
+        "properties": {
+          "id": {"type": "string", "description": "stable across snapshots, e.g. L3"},
+          "region_id": {"type": "string"},
+          "order": {"type": "integer", "description": "reading order on the page, 0-based"},
+          "bbox": {"$ref": "#/$defs/bbox"},
+          "status": {"type": "string", "enum": ["active", "crossed_out", "illegible"]},
+          "kind": {"type": "string", "enum": ["math", "text", "mixed", "diagram_label"]},
+          "latex": {"type": "string", "description": "verbatim LaTeX for math; empty for pure text"},
+          "text": {"type": "string", "description": "verbatim plain text; for math lines a readable rendering"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "uncertain_spans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["start", "end", "alternatives"],
+              "properties": {
+                "start": {"type": "integer", "description": "char offset into latex (or text if latex empty)"},
+                "end": {"type": "integer"},
+                "alternatives": {"type": "array", "items": {"type": "string"}, "description": "other plausible readings, e.g. ['+', '-']"}
+              }
+            }
+          },
+          "parse_ok": {"type": "boolean", "description": "latex parses as math (SymPy). False never triggers a correction."},
+          "first_seen": {"type": "string"},
+          "last_changed": {"type": "string"}
+        }
+      }
+    },
+    "changes": {
+      "type": "object",
+      "required": ["added", "edited", "removed", "crossed_out"],
+      "properties": {
+        "added": {"type": "array", "items": {"type": "string"}},
+        "edited": {"type": "array", "items": {"type": "string"}},
+        "removed": {"type": "array", "items": {"type": "string"}},
+        "crossed_out": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "latency_ms": {"type": "object", "additionalProperties": {"type": "number"}}
+  },
+  "$defs": {
+    "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4, "description": "[x, y, w, h] in dewarped-page pixels"}
+  }
+}

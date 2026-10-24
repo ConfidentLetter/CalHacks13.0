@@ -173,6 +173,11 @@ class Pipeline:
                     raise box["error"]
                 refined = box["result"]
                 ms = (time.perf_counter() - t0) * 1000
+                if refined is phase1:  # T3: identical object means "nothing new" — keep the rule card as is
+                    self.last_ms["refine"] = ms
+                    log("refine", ms, frame_id=twin.get("frame_id"), nothing_new=True)
+                    self.status("refine", ms, frame_id=twin.get("frame_id"), nothing_new=True)
+                    return phase1
                 if not isinstance(refined, dict) or refined.get("frame_id") != phase1.get("frame_id"):
                     raise ValueError("refine returned a diagnosis for a different frame")
                 self.last_ms["refine"] = ms
@@ -214,15 +219,27 @@ class Pipeline:
         self.status("live", 0)
 
     # ------------------------------------------------------------------ interactions
-    def calibrate(self, corners=None) -> list:
+    CORNER_HINT = "Click the four corner holes of the main grid: A1 (top-left), A63 (top-right), J63 (bottom-right), J1 (bottom-left)."
+
+    def calibrate(self, corners=None) -> Optional[list]:
+        """Manual or ArUco calibration. Errors are shown verbatim (T1 promises safe messages) and never fatal."""
         from app.markers import detect_marker_ids
         frame_path = self._frame_path(high_res=True) or ""
         t0 = time.perf_counter()
         markers = detect_marker_ids(frame_path) if frame_path else None
-        self.homography = modules.calibrate(frame_path, corners)
+        modules.set_manual_corners(corners)
+        try:
+            self.homography = modules.calibrate_strict(frame_path, corners)
+        except Exception as exc:
+            ms = (time.perf_counter() - t0) * 1000
+            log("calibrate", ms, manual=corners is not None, markers=markers, error=str(exc)[:160])
+            self.status("calibrate", ms, error=f"{exc} {self.CORNER_HINT}"[:300], markers=markers, manual=corners is not None)
+            return None
         ms = (time.perf_counter() - t0) * 1000
+        modules.clear_twin_cache()
         log("calibrate", ms, manual=corners is not None, markers=markers)
         self.status("calibrate", ms, manual=corners is not None, ok=True, markers=markers)
+        self.run_proactive()
         return self.homography
 
     def marker_status(self) -> dict:

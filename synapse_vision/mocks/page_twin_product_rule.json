@@ -1,0 +1,28 @@
+{
+  "page_id": "page_mock_01",
+  "snapshot_id": "snap_mock_01",
+  "captured_at": "2026-10-24T10:00:00-07:00",
+  "source": "mock",
+  "image": {"original_path": "mocks/page_mock_01.jpg", "dewarped_path": "mocks/page_mock_01_dewarped.jpg", "width": 1700, "height": 2200, "homography": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]},
+  "quality": {"ok": true, "issues": [], "blur_score": 210.5, "glare_fraction": 0.01},
+  "regions": [
+    {"id": "R0", "type": "problem", "bbox": [120, 140, 1460, 120]},
+    {"id": "R1", "type": "work", "bbox": [120, 300, 1460, 900]}
+  ],
+  "lines": [
+    {"id": "L0", "region_id": "R0", "order": 0, "bbox": [130, 150, 900, 90], "status": "active", "kind": "mixed",
+     "latex": "f(x)=x^{2}\\sin x", "text": "Find f'(x) if f(x) = x^2 sin x", "confidence": 0.95, "uncertain_spans": [], "parse_ok": true,
+     "first_seen": "2026-10-24T09:58:10-07:00", "last_changed": "2026-10-24T09:58:10-07:00"},
+    {"id": "L1", "region_id": "R1", "order": 1, "bbox": [130, 320, 1100, 110], "status": "active", "kind": "math",
+     "latex": "f'(x)=2x\\cdot\\cos x", "text": "f'(x) = 2x · cos x", "confidence": 0.91, "uncertain_spans": [], "parse_ok": true,
+     "first_seen": "2026-10-24T09:58:40-07:00", "last_changed": "2026-10-24T09:58:40-07:00"},
+    {"id": "L2", "region_id": "R1", "order": 2, "bbox": [130, 460, 700, 100], "status": "crossed_out", "kind": "math",
+     "latex": "=2\\cos x", "text": "= 2 cos x (crossed out)", "confidence": 0.62, "uncertain_spans": [{"start": 1, "end": 2, "alternatives": ["2", "z"]}], "parse_ok": true,
+     "first_seen": "2026-10-24T09:59:05-07:00", "last_changed": "2026-10-24T09:59:30-07:00"},
+    {"id": "L3", "region_id": "R1", "order": 3, "bbox": [130, 600, 1200, 110], "status": "active", "kind": "math",
+     "latex": "f'(0)=2\\cdot 0\\cdot\\cos 0=0", "text": "f'(0) = 2·0·cos 0 = 0", "confidence": 0.84, "uncertain_spans": [], "parse_ok": true,
+     "first_seen": "2026-10-24T09:59:50-07:00", "last_changed": "2026-10-24T09:59:50-07:00"}
+  ],
+  "changes": {"added": ["L3"], "edited": [], "removed": [], "crossed_out": ["L2"]},
+  "latency_ms": {"capture": 0, "page": 0, "layout": 0, "transcribe": 0}
+}

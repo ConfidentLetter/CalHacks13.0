@@ -173,7 +173,7 @@ def test_confirm_requests_are_emitted(runtime, monkeypatch):
 
 
 def test_calibrate_and_register(runtime, monkeypatch):
-    monkeypatch.setattr(modules, "calibrate", lambda fp, corners=None: [[2, 0, 0], [0, 2, 0], [0, 0, 1]])
+    monkeypatch.setattr(modules, "calibrate_strict", lambda fp, corners=None: [[2, 0, 0], [0, 2, 0], [0, 0, 1]])
     seen = []
     monkeypatch.setattr(modules, "register", lambda pid, row, px: seen.append((pid, row, px)))
     monkeypatch.setattr(modules, "run_checks", modules.mock_run_checks)
@@ -203,3 +203,40 @@ def test_busy_guard_second_call_returns_none_then_reruns(runtime, monkeypatch):
     gate.set()
     t.join(2)
     assert len(by_type(out, "diagnosis")) == 2  # the rerun happened after the first finished
+
+
+def test_calibrate_error_is_shown_verbatim_with_corner_hint(runtime, monkeypatch):
+    monkeypatch.setattr(modules, "calibrate_strict", lambda fp, c=None: (_ for _ in ()).throw(RuntimeError("Need exactly 4 clicked corners (TL, TR, BR, BL).")))
+    seen = {}
+    monkeypatch.setattr(modules, "set_manual_corners", lambda c: seen.setdefault("corners", c))
+    out = []
+    p = Pipeline(out.append, capture=FakeCapture(), serial=FakeSerial(), mock=True)
+    assert p.calibrate(None) is None
+    err = [m for m in by_type(out, "status") if m["stage"] == "calibrate"][0]
+    assert err["error"].startswith("Need exactly 4 clicked corners") and "A63" in err["error"]
+    assert seen["corners"] is None
+
+
+def test_calibrate_success_clears_twin_cache_and_reruns(runtime, monkeypatch):
+    calls = []
+    monkeypatch.setattr(modules, "calibrate_strict", lambda fp, c=None: [[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    monkeypatch.setattr(modules, "set_manual_corners", lambda c: calls.append(("corners", c)))
+    monkeypatch.setattr(modules, "clear_twin_cache", lambda: calls.append(("clear",)))
+    monkeypatch.setattr(modules, "run_checks", modules.mock_run_checks)
+    out = []
+    p = Pipeline(out.append, capture=FakeCapture(), serial=FakeSerial(), mock=True)
+    corners = [(0, 0), (1, 0), (1, 1), (0, 1)]
+    assert p.calibrate(corners) is not None
+    assert calls == [("corners", corners), ("clear",)]
+    assert by_type(out, "diagnosis")  # re-ran the pipeline after recalibration
+
+
+def test_ask_refine_returning_same_object_means_nothing_new(runtime, monkeypatch):
+    monkeypatch.setattr(modules, "build_twin", lambda fp: modules.load_mock_twin("sda_swapped"))
+    monkeypatch.setattr(modules, "answer", modules.mock_answer)
+    monkeypatch.setattr(modules, "refine", lambda q, t, s, f, rule: rule)
+    out = []
+    Pipeline(out.append, capture=FakeCapture(), serial=FakeSerial()).ask("why?")
+    assert [d["phase"] for d in by_type(out, "diagnosis")] == ["rules"]
+    st = [m for m in by_type(out, "status") if m["stage"] == "refine"][-1]
+    assert st.get("nothing_new") is True and "error" not in st

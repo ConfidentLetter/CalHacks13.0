@@ -168,7 +168,6 @@ def draw_components(canvas, rng, n: int) -> list[dict]:
     """Rectangular PCBs sitting on the board (they are coloured and hide holes). Returns
     {"poly_mm": 4 corners, "holes": covered hole ids}."""
     cfg = board.BOARD_CONFIG
-    s = cfg["px_per_mm"]
     p = cfg["pitch_mm"]
     letters = cfg["letters_top_to_bottom"]
     out = []
@@ -254,7 +253,7 @@ def random_camera(rng, out_size=(1920, 1080), tilt_deg=8.0, scale_jitter=0.10, r
     s = cfg["px_per_mm"]
     W, Hh = board.warped_size_px()
     cx_w, cy_w = W / 2, Hh / 2
-    ppm = ppm_base * (1 + rng.uniform(-scale_jitter, scale_jitter))
+    ppm = ppm_base * (out_size[0] / 1920.0) * (1 + rng.uniform(-scale_jitter, scale_jitter))
     f = 1.4 * out_size[0]
     Z = f / ppm
     ax, ay = np.deg2rad(rng.uniform(-tilt_deg, tilt_deg, 2))
@@ -324,3 +323,85 @@ if __name__ == "__main__":  # quick visual check: python -m perception_geometry.
     os.makedirs("runtime/debug", exist_ok=True)
     cv2.imwrite(out, r.image)
     print("wrote", out, [(w.color, w.hole_a, w.hole_b) for w in r.wires])
+
+
+# ----------------------------------------------------------------------------- demo scenes
+
+DEMO_GND_COLOR = "blue"   # the mocks use black GND wires; black is not detectable, the real board uses blue
+
+
+def render_mock_scene(twin: dict, seed: int = 0, out_size=(1920, 1080), **camera_kw) -> SynthResult:
+    """Render a mock twin (mocks/twin_*.json) as a synthetic photo: ESP32 body over rows C-J cols 1-19,
+    sensor body over rows C-E cols 40-43, and the twin's wires. Ground truth = the twin's wires."""
+    rng = np.random.default_rng(seed)
+    canvas, marker_centres_w = draw_blank_board(rng, 0.5)
+    cfg = board.BOARD_CONFIG
+    ox, oy = cfg["origin_mm"]
+    p = cfg["pitch_mm"]
+    polys = []
+
+    def body(c0, c1, r0, r1, bgr):
+        x0, x1 = ox + (c0 - 0.6) * p, ox + (c1 + 0.6) * p
+        y0 = oy + (board.row_offset_pitches(r0) - 0.45) * p
+        y1 = oy + (board.row_offset_pitches(r1) + 0.45) * p
+        cv2.rectangle(canvas, _mm_to_px(x0, y0), _mm_to_px(x1, y1), bgr, -1)
+        polys.append([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+        return x0, y0, x1, y1
+
+    for comp in twin["components"]:
+        if comp["part_id"].startswith("esp32"):
+            # body drawn over C-H only (leaves row I free for the GPIO wires, as the mocks assume)
+            x0, y0, x1, y1 = body(1, 19, "C", "H", (60, 30, 15))
+            cv2.rectangle(canvas, _mm_to_px(x0 + 4, y0 + 3), _mm_to_px(x0 + 22, y1 - 3), (25, 25, 25), -1)  # metal can
+        else:
+            body(40, 43, "C", "E", (150, 60, 130))
+
+    wires_mm = []
+    rail_cols: set[int] = set()
+    def _rail_near(rail: str, other: str):
+        """A human plugs the rail end into the free rail hole nearest the other end's column."""
+        col = int(other[1:]) if other not in cfg["rails"] else 32
+        free = sorted((c for c in RAIL_COLS if c not in rail_cols), key=lambda c: abs(c - col))
+        c = free[0]
+        rail_cols.add(c)
+        return ox + (c - 1) * p, oy + cfg["rail_rows"][rail] * p
+
+    for w in twin["wires"]:
+        color = DEMO_GND_COLOR if w["color"] == "black" else w["color"]
+        a, b = w["end_a"]["hole"], w["end_b"]["hole"]
+        ma = _rail_near(a, b) if a in cfg["rails"] else board.hole_mm(a)
+        mb = _rail_near(b, a) if b in cfg["rails"] else board.hole_mm(b)
+        A, B = np.array(ma), np.array(mb)
+        d = B - A
+        perp = np.array([-d[1], d[0]]) / (np.linalg.norm(d) + 1e-9)
+        ctrl = (A + B) / 2 + perp * rng.uniform(-0.12, 0.12) * np.linalg.norm(d)
+        pts_mm = _bezier(A, B, ctrl)
+        cut = 0.5 * p + 0.75
+        cum = np.r_[0, np.cumsum(np.linalg.norm(np.diff(pts_mm, axis=0), axis=1))]
+        ins = pts_mm[(cum >= cut) & (cum <= cum[-1] - cut)]
+        s_ = cfg["px_per_mm"]
+        cv2.polylines(canvas, [(pts_mm * s_).astype(np.int32)], False, (150, 150, 150), int(0.35 * s_), cv2.LINE_AA)
+        bgr = tuple(int(v) for v in SYNTH_WIRE_BGR[color])
+        cv2.polylines(canvas, [(ins * s_).astype(np.int32)], False, bgr, int(1.5 * s_), cv2.LINE_AA)
+        wires_mm.append((color, a, b, ma, mb))
+
+    M, ppm = random_camera(rng, out_size, **camera_kw)
+    img = cv2.warpPerspective(canvas, M, out_size, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=MAT_BGR)
+    img = cv2.GaussianBlur(img, (3, 3), 0)
+    H_true = np.linalg.inv(M)
+    H_true /= H_true[2, 2]
+    s_ = cfg["px_per_mm"]
+
+    def w2o(mm):
+        q = M @ np.array([mm[0] * s_, mm[1] * s_, 1.0])
+        return (float(q[0] / q[2]), float(q[1] / q[2]))
+
+    comps = []
+    for poly in polys:
+        pts = np.array([w2o(q) for q in poly])
+        x0, y0 = pts.min(axis=0)
+        x1, y1 = pts.max(axis=0)
+        comps.append({"bbox": [float(x0), float(y0), float(x1 - x0), float(y1 - y0)], "holes": []})
+    wires = [SynthWire(c, a, b, w2o(ma), w2o(mb)) for c, a, b, ma, mb in wires_mm]
+    markers = {k: w2o((v[0] / s_, v[1] / s_)) for k, v in marker_centres_w.items()}
+    return SynthResult(img, H_true, wires, markers, ppm, {"seed": seed, "scene": twin["frame_id"]}, comps)

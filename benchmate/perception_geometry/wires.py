@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import time
-from collections import deque
 from pathlib import Path
 
 import cv2
@@ -16,41 +15,13 @@ import numpy as np
 
 from . import board
 from .holes import hole_blob_mask
+from .skeleton import (_branch_dir_at, _pair_branches_at_junctions, _prune_spurs,
+                       _skeleton_graph)
 from .paths import debug_dir
 from .telemetry import log
 from .warp import as_matrix, read_frame, to_original, warp_image
 
-# HSV ranges (OpenCV scale: H 0-179, S 0-255, V 0-255). Red wraps around 0/180 -> two ranges.
-# Tune against real photos; keep white/black out (invisible on the board / look like holes).
-WIRE_COLORS: dict[str, list[tuple[tuple[int, int, int], tuple[int, int, int]]]] = {
-    "red": [((0, 110, 70), (7, 255, 255)), ((168, 110, 70), (179, 255, 255))],
-    "orange": [((8, 120, 110), (19, 255, 255))],
-    "yellow": [((20, 100, 110), (36, 255, 255))],
-    "green": [((37, 70, 50), (88, 255, 255))],
-    "blue": [((92, 80, 50), (132, 255, 255))],
-}
-
-WIRE_PARAMS = {
-    "clahe_clip": 2.0,
-    "glare_v": 245,                 # pixels brighter than this with low saturation are glare, not wire
-    "glare_s": 50,
-    "open_pitches": 0.28,           # removes the board's printed rail lines (thin) and speckle
-    "close_pitches": 0.30,          # spec: ~0.3 pitch
-    "min_len_pitches": 1.5,         # drop blobs shorter than this (bbox diagonal)
-    "spur_pitches": 0.7,            # skeleton branches shorter than this are spurs, not wire ends
-    "extend_pitches": 0.47,         # insulation tip -> hole centre (bare pin length); measured 0.47 on synth — TUNE on real photos
-    "exclude_margin_pitches": 0.1,
-    "crossing_conf": 0.5,
-    "hidden_end_conf": 0.3,         # one end disappears under a component box
-    "pcb_inside_fraction": 0.5,     # a colour blob mostly inside a component box is the PCB, not a wire ...
-    "pcb_min_halfwidth_mm": 1.6,    # ... provided it is fat; a thin blob inside the box is a wire over the PCB
-    "tip_walk_pitches": 1.5,        # how far past the skeleton end to look for the insulation tip
-    "fragment_min_pitches": 0.5,    # shorter blobs are noise; longer ones may still be fragments to merge
-    "extrapolate_max_pitches": 3.0, # how far an occluded end may be pushed through a crossing wire
-    "extrapolated_conf": 0.6,       # confidence ceiling for an end found by extrapolation
-    "dir_trace_pitches": 1.2,       # skeleton length used to estimate the direction at an end
-    "merge_max_gap_pitches": 12.0,  # fragments farther apart than this are not the same wire
-}
+from .params import WIRE_COLORS, WIRE_PARAMS  # noqa: F401  (tunables live in params.py)
 
 
 # ----------------------------------------------------------------------------- masks
@@ -101,115 +72,62 @@ def _colour_masks(warped: np.ndarray, ignore: np.ndarray) -> dict[str, np.ndarra
     return out
 
 
-# ----------------------------------------------------------------------------- skeleton analysis
-
-_NBR = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+# ----------------------------------------------------------------------------- endpoints
 
 
-def _neighbour_count(sk: np.ndarray) -> np.ndarray:
-    k = np.ones((3, 3), np.float32)
-    k[1, 1] = 0
-    return cv2.filter2D(sk.astype(np.float32), -1, k, borderType=cv2.BORDER_CONSTANT).astype(np.int32) * sk
-
-
-def _trace_from(sk: np.ndarray, start: tuple[int, int], max_len: int) -> list[tuple[int, int]]:
-    """Walk from an endpoint along the skeleton until a junction / endpoint / max_len."""
-    nb = _neighbour_count(sk)
-    path = [start]
-    prev, cur = None, start
-    while len(path) < max_len:
-        r, c = cur
-        nxt = [(r + dr, c + dc) for dr, dc in _NBR
-               if 0 <= r + dr < sk.shape[0] and 0 <= c + dc < sk.shape[1] and sk[r + dr, c + dc] and (r + dr, c + dc) != prev
-               and (r + dr, c + dc) not in path[-3:]]
-        if len(nxt) != 1 or nb[cur] > 2 and cur != start:
-            break
-        prev, cur = cur, nxt[0]
-        path.append(cur)
-    return path
-
-
-def _prune_spurs(sk: np.ndarray, spur_len: int) -> np.ndarray:
-    sk = sk.copy()
-    for _ in range(3):
-        nb = _neighbour_count(sk)
-        ends = list(zip(*np.where((sk > 0) & (nb == 1))))
-        if len(ends) <= 2:
-            break
-        removed = False
-        for e in ends:
-            path = _trace_from(sk, e, spur_len + 2)
-            if len(path) <= spur_len and len(path) > 1:
-                r, c = path[-1]
-                if _neighbour_count(sk)[r, c] >= 3:          # ended at a junction -> spur
-                    for pr, pc in path[:-1]:
-                        sk[pr, pc] = 0
-                    removed = True
-        if not removed:
-            break
-    return sk
-
-
-def _geodesic(sk: np.ndarray, start: tuple[int, int]) -> np.ndarray:
-    dist = np.full(sk.shape, -1, np.int32)
-    dist[start] = 0
-    q = deque([start])
-    while q:
-        r, c = q.popleft()
-        for dr, dc in _NBR:
-            rr, cc = r + dr, c + dc
-            if 0 <= rr < sk.shape[0] and 0 <= cc < sk.shape[1] and sk[rr, cc] and dist[rr, cc] < 0:
-                dist[rr, cc] = dist[r, c] + 1
-                q.append((rr, cc))
-    return dist
-
-
-def _endpoint_direction(sk: np.ndarray, end: tuple[int, int], back: int) -> np.ndarray:
-    path = _trace_from(sk, end, back)
-    if len(path) < 3:
-        return np.zeros(2)
-    a, b = np.array(path[-1], np.float64), np.array(path[0], np.float64)
-    d = b - a                                   # (row, col) pointing outwards
-    n = np.linalg.norm(d)
-    return d / n if n > 0 else np.zeros(2)
-
-
-def _blob_endpoints(blob: np.ndarray, pitch: float) -> tuple[list[np.ndarray], bool, np.ndarray]:
-    """-> ([endpoint (x,y) in blob coords, extended], crossing_flag, skeleton)."""
+def _blob_wires(blob: np.ndarray, pitch: float) -> tuple[list[tuple[list[dict], bool]], np.ndarray]:
+    """One blob -> list of (two end records, crossing_flag); plus the skeleton for debugging.
+    Touching / crossing wires of the same colour are separated at skeleton junctions."""
     from skimage.morphology import skeletonize
     sk = skeletonize(blob > 0).astype(np.uint8)
     sk = _prune_spurs(sk, int(WIRE_PARAMS["spur_pitches"] * pitch))
-    nb = _neighbour_count(sk)
-    ends = list(zip(*np.where((sk > 0) & (nb == 1))))
-    crossing = False
-    if len(ends) > 2:
-        crossing = True
-        best, best_d = None, -1
-        for e in ends:
-            dist = _geodesic(sk, e)
-            far = max(ends, key=lambda f: dist[f])
-            if dist[far] > best_d:
-                best, best_d = (e, far), dist[far]
-        ends = list(best)
-    elif len(ends) < 2:
-        ys, xs = np.where(sk > 0)                # loop or degenerate: farthest pixel pair along x
-        if xs.size < 2:
-            return [], False, sk
-        i, j = xs.argmin(), xs.argmax()
-        ends = [(ys[i], xs[i]), (ys[j], xs[j])]
-    ext = WIRE_PARAMS["extend_pitches"] * pitch
-    out = []
-    for k, e in enumerate(ends):
-        d_sk = _endpoint_direction(sk, e, int(WIRE_PARAMS["dir_trace_pitches"] * pitch))
-        if not np.any(d_sk):                                # fragment too short to trace: use end-to-end
-            d_sk = np.array(e, np.float64) - np.array(ends[1 - k], np.float64)
-            d_sk = d_sk / np.linalg.norm(d_sk) if np.linalg.norm(d_sk) > 0 else d_sk
-        d = _pca_direction(blob, np.array(e, np.float64), WIRE_PARAMS["dir_trace_pitches"] * pitch, d_sk)
-        tip = _walk_to_tip(blob, np.array(e, np.float64), d, int(WIRE_PARAMS["tip_walk_pitches"] * pitch))
-        r, c = tip + d * ext
-        out.append({"raw": np.array([e[1], e[0]], np.float64), "tip": np.array([tip[1], tip[0]]),
-                    "pt": np.array([c, r]), "dir": np.array([d[1], d[0]])})
-    return out, crossing, sk
+    nodes, branches = _skeleton_graph(sk, pitch)
+    if not branches:
+        return [], sk
+    pairs = _pair_branches_at_junctions(nodes, branches, pitch)
+    used: set[int] = set()
+    wires = []
+    L = max(3, int(WIRE_PARAMS["dir_trace_pitches"] * pitch))
+
+    def _end_record(bi: int, which: int) -> dict:
+        br = branches[bi]
+        node = nodes[br["nodes"][which]]
+        d = _branch_dir_at(br, which, L)
+        term = np.array(br["pixels"][0 if which == 0 else -1], np.float64)
+        if node["kind"] == "end":
+            d = _pca_direction(blob, term, WIRE_PARAMS["dir_trace_pitches"] * pitch, d)
+            tip = _walk_to_tip(blob, term, d, int(WIRE_PARAMS["tip_walk_pitches"] * pitch))
+            at_junction = False
+        else:                                                   # wire terminates ON another wire (T)
+            tip = np.array(node["pos"], np.float64) + d * 0.5 * pitch
+            at_junction = True
+        pt = tip + d * WIRE_PARAMS["extend_pitches"] * pitch
+        return {"raw": np.array([term[1], term[0]]), "tip": np.array([tip[1], tip[0]]),
+                "pt": np.array([pt[1], pt[0]]), "dir": np.array([d[1], d[0]]), "at_junction": at_junction}
+
+    # start a traversal from every branch end that is terminal (endpoint node or unpaired at a junction)
+    starts = [(bi, w) for bi, br in enumerate(branches) for w in (0, 1) if (bi, w) not in pairs]
+    for bi, w in starts:
+        if bi in used:
+            continue
+        first = _end_record(bi, w)
+        crossing = False
+        cur_b, cur_w = bi, w
+        while True:
+            used.add(cur_b)
+            other = 1 - cur_w
+            if (cur_b, other) not in pairs:
+                last = _end_record(cur_b, other)
+                break
+            crossing = True
+            nb_b, nb_w = pairs[(cur_b, other)]
+            if nb_b in used:                                    # loop; stop here
+                last = _end_record(cur_b, other)
+                break
+            cur_b, cur_w = nb_b, nb_w
+        crossing = crossing or first["at_junction"] or last["at_junction"]
+        wires.append(([first, last], crossing))
+    return wires, sk
 
 
 def _pca_direction(blob: np.ndarray, end_rc: np.ndarray, radius: float, fallback: np.ndarray) -> np.ndarray:
@@ -296,6 +214,12 @@ def _extrapolate_through(e: dict, occ: np.ndarray, pitch: float) -> None:
     if not np.any(e["dir"]):
         return
     q = e["tip"].copy()
+    lead = 0
+    while lead < int(0.5 * pitch) and not _near_mask(occ, q):
+        q = q + e["dir"]
+        lead += 1
+    if not _near_mask(occ, q):
+        return
     steps = 0
     max_steps = int(WIRE_PARAMS["extrapolate_max_pitches"] * pitch)
     while steps < max_steps and _near_mask(occ, q):
@@ -303,8 +227,10 @@ def _extrapolate_through(e: dict, occ: np.ndarray, pitch: float) -> None:
         steps += 1
     if steps == 0 or steps >= max_steps:
         return
-    e["tip"] = q
-    e["pt"] = q + e["dir"] * WIRE_PARAMS["extend_pitches"] * pitch
+    if steps <= WIRE_PARAMS["crossing_span_pitches"] * pitch:
+        e["tip"] = q                                  # a wire crossing ours: the end is just past it
+        e["pt"] = q + e["dir"] * WIRE_PARAMS["extend_pitches"] * pitch
+    # else: the occluder runs along our wire; the end is most likely right where it disappears (keep pt)
     hole, d = _snap_warped(float(e["pt"][0]), float(e["pt"][1]))
     if hole is None:
         return
@@ -454,18 +380,19 @@ def _detect(frame_path, homography, exclude_boxes, debug: bool, out_path: str | 
             pad = 2
             blob = cv2.copyMakeBorder(crop, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
             x0, y0 = bx - pad, by - pad
-            ends, crossing, sk = _blob_endpoints(blob, pitch)
-            if len(ends) != 2:
-                continue
-            for e in ends:
-                e["raw"] = e["raw"] + np.array([x0, y0])
-                e["tip"] = e["tip"] + np.array([x0, y0])
-                e["pt"] = e["pt"] + np.array([x0, y0])
-                e["occluded"] = _near_mask(occ, e["pt"]) or _near_mask(occ, e["tip"])
-                # hidden = the wire runs INTO a PCB: its tip touches the PCB and the extended point is inside it
-                e["hidden"] = _near_mask(pcb_touch, e["tip"]) and _near_mask(pcb_mask, e["pt"])
-                _snap_end(e, pitch)
-            candidates.append({"color": color, "ends": ends, "crossing": crossing, "parts": [(sk, (x0, y0))]})
+            found, sk = _blob_wires(blob, pitch)
+            for ends, crossing in found:
+                for e in ends:
+                    e["raw"] = e["raw"] + np.array([x0, y0])
+                    e["tip"] = e["tip"] + np.array([x0, y0])
+                    e["pt"] = e["pt"] + np.array([x0, y0])
+                    e["occluded"] = _near_mask(occ, e["pt"]) or _near_mask(occ, e["tip"])
+                    # hidden = the wire runs INTO a PCB: its tip touches the PCB and the extended point is inside it
+                    e["hidden"] = _near_mask(pcb_touch, e["tip"]) and _near_mask(pcb_mask, e["pt"])
+                    _snap_end(e, pitch)
+                    if e["at_junction"]:
+                        e["conf"] = min(e["conf"], WIRE_PARAMS["crossing_conf"])
+                candidates.append({"color": color, "ends": ends, "crossing": crossing, "parts": [(sk, (x0, y0))]})
         candidates = _merge_fragments(candidates, color, occ, pitch)
         for c in candidates:
             if c["color"] != color:

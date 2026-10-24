@@ -19,7 +19,7 @@ MAX_QUOTE_CHARS = 200
 SERIAL_WINDOW_LINES = 20
 # Phase 1 must stay under 300 ms: give knowledge.search this long, else skip the citation (the call keeps
 # running in its thread, so the next question is fast). T4's first search loads a model (~15 s cold).
-SEARCH_BUDGET_MS = float(os.environ.get("BM_SEARCH_BUDGET_MS", "150"))  # shared by all citations of one diagnosis
+SEARCH_BUDGET_MS = float(os.environ.get("BM_SEARCH_BUDGET_MS", "120"))  # shared by all citations of one diagnosis
 SEARCH_K_CITATION = 3
 SEARCH_K_QUESTION = 2
 

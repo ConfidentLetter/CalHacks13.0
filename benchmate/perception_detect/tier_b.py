@@ -5,8 +5,8 @@ from typing import Any, Callable
 
 from ._telemetry import log, timed
 from .boxes import nms, to_original
-from .config import (MAX_COMPONENT_BOARD_FRACTION, NMS_IOU, OWL_IGNORE_QUERIES, OWL_SCORE_THRESHOLD,
-                     TIER_B_CONFIDENCE_CAP)
+from .config import (MAX_COMPONENT_BOARD_FRACTION, MAX_COMPONENT_PITCHES, NMS_IOU, OWL_IGNORE_QUERIES,
+                     OWL_SCORE_THRESHOLD, TIER_B_CONFIDENCE_CAP)
 from .geometry_bridge import hole_to_pixel, parse_hole, pitch_px, snap_to_hole
 from .layout import layout_row
 from .normalize import normalize_part
@@ -18,9 +18,17 @@ ANCHOR_TOLERANCE_PITCHES = 1.2
 Detector = Callable[[Any], list[Detection]]
 
 
+def component_sized(bbox: tuple[float, float, float, float], homography: Any | None) -> bool:
+    """False for boxes wider/taller than any component can be (in breadboard pitches)."""
+    if homography is None:
+        return True
+    p = pitch_px(homography)
+    return bbox[2] <= MAX_COMPONENT_PITCHES[0] * p and bbox[3] <= MAX_COMPONENT_PITCHES[1] * p
+
+
 def detect_boxes(frame_path: str, tiles: list[dict] | None, detector: Detector,
-                 frame_size: tuple[int, int] | None = None) -> list[Detection]:
-    """Run the detector per tile, map to original pixels, NMS, drop board-sized boxes."""
+                 frame_size: tuple[int, int] | None = None, homography: Any | None = None) -> list[Detection]:
+    """Run the detector per tile (or the full frame), map to original pixels, NMS, drop board-sized boxes."""
     tiles = tiles or [{"path": frame_path, "bbox": [0, 0, 0, 0], "scale": 1.0}]
     dets: list[Detection] = []
     for t in tiles:
@@ -35,6 +43,7 @@ def detect_boxes(frame_path: str, tiles: list[dict] | None, detector: Detector,
     if frame_size:
         area = float(frame_size[0] * frame_size[1])
         kept = [d for d in kept if d.bbox[2] * d.bbox[3] / area <= MAX_COMPONENT_BOARD_FRACTION]
+    kept = [d for d in kept if component_sized(d.bbox, homography)]
     return [d for d in kept if d.score >= OWL_SCORE_THRESHOLD]
 
 
@@ -74,7 +83,7 @@ def tier_b_components(frame_path: str, tiles: list[dict] | None, homography: Any
                       calibrated: bool = True) -> tuple[list[dict], list[dict]]:
     """(components, needs_register). Components without a readable/known part_id are still returned
     (part_id None, no pins) so the UI can draw the box and ask the user to register it."""
-    boxes = detect_boxes(frame_path, tiles, detector, frame_size)
+    boxes = detect_boxes(frame_path, tiles, detector, frame_size, homography)
     components: list[dict] = []
     needs_register: list[dict] = []
     counts: dict[str, int] = {}

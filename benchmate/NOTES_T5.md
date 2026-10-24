@@ -1,8 +1,8 @@
 # NOTES_T5 — Shell (app/)
 
-**Done:** Steps 1–6 all in. `app/telemetry.py`, `app/capture.py`, `app/serial_bridge.py`, `app/modules.py`, `app/pipeline.py`, `app/server.py`, `app/markers.py`, `app/static/index.html` (overlay + cards + serial + ask bar + mic + Calibrate/Register modes + mock keys + latency drawer). 44 tests pass (`pytest app/tests`). Verified in Chrome in mock mode: press 3 → swapped card with pulsing wires + swapped serial replay; ask → rule card in ~160 ms, refine timed out at 8 s and the rule card stayed; Calibrate click-4-corners works; L drawer shows per-stage ms + p50/p90.
-**Next:** real-camera pass once Henry grants camera permission (`python -m app.capture --list`, set `BM_CAMERA_INDEX`), real serial once a board is plugged in, then demo hardening (overlay drift check against a real twin from T2).
-**Blocked (Henry, 1 min):** macOS camera permission — `python -m app.capture --list` says `OpenCV: not authorized to capture video`. Grant Camera access to the terminal app running Claude Code (System Settings → Privacy & Security → Camera), rerun `--list`. Synthetic frames meanwhile; nothing else blocked.
+**Done:** Steps 1–6 + H+2/H+2b relay items. Real-camera pass passed on index 2 (1920×1080, still in 37 ms, 460 KB); live server runs camera → T2 `build_twin` → T3 `run_checks` → UI in ~200 ms per frame (no markers in view yet, so T1 raises CalibrationError and T2 falls back to identity). Camera auto-pick: if `BM_CAMERA_INDEX` yields a black frame, the first index with brightness > 5 is used and logged (`camera_pick` in telemetry; verified index 0 → 2). Calibrate now calls T2 `set_manual_corners` + `clear_cache`, shows CalibrationError verbatim plus the A1/A63/J63/J1 hint; refine returning the same object = "nothing new"; datasheet page renders int or string. 51 tests pass.
+**Next:** when the phone is on the mount with markers taped: `python -m app.capture --list`, confirm the live index, run the demo scenarios on the real board; check overlay drift against T2's real pixel coordinates.
+**Blocked:** nothing. Exposure/white-balance lock is NOT honoured by the Mac built-in camera (AVFoundation returns -1 for both props) — expect auto-exposure drift; keep the lamp steady.
 
 ## How to run
 
@@ -12,7 +12,7 @@ BM_MOCK=1 .venv/bin/python -m uvicorn app.server:app --port 8000     # demo back
 .venv/bin/python -m uvicorn app.server:app --port 8000               # live: BM_CAMERA_INDEX, optional BM_SERIAL_PORT
 ```
 Open http://localhost:8000 · keys: 1 OK · 2 5V · 3 swapped · 0 back to live · R re-check · L latency drawer · / focus question · Esc normal mode.
-A server is currently running on :8000 in mock mode (started by T5; `pkill -f "uvicorn app.server"` to stop).
+A server is currently running on :8000 in LIVE mode with camera index 2 (started by T5; `pkill -f "uvicorn app.server"` to stop).
 
 ## For other terminals
 
@@ -33,6 +33,9 @@ A server is currently running on :8000 in mock mode (started by T5; `pkill -f "u
 - Serial: no USB serial device attached yet (only Bluetooth/debug-console). Replay mode `BM_SERIAL_REPLAY=mocks/serial_sda_swapped.txt` is the fallback.
 
 ## Step log
+
+- H+2b (camera): `open_best_camera()` probes brightness over 8 frames; black preferred index → first bright candidate 0–5; logs `camera_pick`. Live pass verified with the Mac camera (index 2) and the auto-pick path from a black iPhone index.
+- H+2 relay: T2 calibration hooks wired; CalibrationError surfaced verbatim; `refine is rule_diagnosis` → status `nothing_new`, no second card; twin `calibration` field shown next to the frame id (`cal last_good` / `identity`).
 
 - Step 5 (UI): done. Dark high-contrast single file; overlay scales twin pixels by `naturalWidth/Height`; mock twins (pixel `[0,0]`) are laid out on a synthetic hole grid and component boxes hug their pins; error/warning evidence pulses; low-confidence dashed; click → JSON popover with net members; cards replace in place per frame_id; confirm cards; Web Speech mic; errors stick for 8 s on the status line.
 - Step 6 (latency drawer): done. `L` toggles; last-run ms per stage vs budget (over budget in red) + p50/p90 from `/api/telemetry`.

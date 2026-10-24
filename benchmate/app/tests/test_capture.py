@@ -1,4 +1,5 @@
 """Tests for app.capture (Step 2). No real camera: synthetic sources + fake clock."""
+import json
 import time
 
 import numpy as np
@@ -171,3 +172,57 @@ def test_module_level_api_signatures():
     import inspect
     assert str(inspect.signature(capture.get_frame)) == "(high_res: bool = False) -> str"
     assert str(inspect.signature(capture.frame_changed)) == "(threshold: float = 0.02) -> bool"
+
+
+# ---------------------------------------------------------------- camera auto-pick on black frames
+class BrightSource(capture.FrameSource):
+    def __init__(self, index, level):
+        self.index, self.level, self.released = index, level, False
+
+    def read(self):
+        return np.full((90, 160, 3), self.level, dtype=np.uint8)
+
+    def release(self):
+        self.released = True
+
+
+def make_opener(levels):
+    """levels: {index: brightness} — missing index raises RuntimeError like a closed camera."""
+    opened = []
+
+    def opener(i):
+        if i not in levels:
+            raise RuntimeError(f"camera index {i} did not open")
+        src = BrightSource(i, levels[i]); opened.append(src); return src
+
+    opener.opened = opened
+    return opener
+
+
+def test_open_best_camera_keeps_preferred_when_bright(runtime):
+    op = make_opener({0: 0, 1: 0, 2: 93})
+    src = capture.open_best_camera(2, opener=op)
+    assert src.index == 2 and len(op.opened) == 1
+
+
+def test_open_best_camera_falls_through_black_preferred_to_first_bright(runtime):
+    op = make_opener({0: 0, 1: 0, 2: 93})
+    src = capture.open_best_camera(0, opener=op)
+    assert src.index == 2
+    assert op.opened[0].released and op.opened[1].released  # 0 (preferred) and 1 (black) closed
+    recs = [json.loads(l) for l in (runtime / "telemetry.jsonl").read_text().splitlines()]
+    picks = [r for r in recs if r["stage"] == "camera_pick"]
+    assert picks[-1]["index"] == 2 and "first bright" in picks[-1]["reason"]
+
+
+def test_open_best_camera_prefers_live_phone_over_builtin(runtime):
+    op = make_opener({0: 0, 1: 80, 2: 93})
+    assert capture.open_best_camera(0, opener=op).index == 1  # first bright index, not the brightest
+
+
+def test_open_best_camera_unopenable_preferred_and_all_black(runtime):
+    op = make_opener({0: 0, 1: 0})
+    assert capture.open_best_camera(2, opener=op) is None or capture.open_best_camera(2, opener=op) is None
+    op2 = make_opener({0: 0, 1: 0, 2: 0})
+    src = capture.open_best_camera(2, opener=op2)
+    assert src.index == 2  # all black: keep the preferred one rather than nothing

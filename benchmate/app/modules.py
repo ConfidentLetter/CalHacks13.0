@@ -229,5 +229,27 @@ def list_profiles() -> list[dict]:
     return call("knowledge", "list_profiles", mock_list_profiles)
 
 
+def calibrate_strict(frame_path: str, corners=None):
+    """Like calibrate() but lets CalibrationError through: T1 says its message is safe to show verbatim.
+    Only a missing module falls back to the mock identity homography."""
+    try:
+        mod = importlib.import_module("perception_geometry")
+        fn = mod.calibrate
+    except Exception as exc:
+        return _fallback("perception_geometry", "calibrate", mock_calibrate, f"import: {type(exc).__name__}: {exc}",
+                         (frame_path, corners), {})
+    return fn(frame_path, corners)
+
+
+def set_manual_corners(corners) -> None:
+    """T2 hook: clicked corners feed T1's calibrate inside build_twin; None clears them."""
+    return call("perception_detect.geometry_bridge", "set_manual_corners", lambda c: None, corners)
+
+
+def clear_twin_cache() -> None:
+    """T2 hook: forget cached twins after any recalibration."""
+    return call("perception_detect.twin", "clear_cache", lambda: None)
+
+
 def record_read(url_or_path: str, text, seconds_on_page: float) -> None:
     return call("knowledge", "record_read", mock_record_read, url_or_path, text, seconds_on_page)

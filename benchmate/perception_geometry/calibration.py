@@ -382,7 +382,20 @@ def calibrate(frame_path: str, corners: list[tuple[float, float]] | None = None)
         _remember(found, out)
     else:
         _corner_cache[key] = out
-    log("calibrate", (time.perf_counter() - t0) * 1000, source=source, **stats)
+    log("calibrate", (time.perf_counter() - t0) * 1000, source=source, **_finite(stats))
+    return out
+
+
+def _finite(stats: dict) -> dict:
+    """Telemetry goes to browsers over JSON: non-finite floats become None (T5's request)."""
+    out = {}
+    for k, v in stats.items():
+        if isinstance(v, float) and not math.isfinite(v):
+            out[k] = None
+        elif isinstance(v, (np.floating, np.integer)):
+            out[k] = v.item()
+        else:
+            out[k] = v
     return out
 
 

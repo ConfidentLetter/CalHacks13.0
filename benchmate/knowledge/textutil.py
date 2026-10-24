@@ -134,12 +134,21 @@ def parent_window(page_text: str, chunk_text: str, width: int = PARENT_WINDOW_CH
     page_text = page_text.strip()
     if len(page_text) <= width:
         return page_text
-    probe = chunk_text.strip()[:60]
-    pos = page_text.find(probe) if probe else -1
+    pos = _locate(page_text, chunk_text)
     if pos < 0:
         return page_text[:width].strip()
     start = max(0, min(pos - width // 4, len(page_text) - width))
     return page_text[start:start + width].strip()
+
+
+def _locate(page_text: str, chunk_text: str) -> int:
+    """Index of the chunk's first words in the page text, tolerant of line breaks and spacing differences."""
+    words = chunk_text.split()[:8]
+    if not words:
+        return -1
+    pattern = r"\s+".join(re.escape(w) for w in words)
+    m = re.search(pattern, page_text)
+    return m.start() if m else page_text.find(" ".join(words[:3]))
 
 
 def ends_mid_sentence(text: str) -> bool:

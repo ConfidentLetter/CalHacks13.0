@@ -11,6 +11,7 @@ HOLE_MIN_MM, HOLE_MAX_MM = 0.55, 1.9
 HOLE_MIN_FILL = 0.55          # contour area / bbox area; printed letters are thin -> low fill
 ADAPTIVE_BLOCK_PITCHES = 2.0
 ADAPTIVE_C = 22
+HOLE_MAX_SAT = 90              # HSV saturation above this = coloured (wire / PCB), not a hole
 
 
 def hole_mask(warped_bgr: np.ndarray) -> np.ndarray:
@@ -18,7 +19,10 @@ def hole_mask(warped_bgr: np.ndarray) -> np.ndarray:
     gray = cv2.cvtColor(warped_bgr, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
     block = int(ADAPTIVE_BLOCK_PITCHES * board.pitch_px()) | 1
-    return cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block, ADAPTIVE_C)
+    dark = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block, ADAPTIVE_C)
+    # holes are dark AND grey; a coloured wire is darker than the board in grayscale but saturated
+    sat = cv2.cvtColor(warped_bgr, cv2.COLOR_BGR2HSV)[..., 1]
+    return cv2.bitwise_and(dark, (sat < HOLE_MAX_SAT).astype(np.uint8) * 255)
 
 
 def detect_hole_blobs(warped_bgr: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:

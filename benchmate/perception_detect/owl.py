@@ -11,13 +11,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ._telemetry import timed
-from .config import OWL_MODEL_ID, OWL_QUERIES, OWL_SCORE_THRESHOLD
+from ._telemetry import log, timed
+from .config import OWL_HALF_PRECISION, OWL_MODEL_ID, OWL_QUERIES, OWL_SCORE_THRESHOLD
 
 _lock = threading.Lock()
 _model: Any = None
 _processor: Any = None
 _device: str | None = None
+_dtype: Any = None
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,7 @@ def pick_device() -> str:
 
 def load(model_id: str = OWL_MODEL_ID) -> tuple[Any, Any, str]:
     """Load (once) and return (processor, model, device)."""
-    global _model, _processor, _device
+    global _model, _processor, _device, _dtype
     with _lock:
         if _model is None:
             with timed("owl.load", model=model_id) as info:
@@ -58,19 +59,25 @@ def load(model_id: str = OWL_MODEL_ID) -> tuple[Any, Any, str]:
                 from transformers import Owlv2ForObjectDetection, Owlv2Processor
 
                 _device = pick_device()
+                _dtype = torch.float16 if (OWL_HALF_PRECISION and _device != "cpu") else torch.float32
                 _processor = Owlv2Processor.from_pretrained(model_id)
-                _model = Owlv2ForObjectDetection.from_pretrained(model_id).to(_device).eval()
+                _model = Owlv2ForObjectDetection.from_pretrained(model_id, torch_dtype=_dtype).to(_device).eval()
                 info["device"] = _device
-                torch.set_grad_enabled(False)
+                info["dtype"] = str(_dtype)
         return _processor, _model, _device  # type: ignore[return-value]
 
 
 def warmup() -> bool:
-    """Load the model (T5 may call this at server start). False if it cannot be loaded."""
+    """Load the model and run one dummy inference so the first real frame is not the slow one
+    (T5 may call this at server start). False if the model cannot be loaded."""
     try:
+        import numpy as np
+
         load()
+        detect(np.full((480, 640, 3), 128, np.uint8))
         return True
-    except Exception:
+    except Exception as exc:
+        log("owl.warmup_failed", 0.0, error=f"{type(exc).__name__}: {exc}"[:160])
         return False
 
 
@@ -88,11 +95,17 @@ def detect(image: Any, queries: tuple[str, ...] = OWL_QUERIES,
     processor, model, device = load()
     with timed("owl.detect", w=pil.width, h=pil.height) as info:
         inputs = processor(text=[list(queries)], images=pil, return_tensors="pt").to(device)
+        if _dtype is not None and _dtype != torch.float32:
+            inputs["pixel_values"] = inputs["pixel_values"].to(_dtype)
         with torch.no_grad():
             outputs = model(**inputs)
+            if device == "mps":
+                torch.mps.synchronize()
         # OWLv2 pads the image to a square (bottom/right); boxes come back in that padded frame,
         # so the target size is the padded square and the original image is its top-left corner.
         side = max(pil.width, pil.height)
+        outputs.logits = outputs.logits.float()
+        outputs.pred_boxes = outputs.pred_boxes.float()
         results = processor.post_process_grounded_object_detection(
             outputs, threshold=threshold, target_sizes=torch.tensor([[side, side]]),
             text_labels=[list(queries)])[0]

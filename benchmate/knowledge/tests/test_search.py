@@ -57,7 +57,7 @@ def test_bme280_i2c_address_mentions_0x76_0x77():
     for h in hits:
         _assert_hit_shape(h)
     assert hits[0]["page"] in {"32", "33"}, [h["page"] for h in hits]
-    hex_hits = [h for h in hits if "0x76" in h["text"] or "0x77" in h["text"]]
+    hex_hits = [h for h in hits if "0x76" in h["text"]]
     assert hex_hits, [h["page"] for h in hits]
     assert "0x76" in _page_text_by_label("bme280.pdf", hex_hits[0]["page"])
 

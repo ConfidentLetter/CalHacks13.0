@@ -129,3 +129,28 @@ def test_slow_search_is_skipped_within_budget(monkeypatch, twin_5v):
 def test_warmup_runs_offline():
     out = reasoning.warmup()
     assert {"profiles_ms", "search_ms"} <= set(out)
+
+
+@pytest.mark.realsearch
+def test_cold_index_does_not_queue_searches(monkeypatch):
+    """While the first search is still loading, later budgeted calls return [] at once; once it finishes, hits flow."""
+    import threading, time
+    from reasoning import citations
+
+    gate = threading.Event()
+
+    def slow(part_id, query, k):
+        gate.wait(5)
+        return [{"text": "Supply voltage VDD 3.6 V.", "page": "22"}]
+
+    monkeypatch.setattr(citations, "_raw_search", slow)
+    monkeypatch.setattr(citations, "_INFLIGHT", {})
+    monkeypatch.setattr(citations, "_WARM", threading.Event())
+    assert citations.safe_search("bme280", "q1", 3, budget_ms=30) == []          # starts the cold load
+    t0 = time.perf_counter()
+    assert citations.safe_search("bme280", "q2", 3, budget_ms=30) == []          # not queued: immediate
+    assert (time.perf_counter() - t0) < 0.02
+    gate.set()
+    time.sleep(0.05)
+    assert citations.safe_search("bme280", "q1", 3, budget_ms=200)[0]["page"] == "22"   # in-flight result reused
+    assert citations.safe_search("bme280", "q3", 3, budget_ms=200)[0]["page"] == "22"   # warm now
