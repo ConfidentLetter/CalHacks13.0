@@ -44,7 +44,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("SV_CAMERA_PROBE", "0")
     monkeypatch.setenv("SV_STT", "0")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
-    monkeypatch.delenv("SV_SOURCE", raising=False)
+    monkeypatch.setenv("SV_SOURCE", "webcam")  # tests never depend on config/vision.yaml capture.source
     monkeypatch.setattr(store, "TWINS_DIR", tmp_path / "twins")
     monkeypatch.setattr(pipeline, "SNAPSHOT_DIR", tmp_path / "snapshots")
     monkeypatch.setattr(telemetry, "TELEMETRY_PATH", tmp_path / "telemetry.jsonl")

@@ -29,15 +29,16 @@ listed by ffmpeg's AVFoundation backend but **not** by OpenCV's `VideoCapture` i
 
 ```
 python -m capture.avf                                  # list video devices: avf:0 MacBook Air相机 … avf:3 MacBook Air桌上视角相机
-python -m capture.source --snap --source "avf:MacBook Air桌上视角"   # one still (name substring, case-insensitive)
+python -m capture.source --snap --source avf                           # device from config capture.avf_device
+python -m capture.source --snap --source "avf:MacBook Air桌上视角"   # or an explicit name substring / index
 SV_SOURCE="avf:MacBook Air桌上视角" python -m capture.source --wait 20  # stability trigger on the Desk View stream
 ```
 
 - **Address devices by name, not index.** ffmpeg renumbers paired iPhones between runs (the two iPhone entries swapped
   indices between two listings minutes apart); the MacBook entries also move when a phone connects. A substring must
   match exactly one device (`avf:桌上视角` alone is ambiguous when an iPhone is paired → the error lists the candidates).
-- For the whole pipeline (T4 server / T5 bridge) set `capture.source: "avf:MacBook Air桌上视角"` in `config/vision.yaml`
-  or export `SV_SOURCE` for the server process — `app/server.py` and `bridge/camera.py` both read those.
+- For the whole pipeline (T4 server / T5 bridge) set `capture.source: avf` (device = `capture.avf_device`, ffmpeg =
+  `capture.avf_ffmpeg`) in `config/vision.yaml`, or export `SV_SOURCE=avf` for the server process.
 - Implementation (`capture/avf.py`): one long-lived `ffmpeg -f avfoundation -framerate 30 -video_size <largest mode>
   -i <index> -vf fps=5 -f rawvideo -pix_fmt bgr24 -` process; frames are read from the pipe by a thread, previews and
   snapshots both come from it (device opened once, no second client). Desk View delivers 1920×1440 at 30 fps.
@@ -46,4 +47,11 @@ SV_SOURCE="avf:MacBook Air桌上视角" python -m capture.source --wait 20  # st
 - ffmpeg is found via env `SV_FFMPEG`, `capture.avf_ffmpeg`, `PATH`, then `/opt/homebrew/bin/ffmpeg`. Optional keys with
   defaults in code: `capture.avf_fps` 5, `capture.avf_warmup_s` 1.5, `capture.avf_frame_timeout_s` 5,
   `capture.avf_device_framerate` 30, `capture.avf_pixel_format` uyvy422.
-- The ffmpeg process is killed by `capture.source.release_cameras()` (also called at the end of every CLI run).
+- Lifecycle: `capture.source._avf()` owns one stream per process; it is reopened automatically if ffmpeg dies and
+  **stopped after `capture.avf_idle_stop_s` (30 s) with no reader** (verified live: killed after the window, next call
+  reopened it in 2.6 s). `capture.source.release_cameras()` stops it explicitly (every CLI run ends with that).
+- `capture.source.latest_frame()` returns the frame currently in memory in ~0.3 ms (for T5's MJPEG grabber);
+  `live_frame()` / `get_snapshot()` wait for a frame newer than the last one served (≤ 200 ms at 5 fps).
+- Sample Desk View frame from this Mac: `runtime/snapshots/20261024_144603_302.jpg` (1920×1440, a white cloth and no paper in view →
+  `no_page`, which is correct). Desk View is macOS's own top-down warp: the paper must lie close to the laptop base;
+  the far part of the frame is stretched hard.

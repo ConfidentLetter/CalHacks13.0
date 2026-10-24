@@ -27,7 +27,7 @@ def _result(dewarped_path: str, width: int, height: int, homography, quality: Qu
 def _unreadable(snapshot_path: str) -> dict:
     quality = Quality(ok=False, issues=["no_page"])
     return _result(repo_relative(snapshot_path) if Path(snapshot_path).exists() else snapshot_path, 0, 0, IDENTITY, quality,
-                   detection={"method": "none", "quad": None})
+                   dewarped_gray_path=None, debug_path=None, detection={"method": "none", "quad": None})
 
 
 def _save_outputs(stem: str, dw: Dewarped) -> tuple[str, str]:
@@ -91,9 +91,10 @@ def detect_and_dewarp(snapshot_path: str) -> dict:
                 det = detect_page(frame)
             if det.quad is None:
                 quality = assess(frame, None, None, None)
-                _debug_image(stem, frame, det, None, quality, (time.perf_counter() - t0) * 1000)
+                debug_path = _debug_image(stem, frame, det, None, quality, (time.perf_counter() - t0) * 1000)
                 info["ok"] = False
                 return _result(repo_relative(snapshot_path), frame.shape[1], frame.shape[0], IDENTITY, quality,
+                               dewarped_gray_path=None, debug_path=debug_path,
                                detection={"method": det.method, "quad": None})
             flat = det.method == "flat"
             with timed("capture.dewarp"):
@@ -105,6 +106,7 @@ def detect_and_dewarp(snapshot_path: str) -> dict:
             log("capture.page_error", (time.perf_counter() - t0) * 1000, error=f"{type(exc).__name__}: {exc}")
             quality = Quality(ok=False, issues=["no_page"])
             return _result(repo_relative(snapshot_path), frame.shape[1], frame.shape[0], IDENTITY, quality,
+                           dewarped_gray_path=None, debug_path=None,
                            detection={"method": "error", "quad": None, "error": f"{type(exc).__name__}: {exc}"})
         debug_path = _debug_image(stem, frame, det, dw, quality, (time.perf_counter() - t0) * 1000)
         info.update(ok=quality.ok, issues=",".join(quality.issues), method=det.method)

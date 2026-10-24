@@ -50,7 +50,7 @@ export function NotebookObserver() {
   const isHardware = camera.source === HARDWARE_SOURCE
   const backendCamera = status.data?.camera
   // T5 reports camera.source == "avf" when the backend grabs macOS Desk View (the demo rig).
-  const isDeskViewRig = backendCamera?.source === 'avf'
+  const isDeskViewRig = String(backendCamera?.source || '').startsWith('avf')
   const overheadLabel = isDeskViewRig ? 'Desk View · overhead' : 'Overhead camera · backend stream'
   const canGrab = camera.isLive
   const frame = analysis.frame

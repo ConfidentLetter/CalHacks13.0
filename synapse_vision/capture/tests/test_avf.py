@@ -72,6 +72,7 @@ def test_ffmpeg_bin_prefers_env_then_errors_cleanly(tmp_path, monkeypatch):
     monkeypatch.setenv("SV_FFMPEG", str(fake))
     assert avf.ffmpeg_bin() == str(fake)
     monkeypatch.delenv("SV_FFMPEG")
+    monkeypatch.setattr(avf, "cfg", lambda key, default=None: default)   # ignore Henry's real capture.avf_ffmpeg path
     monkeypatch.setattr(avf.shutil, "which", lambda _: None)
     monkeypatch.setattr(avf, "FFMPEG_FALLBACKS", ())
     with pytest.raises(SourceError):
@@ -118,7 +119,7 @@ def test_stream_skips_warmup_serves_fresh_frames_then_reports_end(fake_ffmpeg):
 
 def test_stream_read_times_out_when_no_frames_arrive(tmp_path, monkeypatch):
     sleeper = tmp_path / "ffmpeg"
-    sleeper.write_text("#!/bin/sh\nsleep 5\n")
+    sleeper.write_text("#!/bin/sh\nexec sleep 5\n")
     sleeper.chmod(sleeper.stat().st_mode | stat.S_IXUSR)
     stream = avf.AvfStream([str(sleeper)], W, H, avf.AvfDevice(3, "x"), warmup_s=0.0)
     try:
@@ -171,7 +172,7 @@ def test_latest_frame_returns_newest_without_waiting_and_live_frame_waits(fake_f
 
 def test_idle_stop_kills_ffmpeg_and_owner_reopens(tmp_path, monkeypatch):
     sleeper = tmp_path / "ffmpeg"
-    sleeper.write_text("#!/bin/sh\nsleep 30\n")
+    sleeper.write_text("#!/bin/sh\nexec sleep 30\n")
     sleeper.chmod(sleeper.stat().st_mode | stat.S_IXUSR)
     opened = []
 

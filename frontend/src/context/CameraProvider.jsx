@@ -16,7 +16,7 @@ import { findDeskView } from '../utils/camera'
 // unload, and if the device disconnects.
 
 export const HARDWARE_SOURCE = 'hardware'
-const DEVICE_KEY = 'synapse.camera.device'
+const DEVICE_KEY = 'synapse.camera.device.v2' // v2 (H+12): stale webcam choices are dropped so the overhead rig is the default
 const MAX_FRAME_WIDTH = 1600
 
 const ERROR_STATES = {

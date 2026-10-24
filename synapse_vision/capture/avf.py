@@ -276,6 +276,9 @@ class AvfStream:
             self._proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             pass
+        with self._cond:            # do not rely on the pipe reaching EOF (a child of ffmpeg could hold it open)
+            self._dead = True
+            self._cond.notify_all()
 
     def __enter__(self) -> "AvfStream":
         return self

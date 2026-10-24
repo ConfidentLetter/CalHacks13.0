@@ -68,3 +68,66 @@ def test_probe_is_cached(env, monkeypatch):
     assert camera.probe_camera() is True
     assert len(calls) == 1
     assert camera.probe_camera(force=True) is True and len(calls) == 2
+
+
+# ---------------------------------------------------------------------- H+12: source-agnostic via capture.source.live_frame
+
+def _fake_live_frame(monkeypatch, calls):
+    import numpy as np
+
+    import capture.source as src
+
+    frame = np.full((36, 48, 3), 180, dtype=np.uint8)
+
+    def live_frame(source=None):
+        calls.append(source)
+        return frame.copy()
+
+    monkeypatch.setattr(src, "live_frame", live_frame)
+    return frame
+
+
+def test_avf_source_reads_t1_live_frame_and_reports_avf(client, monkeypatch):
+    calls: list = []
+    _fake_live_frame(monkeypatch, calls)
+    monkeypatch.setenv("SV_SOURCE", "avf:Fake Desk View")
+    monkeypatch.delenv("SV_CAMERA_PROBE", raising=False)
+    monkeypatch.setattr(camera, "_probe", {"at": 0.0, "value": False, "detail": ""})
+    status = client.get("/api/status").json()["camera"]
+    assert status["connected"] is True and status["source"] == "avf" and status["device"] == "Fake Desk View"
+    assert "Desk View" in status["label"] and "Fake Desk View" in status["detail"]
+    snap = client.post("/api/camera/capture").json()
+    assert snap["deviceId"] == "avf" and snap["imageUrl"].startswith("/files/runtime/")
+    with client.stream("GET", "/api/camera/stream?max_frames=2") as r:
+        body = b"".join(r.iter_bytes())
+    assert body.count(b"--frame\r\n") == 2
+    assert calls and all(c == "avf:Fake Desk View" for c in calls)  # every frame came through T1's live_frame(spec)
+
+
+def test_bare_avf_is_completed_from_config(env, monkeypatch):
+    monkeypatch.setenv("SV_SOURCE", "avf")
+    monkeypatch.setattr(camera, "cfg", lambda key, default=None: {"capture.avf_device": "MacBook Air桌上视角相机"}.get(key, default))
+    assert camera.source_spec() == "avf:MacBook Air桌上视角相机"
+    assert camera.source_kind() == "avf" and camera.source_device() == "MacBook Air桌上视角相机"
+    monkeypatch.setattr(camera, "cfg", lambda key, default=None: default)
+    assert camera.source_spec() == "avf"
+    import pytest
+
+    with pytest.raises(camera.CameraError):
+        camera.frame_reader()
+
+
+def test_webcam_reads_go_through_live_frame_under_lock(env, monkeypatch):
+    calls: list = []
+    _fake_live_frame(monkeypatch, calls)
+    monkeypatch.setenv("SV_SOURCE", "webcam")
+    read = camera.frame_reader()
+    assert read().shape == (36, 48, 3) and calls == ["webcam"]
+
+
+def test_upload_source_has_no_live_camera(env, monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("SV_SOURCE", "upload:eval/testset/synthetic_demo.jpg")
+    with pytest.raises(camera.CameraError):
+        camera.frame_reader()

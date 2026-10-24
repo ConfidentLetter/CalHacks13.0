@@ -1,0 +1,2 @@
+Message from Henry: app/tests/test_config.py::test_reads_real_config_values fails again — it asserts capture.source ∈ {pi, upload, webcam}, but the demo source is now `avf:<device>` (macOS Desk View via ffmpeg; T1's capture/source.py accepts `avf` and `avf:<name substring|index>`). Accept any string that is one of pi|webcam|upload|avf or starts with `avf:`/`upload:`. Also: the live server on :8000 is the bridge (bridge.server:app) and config/vision.yaml now says `source: "avf:MacBook Air桌上视角"` — nothing else for you to change.
+Adapt, then continue.

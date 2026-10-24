@@ -111,8 +111,8 @@ yet, bridge builds it · `defer` not for the demo.
 
 | Frontend call | Timeout | Backing today | Missing | Bridge builds | Kind |
 |---|---|---|---|---|---|
-| `GET /api/status` | 3 s (polled 10 s) | T4 `/status` (mock, source, model, latest id); `ANTHROPIC_API_KEY`/`SV_MODEL` env; `capture.source._webcam()` | shape (`ok, version, camera{connected,streamUrl,streamType}, reading{eventsToday}, ai{available,model}`); real `camera.connected`; eventsToday | `bridge/api.py:status` — camera probe = shared webcam already open ⇒ true, else try `Webcam.open` once, cache 5 s; eventsToday from `bridge/store.py` | compose |
-| `GET /api/camera/stream` | 10 s to first frame | `capture.source._webcam().read()` (singleton), `wait_for_stable`'s 5 fps preview loop (not reusable as-is) | MJPEG `multipart/x-mixed-replace` endpoint; a frame grabber that doesn't fight T4 for the camera | `bridge/camera.py:FrameGrabber` — one thread, lock around `Webcam.read()`, ~5 fps, latest JPEG in memory; installs itself as `pipeline.set_frame_provider` so `/snapshot` and `/api/camera/capture` take stills from the same handle; only runs while a stream client is connected; Pi source → proxy `pi_url` preview | new |
+| `GET /api/status` | 3 s (polled 10 s) | T4 `/status` (mock, source, model, latest id); `ANTHROPIC_API_KEY`/`SV_MODEL` env; `capture.source.live_frame` | shape (`ok, version, camera{connected,streamUrl,streamType}, reading{eventsToday}, ai{available,model}`); real `camera.connected`; eventsToday | `bridge/api.py:status` — camera probe = one `live_frame(spec)` read per 5 s cache window (handle stays open in T1); `camera.source/device/label/detail` (H+12: `avf` = Desk View); eventsToday from `bridge/store.py` | compose |
+| `GET /api/camera/stream` | 10 s to first frame | `capture.source._webcam().read()` (singleton), `wait_for_stable`'s 5 fps preview loop (not reusable as-is) | MJPEG `multipart/x-mixed-replace` endpoint; a frame grabber that doesn't fight T4 for the camera | `bridge/camera.py:FrameGrabber` — one thread reading `capture.source.live_frame(spec)` (webcam / `avf:<device>` Desk View / pi), ~5 fps, latest JPEG in memory; installs itself as `pipeline.set_frame_provider` so `/snapshot` and `/api/camera/capture` take stills from the same handle; stops 15 s after the last client leaves | new |
 | `GET /api/camera/latest[?fresh=true]` | 10 s (polled 10 s) | `app.bridge_api.latest_snapshot()` (latest analysed twin), `latest_frame_path()` (newest still), T4 `/files/` | snapshot object `{id, imageUrl, capturedAt, deviceId}`; `null` 200 when none; `fresh=true` = grab a still | `bridge/api.py:camera_latest` — bridge still index first, else latest twin, else newest file; `fresh` grabs one still (no pipeline) | direct |
 | `POST /api/camera/capture` | 20 s | T4 `POST /snapshot` runs the *whole* pipeline (17 s+, would exceed 20 s under load and double-run analysis); T1 `get_snapshot` / frame provider take a still in ≤1 s | still-only capture with an id the frontend can hand back to analyze | `bridge/api.py:camera_capture` — one still via FrameGrabber (or `capture.get_snapshot`), registered in the bridge still index as `still_<ts>_<rand>` → path; returns the snapshot object. **Deliberate deviation**: does *not* wrap `/snapshot` (see § 4.6) | direct |
 | `POST /api/camera/analyze` | 60 s | `app.server.analyze(path, source)` → `transcribe.build_page_twin` (real chain; stores + broadcasts on `/events`); `transcribe.low_confidence`; T3's per-line extras `bbox`, `crop_path`, `context_crop_path`, `readings`, `uncertain_spans` | accept `image.base64` **and** `image.snapshotId`; write `runtime/uploads/<id>.jpg`; judging layer (status/note/summary/hints); H+9: per-step `bbox`, `cropUrl`, `contextCropUrl`, `readings{page,line,reread,agree,notes}`, `uncertainSpans` + top-level `imageSize` for T6's inspector | `bridge/analyze.py` — decode → file → `server.analyze` → `bridge/tutor.py:judge_twin` (ONE Claude call with verbatim lines + crossed-out flags + confidences; labels copied verbatim from the twin, never from the model); fallbacks: crossed_out→`unclear` "crossed out", conf < 0.6→`unclear`, `_error`/no lines→`steps=[]`, summary says analysis failed; 60 s budget, never 500 | compose |
@@ -143,12 +143,15 @@ Not in the frontend contract but served through the bridge unchanged: all of T4'
    image.original_path, captured_at, source}`. Adapter: `id=snapshot_id` (or `still_…` for un-analysed stills),
    `imageUrl=/files/<original_path>` (relative; the frontend resolves against its backend URL),
    `capturedAt=captured_at`, `deviceId=source` (`webcam` | `pi` | `upload`).
-5. **Camera shared by three readers** — `capture.source._webcam()` is a process-wide singleton but `Webcam.read()` is
-   not thread-safe: T4's `/snapshot` (worker thread), T4's watch loop (`wait_for_stable`, its own 5 fps loop) and the
-   bridge's MJPEG grabber could call `read()` concurrently. Bridge: a single grabber thread with a lock, installed as
-   `pipeline.set_frame_provider` so `/snapshot` goes through it. Remaining hole: the **watch loop** (`POST /watch`)
-   bypasses the provider. Decision for the demo: don't run the watch loop while the MJPEG stream is open; asked T1
-   (NOTES_T5) to add a lock inside `Webcam.read()` so it becomes safe.
+5. **Camera shared by three readers** — one camera handle per process lives in T1 (`capture.source`): the shared
+   `Webcam`, the shared ffmpeg AVFoundation stream (`avf:<device>`, macOS Desk View — invisible to OpenCV and to
+   Chrome's getUserMedia, hence the demo's "Overhead camera" mode), or the Pi over HTTP. Since H+12 the bridge reads
+   every frame and still through T1's public **`capture.source.live_frame(spec)`** (thread-safe for avf; the bridge
+   keeps `capture_lock` around webcam reads) and never opens a camera itself. While the MJPEG grabber runs it is
+   installed as `pipeline.set_frame_provider`, so T4's `/snapshot` shares the handle. Remaining hole: the **watch loop**
+   (`POST /watch`) bypasses the provider; don't run it while the stream is open. Henry's config uses a bare
+   `capture.source: avf` + `capture.avf_device`; the bridge completes that to `avf:<device>` (T1's `get_snapshot` alone
+   would raise on the bare form — asked T1 to fall back to `capture.avf_device`).
 6. **`/api/camera/capture` vs `POST /snapshot`** — `/snapshot` runs the whole pipeline (17 s now, 25–33 s under
    contention) while the UI waits 20 s, and the UI calls analyze right after, which would run the pipeline twice.
    Decision: capture takes a still only (≤1 s) and analyze runs the pipeline once. T4's `/snapshot` is untouched.
@@ -214,6 +217,8 @@ to T4's server on :8000, so nothing had to stop; dashboard `npm run dev` on :517
 
 | H+9 inspector fields (in-process, real chain, synthetic page) | 200 in 8.9 s; `imageSize` 1700×2200; every step has `bbox`, `cropUrl`/`contextCropUrl` that `/files/` serves (200), `readings.page`/`line` verbatim with `agree: true`, `uncertainSpans`; `GET /twin/{snapshotId}` → 200. `runtime/debug/bridge/h9_analyze_response.json`. **Not yet on the live :8000** — that process predates the change and needs Henry to restart it (kill was denied to the terminal). |
 
+| H+12 Desk View (`SV_SOURCE=avf:MacBook Air桌上视角`, in-process, real ffmpeg stream) | `/api/status › camera` = `connected: true, source: "avf", device: "MacBook Air桌上视角", label: "Desk View (macOS AVFoundation via ffmpeg)", detail: "… 1920x1440"` (first probe 3.1 s = ffmpeg warm-up, then cached); `POST /api/camera/capture` 62 ms → 1920×1440 JPEG under `/files/runtime/snapshots/`, `deviceId: "avf"`; `GET /api/camera/stream` 3 frames in 0.59 s. Every frame came through T1's `capture.source.live_frame(spec)`; no camera opened by the bridge. |
+
 What did not work / caveats:
 - The Chrome **extension** was not loaded unpacked in this pass (needs Henry's Chrome profile and a site approval); its
   endpoints were exercised with the exact payloads from `background.js` via curl/tests instead. Load `../extension/`
@@ -222,6 +227,10 @@ What did not work / caveats:
   A flat page under the mount (the real demo) gives 4 clean lines (see the synthetic result above).
 - The in-UI hardware Analyze left the live preview toggled off afterwards (frontend behaviour or my click — to confirm).
 - Voice TTS is not built (`replyAudioUrl: null`), as agreed.
+- **Dylib clash warning:** `faster-whisper` pulls in PyAV, and both PyAV and `opencv-python` bundle `libavdevice`; macOS prints
+  "Class AVFFrameReceiver is implemented in both … may cause spurious casting failures and mysterious crashes" when both are
+  loaded in one process (the bridge loads PyAV on the first `/api/status`, to warm STT). No crash seen in testing. If the
+  server ever dies around a voice question, start it with `SV_STT=0` (voice → 501 "not built yet", PyAV never imported).
 
 ### H+9 addition — analyze step shape (for T6's notebook inspector)
 
@@ -242,6 +251,7 @@ What did not work / caveats:
 `GET /twin/{snapshotId}`.
 
 ## Change log
+- H+12 (T5): camera made source-agnostic over T1's `live_frame` (Desk View `avf:` support); status reports source/device/label/detail; gap 5 rewritten.
 - H+9 (T5): analyze steps gained `bbox`, `cropUrl`, `contextCropUrl`, `readings`, `uncertainSpans`; top-level `imageSize` (relay from Henry for T6). Bridge serves :8000 since H+8.
 - H+7 (T5): bridge built and verified live on :8001 (§ 5); gap 19 added; hand-off to :8000 requested in NOTES_T5.
 - H+6 (T5): first version — module analysis, data flow, 13-endpoint mapping, 18 gaps/decisions.

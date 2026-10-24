@@ -96,7 +96,9 @@ async def status():
     return {
         "ok": True, "version": VERSION,
         "camera": {"connected": connected, "streamUrl": "/api/camera/stream", "streamType": "mjpeg",
-                   "source": camera.source_name(), "detail": camera.probe_detail()},
+                   "source": camera.source_name(), "device": camera.source_device(),
+                   "label": camera.KIND_LABELS.get(camera.source_name(), camera.source_name()),
+                   "detail": camera.probe_detail()},
         "reading": {"eventsToday": default_store().count_today()},
         "ai": {"available": llm.available(), "model": llm.model_name()},
         "voice": stt.status(),

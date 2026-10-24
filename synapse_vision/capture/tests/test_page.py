@@ -137,6 +137,9 @@ def test_no_page_and_partial_page_block(tmp_path):
     out, _ = _run(tmp_path, 2, no_page=True)
     assert out["quality"]["ok"] is False and "no_page" in _flags(out)
     assert out["dewarped_path"].endswith(".jpg") and out["width"] > 0
+    good, _ = _run(tmp_path, 2)
+    assert set(out) == set(good), "every outcome carries the same keys (T5/T6 read debug_path / dewarped_gray_path)"
+    assert out["dewarped_gray_path"] is None and out["debug_path"].startswith("runtime/debug/")
     blocked = [_run(tmp_path, seed, partial=True)[0] for seed in range(4)]
     assert all(o["quality"]["ok"] is False and _flags(o) & {"partial_page", "no_page"} for o in blocked)
 
