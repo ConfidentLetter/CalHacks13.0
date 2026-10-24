@@ -92,7 +92,7 @@ Box styling on the twin (in dewarped-image pixels, scaled to the rendered size w
 ## 4. Component list
 
 `src/components/recognition/`
-- `PageTwin.jsx` — image + absolutely positioned overlay; props `{ imageUrl, image:{width,height}, lines, selectedId, onSelect, compact }`. Uses `useElementSize` to scale.
+- `PageTwin.jsx` — image + overlay; boxes positioned in **percentages of the dewarped image**, so they are exact at any rendered size; `region` prop shows only the ink area (the default "writing" view when the writing covers less than ~3/4 of the page), `maxHeight` keeps a tall sheet inside the viewport; `compact` for the dashboard thumbnail.
 - `LineBox.jsx` — one box (status → classes above), order badge, hover/click, `aria-label`.
 - `LineLedger.jsx` — ruled card; rows via `LedgerRow.jsx` (order, `Latex`, `ConfidenceMeter`, `StatusChip`, note).
 - `Latex.jsx` — KaTeX render (`katex` npm, `throwOnError:false`); falls back to a mono `<code>` with the verbatim string.
@@ -101,14 +101,19 @@ Box styling on the twin (in dewarped-image pixels, scaled to the rendered size w
 - `LineInspector.jsx` — side sheet (`position: fixed`, right); crop, context crop, readings (page vs line, agree mark), re-read zoom + candidates, raw latex with a Copy button.
 - `SummaryStrip.jsx` — topics chips, summary sentence, hints sticky note, latency footnote, line/error counts.
 - `RecognitionView.jsx` — composes the above; owns selection state; loading (skeleton ruled lines, 20 s message) and empty (ruled page + one line) states.
-- `useTwin.js` — given an analyze result, merges `steps[]` with `GET /twin/{snapshotId}` (bbox, crops, readings, image size); uses step-level `bbox/cropUrl/contextCropUrl/readings` when the bridge already sends them.
+- `twinModel.js` — pure helpers: merges `steps[]` with `GET /twin/{snapshotId}` (bbox, crops, readings, image size), uses step-level `bbox/cropUrl/contextCropUrl/readings` when the bridge sends them; `inkRegion` for the zoom-to-writing view; `fileUrl` for repo-relative twin paths.
+- `useTwin.js` — fetches the twin for a snapshot id (skipped when the latest twin is already in hand).
 
 Touched elsewhere: `services/api.js` (+`getTwin(id)`, +`getLatestTwin()`), `context/StudyDataProvider.jsx`
 (load the latest twin on page load so the notebook and dashboard are never empty when a twin exists),
 `pages/NotebookObserver.jsx` (new layout), `pages/Dashboard.jsx` (twin thumbnail + two stats), `index.css`
 (`--color-ink-red`, `.hatch`, `.ruled-lg`, KaTeX import, type scale), `index.html` (title), `package.json` (katex).
 
-## 5. Type scale (projector at 3 m)
+## 5. Status (H+9)
+
+Built and verified live — see `NOTES_T6.md` and `runtime/debug/ui/`. One addition over the wireframe: a **writing / page / still** switch above the twin; "writing" (default when it helps) zooms the twin to the ink so four lines on a tall sheet fill the frame at 3 m.
+
+## 6. Type scale (projector at 3 m)
 
 | role | size / weight | font |
 |---|---|---|
