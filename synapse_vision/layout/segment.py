@@ -52,6 +52,8 @@ def segment_mock(dewarped_path: str) -> dict:
 def _segment_guarded(dewarped_path: str, info: dict) -> dict:
     """Run the classical segmenter; never raise (the demo must not go dark on one bad frame)."""
     try:
+        if info.get("method") == "mock":
+            return segment_mock(dewarped_path)
         from layout.classical import segment_classical
 
         return segment_classical(dewarped_path)
@@ -66,9 +68,6 @@ def segment(dewarped_path: str) -> dict:
     context_crop_path = the line plus the line above and below (for parent-context reading)."""
     method = str(config_get("layout.method", "classical"))
     with timed("layout.segment", method=method) as info:
-        if method == "mock":
-            result = segment_mock(dewarped_path)
-        else:
-            result = _segment_guarded(dewarped_path, info)
+        result = _segment_guarded(dewarped_path, info)
         info["n_lines"] = len(result["lines"])
     return result

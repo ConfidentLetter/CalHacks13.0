@@ -70,11 +70,18 @@ def write_line_crop(img: np.ndarray, bbox: BBox, out_path: Path) -> np.ndarray:
     return crop
 
 
-def write_context_crop(img: np.ndarray, line_bboxes: Sequence[BBox], index: int, out_path: Path) -> np.ndarray:
-    """Crop line ``index`` together with ``layout.context_lines`` neighbours, target outlined."""
+def _neighbour_indices(index: int, n: int, n_ctx: int, groups: Sequence[str] | None) -> list[int]:
+    """Indices of ``index`` and up to ``n_ctx`` reading-order neighbours on each side, same group only."""
+    same = [i for i in range(n) if groups is None or groups[i] == groups[index]]
+    k = same.index(index)
+    return same[max(0, k - n_ctx) : k + n_ctx + 1]
+
+
+def write_context_crop(img: np.ndarray, line_bboxes: Sequence[BBox], index: int, out_path: Path,
+                       groups: Sequence[str] | None = None) -> np.ndarray:
+    """Crop line ``index`` together with ``layout.context_lines`` neighbours (same region), target outlined."""
     n_ctx = int(config_get("layout.context_lines", 1))
-    lo, hi = max(0, index - n_ctx), min(len(line_bboxes), index + n_ctx + 1)
-    neighbours = [line_bboxes[i] for i in range(lo, hi)]
+    neighbours = [line_bboxes[i] for i in _neighbour_indices(index, len(line_bboxes), n_ctx, groups)]
     target = to_int_bbox(line_bboxes[index])
     span = union_bbox([target, [target[0], neighbours[0][1], target[2], 1], [target[0], neighbours[-1][1] + neighbours[-1][3] - 1, target[2], 1]])
     region = pad_bbox(span, CROP_PAD_PX)
@@ -87,16 +94,30 @@ def write_context_crop(img: np.ndarray, line_bboxes: Sequence[BBox], index: int,
     return crop
 
 
-def write_all_crops(img: np.ndarray, line_bboxes: Sequence[BBox], snapshot_id: str) -> list[dict]:
-    """Write line + context crops for every bbox; returns [{crop_path, context_crop_path, ink_density}]."""
+def _clear_stale_crops(out_dir: Path) -> None:
+    for stale in out_dir.glob("line_*.png"):
+        try:
+            stale.unlink()
+        except OSError:
+            pass
+
+
+def write_all_crops(img: np.ndarray, line_bboxes: Sequence[BBox], snapshot_id: str,
+                    groups: Sequence[str] | None = None) -> list[dict]:
+    """Write line + context crops for every bbox; returns [{crop_path, context_crop_path, ink_density}].
+
+    ``groups`` (e.g. region ids, one per line) keeps context crops within the same region/column."""
     out_dir = crops_dir(snapshot_id)
+    _clear_stale_crops(out_dir)
     gray = img if img.ndim == 2 else cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     results: list[dict] = []
     for i, bbox in enumerate(line_bboxes):
         crop_path = out_dir / f"line_{i:03d}.png"
         ctx_path = out_dir / f"line_{i:03d}_ctx.png"
         write_line_crop(img, bbox, crop_path)
-        write_context_crop(img, line_bboxes, i, ctx_path)
+        write_context_crop(img, line_bboxes, i, ctx_path, groups)
+        if not (crop_path.exists() and ctx_path.exists()):
+            raise OSError(f"could not write crops for line {i} under {out_dir}")
         results.append(
             {
                 "crop_path": str(crop_path.relative_to(REPO_ROOT)),

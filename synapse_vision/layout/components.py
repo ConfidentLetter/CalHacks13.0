@@ -25,6 +25,7 @@ BAR_MIN_STACK_INK = 0.5         # pixels of ink needed in a probe zone, x bar wi
 BAR_REACH_FRAC = 1.3            # how far above/below a numerator/denominator may extend, x comp height
 BAR_X_SLACK_FRAC = 0.15         # numerator/denominator centers may overhang the bar by this
 EQUALS_MAX_GAP_FRAC = 0.6       # two similar bars this close (x comp height) are an '=' sign
+STACK_MAX_HEIGHT_FRAC = 3.5     # a fused fraction taller than this x comp height is two lines, not a fraction
 
 
 @dataclass(frozen=True)
@@ -169,6 +170,7 @@ def fuse_fractions(comps: list[Component], binary: np.ndarray, med_char_w: float
         if _is_equals_half(bar, bars, med_h) or not _is_fraction_bar(bar, binary, med_h):
             continue
         group = [c for c in remaining if _in_stack(bar, c, med_h)]
-        if len(group) >= 2:
-            remaining = [c for c in remaining if c not in group] + [union(group)]
+        if len(group) >= 2 and union(group).h <= STACK_MAX_HEIGHT_FRAC * med_h:
+            grouped = {id(c) for c in group}
+            remaining = [c for c in remaining if id(c) not in grouped] + [union(group)]
     return remaining

@@ -17,7 +17,10 @@ UNSURE_MIN_CONF = 0.4
 
 
 def status_hint_for(crop_path: str) -> str:
-    crossed, conf = is_crossed_out(str(REPO_ROOT / crop_path))
+    try:
+        crossed, conf = is_crossed_out(str(REPO_ROOT / crop_path))
+    except Exception:  # noqa: BLE001 - one odd crop must not empty the whole page
+        return "unsure"
     min_conf = float(config_get("layout.crossed_out_min_conf", 0.6))
     if crossed and conf >= min_conf:
         return "crossed_out"
@@ -55,7 +58,7 @@ def segment_classical(dewarped_path: str) -> dict:
     snapshot_id = snapshot_id_from_path(dewarped_path)
     regions, specs = detect_lines(img)
     with timed("layout.crops", n_lines=len(specs)):
-        crops = write_all_crops(img, [s["bbox"] for s in specs], snapshot_id)
+        crops = write_all_crops(img, [s["bbox"] for s in specs], snapshot_id, groups=[s["region_id"] for s in specs])
     with timed("layout.crossed_out", n_lines=len(specs)):
         lines = [
             {"order": i, "region_id": s["region_id"], "bbox": [float(v) for v in s["bbox"]],

@@ -100,8 +100,9 @@ Segment = tuple[int, int, int, int]
 
 def _chain_collinear(segments: list[Segment]) -> list[tuple[Segment, list[Segment]]]:
     """Merge near-horizontal segments lying on the same line: [(straight stroke, its ordered pieces)]."""
-    strokes: list[list[tuple[int, int, int, int]]] = []
-    for s in sorted(segments, key=lambda s: min(s[0], s[2])):
+    strokes: list[list[Segment]] = []
+    segments = [s if s[0] <= s[2] else (s[2], s[3], s[0], s[1]) for s in segments]  # left-to-right
+    for s in sorted(segments):
         for group in strokes:
             ref = group[0]
             dy = (ref[3] - ref[1]) / max(1, ref[2] - ref[0])

@@ -8,8 +8,6 @@ lines containing a wide gap with a baseline jump are split in two.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 import numpy as np
 
 from layout.components import Component, union
@@ -29,17 +27,38 @@ MIN_LINE_AREA_SPECKS = 3       # single-component lines below this many specks a
 DUPLICATE_MIN_Y_OVERLAP = 0.5  # x-overlapping lines sharing this much height are duplicates
 
 
-@dataclass
 class Line:
-    comps: list[Component] = field(default_factory=list)
+    """A growing line of components with a cached bounding box (grouping touches every line per glyph)."""
+
+    def __init__(self, comps: list[Component]):
+        self._comps: list[Component] = list(comps)
+        self._bbox: list[int] | None = None
+
+    @property
+    def comps(self) -> list[Component]:
+        return self._comps
+
+    @comps.setter
+    def comps(self, value: list[Component]) -> None:
+        self._comps = list(value)
+        self._bbox = None
+
+    def append(self, c: Component) -> None:
+        self._comps.append(c)
+        if self._bbox is not None:
+            x0, y0 = min(self._bbox[0], c.x), min(self._bbox[1], c.y)
+            x1, y1 = max(self._bbox[0] + self._bbox[2], c.x1), max(self._bbox[1] + self._bbox[3], c.y1)
+            self._bbox = [x0, y0, x1 - x0, y1 - y0]
 
     @property
     def bbox(self) -> list[int]:
-        return union(self.comps).bbox
+        if self._bbox is None:
+            self._bbox = union(self._comps).bbox
+        return self._bbox
 
     @property
     def x1(self) -> int:
-        return max(c.x1 for c in self.comps)
+        return self.bbox[0] + self.bbox[2]
 
     @property
     def band(self) -> tuple[int, int]:
@@ -80,7 +99,7 @@ def group_into_lines(comps: list[Component], med_char_w: float) -> list[Line]:
         if best is None:
             lines.append(Line([c]))
         else:
-            best.comps.append(c)
+            best.append(c)
     return lines
 
 
