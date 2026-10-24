@@ -1,0 +1,136 @@
+@import 'tailwindcss';
+
+/* Synapse stationery palette — cream canvas, paper surfaces, butter + sage accents, olive ink. */
+@theme {
+  --font-sans: 'Nunito', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fredoka', 'Nunito', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-cream: #fff9ed;
+  --color-paper: #f3ebd9;
+  --color-paper-deep: #e6dac1;
+  --color-butter: #f8e5a0;
+  --color-butter-deep: #e3c75f;
+  --color-sage: #c9d9b8;
+  --color-sage-deep: #a4ba8d;
+  --color-sage-ink: #4a6539;
+  --color-olive: #494638;
+  --color-honey: #8a6a12;
+  --color-clay: #b4553c;
+
+  --animate-fade-up: fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-highlight: highlight 2.4s ease-out both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: -400px 0;
+    }
+    to {
+      background-position: 400px 0;
+    }
+  }
+  @keyframes highlight {
+    0% {
+      background-color: rgb(248 229 160 / 0.7);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-cream text-olive antialiased;
+    min-height: 100dvh;
+    /* faint dotted-grid paper texture */
+    background-image: radial-gradient(rgb(73 70 56 / 0.07) 0.8px, transparent 0.8px);
+    background-size: 18px 18px;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: 0.005em;
+  }
+  ::selection {
+    background: rgb(248 229 160 / 0.9);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-butter-deep);
+    outline-offset: 2px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(73 70 56 / 0.2) transparent;
+  }
+}
+
+@layer components {
+  /* A sheet of paper: white surface, thin warm border, soft resting shadow. */
+  .glass {
+    @apply rounded-md border border-paper-deep bg-white;
+    box-shadow:
+      0 1px 0 rgb(73 70 56 / 0.04),
+      0 10px 24px -18px rgb(73 70 56 / 0.35);
+  }
+  /* Ruled notebook lines, drawn on top of a paper surface. */
+  .ruled {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 27px,
+      rgb(164 186 141 / 0.45) 27px,
+      rgb(164 186 141 / 0.45) 28px
+    );
+    background-position: 0 14px;
+  }
+  /* Butter sticky note. */
+  .sticky-note {
+    @apply rounded-sm border border-olive/70 bg-butter text-olive;
+    box-shadow: 4px 4px 0 0 var(--color-olive);
+  }
+  /* hand-drawn underline for a single word in a heading */
+  .scribble {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 10' preserveAspectRatio='none'%3E%3Cpath d='M2 7 C 30 2, 60 9, 118 4' fill='none' stroke='%23a4ba8d' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-size: 100% 0.45em;
+    background-position: 0 100%;
+    padding-bottom: 0.1em;
+  }
+  .skeleton {
+    @apply rounded-lg bg-olive/[0.06];
+    background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.7), transparent);
+    background-size: 400px 100%;
+    background-repeat: no-repeat;
+    animation: var(--animate-shimmer);
+  }
+  .input {
+    @apply w-full rounded-xl border border-paper-deep bg-cream px-3.5 py-2.5 text-sm text-olive placeholder:text-olive/45 transition outline-none focus:border-butter-deep focus:ring-4 focus:ring-butter/60;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
