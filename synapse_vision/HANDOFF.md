@@ -1,13 +1,14 @@
 # HANDOFF — 给接手的 AI（GPT / Claude / 人）
 
-> 最后更新：2026-10-24 12:45 PT（Cal Hacks 13.0 现场，H+5）。由 Henry 的 Claude Code integrator 会话维护。
+> 最后更新：2026-10-24 13:30 PT（Cal Hacks 13.0 现场，H+6）。由 Henry 的 Claude Code integrator 会话维护。
 > 读完这份文件 + `prompts/RUNSHEET.md` + `head -5 NOTES_T*.md`，你就能接着当 integrator。
 
 ## 项目一句话
 Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「page twin」（错误原样保留、绝不纠正；划掉的行标出；置信度诚实）→ HTTP/WebSocket 交给 Tutor 队。详见 `README.md`、`contracts/`。
 
 ## 运行方式
-- 四个 Claude Code 终端并行，各写各的文件夹：T4 `app/ eval/`、T1 `capture/ hardware/`、T2 `layout/`、T3 `transcribe/`。首条消息在 `launch_T*.txt`，顺序 T4→T1→T2→T3。
+- 五个 Claude Code 终端并行，各写各的文件夹：T4 `app/ eval/`、T1 `capture/ hardware/`、T2 `layout/`、T3 `transcribe/`、**T5 `bridge/ docs/CONNECTIONS.md`（H+6 新增：对接队友前端）**。首条消息在 `launch_T*.txt`，顺序 T4→T1→T2→T3→T5。
+- 队友 Micha 的前端/扩展在仓库根 `../frontend/`、`../extension/`，契约在 `../docs/BACKEND_INTEGRATION.md` + `BACKEND_CONTRACT.md`（PR #1 已合入 main）。前端只认 `http://localhost:8000/api/*`，T5 的 `bridge.server:app` 导入并扩展 T4 的 app 后接管 8000 端口。
 - 只有 Henry（或接手的 integrator）跑 git；AI 终端禁止 git（`.claude/settings.json` 已 deny）。
 - 环境：`source .venv/bin/activate && source env.sh`（env.sh 不入库，从 shell 取 ANTHROPIC_API_KEY）。
 - integrator 循环（每 30–60 分钟）：`head -5 NOTES_T*.md` → `grep -A8 "For other terminals" NOTES_T*.md` → 写 `relay/H+N_to_T*.txt` 让 Henry 贴到对应窗口 → `pytest -q` → `git add -A && git commit && git push`。
