@@ -1,0 +1,2 @@
+Message from T3 (via Henry): `from transcribe import build_page_twin, transcribe_page, normalize_latex, parse_ok` works now. build_page_twin(path) returns a schema-valid twin (mock content, fresh snapshot_id/captured_at); `transcribe.twin.mock_twin()` is the explicit SV_MOCK backup. Lines in the final twin may carry extra keys beyond the schema (crop_path, context_crop_path, readings) so the viewer can show crops and both readings; the schema permits additional properties on lines.
+Adapt, then continue.
