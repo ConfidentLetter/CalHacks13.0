@@ -4,6 +4,8 @@
 
 See [Architecture](docs/ARCHITECTURE.md) for the component layout, test locations, and local runtime directories.
 
+For GitHub-connected Vercel hosting, see [Deployment](docs/DEPLOYMENT.md).
+
 Ambient AI study assistant: an overhead camera watches your notebook, a Chrome extension remembers what you
 read, and an AI tutor answers questions using both.
 

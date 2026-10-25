@@ -15,6 +15,8 @@ let state = {
 }
 const listeners = new Set()
 let started = false
+let sequence = 0
+const pending = new Map()
 
 function set(patch) {
   state = { ...state, ...patch }
@@ -34,12 +36,38 @@ function post(type, payload) {
   window.postMessage({ source: FROM_PAGE, type, payload }, window.location.origin)
 }
 
+function request(type, payload) {
+  if (!state.connected) return Promise.reject(new Error('Chrome extension is disconnected. Reload the extension and this page.'))
+  return new Promise((resolve, reject) => {
+    const requestId = `reading-${++sequence}`
+    const timer = setTimeout(() => {
+      pending.delete(requestId)
+      reject(new Error('Extension did not confirm deletion. Reload the extension and try again.'))
+    }, 10000)
+    pending.set(requestId, { resolve, reject, timer })
+    window.postMessage({ source: FROM_PAGE, type, payload, requestId }, window.location.origin)
+  })
+}
+
 function onMessage(event) {
   if (event.source !== window || event.origin !== window.location.origin) return
   const msg = event.data
   if (!msg || msg.source !== FROM_EXTENSION) return
 
   switch (msg.type) {
+    case 'mutation-result': {
+      const task = pending.get(msg.requestId)
+      if (!task) break
+      clearTimeout(task.timer)
+      pending.delete(msg.requestId)
+      if (msg.payload?.error) task.reject(new Error(msg.payload.error))
+      else {
+        const ids = msg.payload?.deletedIds || []
+        set({ readings: msg.payload?.cleared ? [] : state.readings.filter((r) => !ids.includes(String(r.id))) })
+        task.resolve()
+      }
+      break
+    }
     case 'hello':
     case 'status':
       set({ connected: true, info: msg.payload || null })
@@ -70,7 +98,7 @@ export function startBridge() {
 }
 
 export const bridge = {
-  deleteReading: (id) => post('delete-reading', { id }),
-  clearReadings: () => post('clear-readings'),
+  deleteReading: (id) => request('delete-reading', { id }),
+  clearReadings: () => request('clear-readings'),
   updateSettings: (settings) => post('update-settings', settings),
 }
