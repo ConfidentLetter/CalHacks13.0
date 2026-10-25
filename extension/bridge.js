@@ -1,5 +1,5 @@
 // Relays messages between the StudBud dashboard page and the extension.
-// Matches localhost, but only activates on pages carrying <meta name="synapse-dashboard">.
+// Runs on the local and deployed dashboards, gated by <meta name="synapse-dashboard">.
 
 ;(() => {
   if (!document.querySelector('meta[name="synapse-dashboard"]')) return

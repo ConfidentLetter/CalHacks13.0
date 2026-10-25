@@ -524,7 +524,7 @@ $('save-page').addEventListener('click', async () => {
 })
 
 $('open-dashboard').addEventListener('click', () => {
-  chrome.tabs.create({ url: state?.settings.dashboardUrl || 'http://localhost:5173' })
+  chrome.tabs.create({ url: state?.settings.dashboardUrl || 'https://stud-bud-xi.vercel.app' })
 })
 
 $('sync-now').addEventListener('click', async () => {

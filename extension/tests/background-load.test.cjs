@@ -47,3 +47,18 @@ test('synchronous capture handler errors reach the popup instead of closing its 
   await new Promise(resolve => setImmediate(resolve))
   assert.match(reply.error, /requires the extension popup/)
 })
+
+test('new installs open the deployed dashboard while retaining the local backend default', async () => {
+  const { context } = background()
+  const result = await context.popupState({ tabId: 4, url: 'chrome://newtab' })
+  assert.equal(result.settings.dashboardUrl, 'https://stud-bud-xi.vercel.app')
+  assert.equal(result.settings.backendUrl, 'http://localhost:8000')
+})
+
+test('the deployed dashboard receives the extension bridge without broad website injection', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../manifest.json'), 'utf8'))
+  const bridge = manifest.content_scripts.find(script => script.js.includes('bridge.js'))
+  assert.ok(bridge.matches.includes('https://stud-bud-xi.vercel.app/*'))
+  assert.ok(!bridge.matches.includes('<all_urls>'))
+  assert.ok(!bridge.matches.includes('https://*/*'))
+})

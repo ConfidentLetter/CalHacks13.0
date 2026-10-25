@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS = {
   shareText: false,
   minReadingSeconds: 5, // 1–10s of active reading before a page is saved
   backendUrl: 'http://localhost:8000',
-  dashboardUrl: 'http://localhost:5173',
+  dashboardUrl: 'https://stud-bud-xi.vercel.app',
   allowedSites: [],
   blockedSites: ['mail.google.com', 'web.whatsapp.com', 'messenger.com', 'discord.com', 'slack.com'],
   screenshotsEnabled: false,
