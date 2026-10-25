@@ -5,6 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { webcrypto } = require('node:crypto')
 const policy = require('../study-policy.js')
+const tileDiff = require('../tile-diff.js')
 
 function worker(options = {}) {
   const saved = []
@@ -13,9 +14,9 @@ function worker(options = {}) {
   let captured = 0
   let uploads = []
   const initial = { ...target, sessionId: 'study-test', running: true, timed: true,
-    generation: 'generation', intervalSec: 10, lastAttemptAt: 0 }
+    generation: 'generation', intervalSec: 10, lastAttemptAt: 0, tileSignature: null }
   const context = vm.createContext({
-    StudyPolicy: policy, crypto: webcrypto, AbortController, Date, URL,
+    StudyPolicy: policy, TileDiff: tileDiff, crypto: webcrypto, AbortController, Date, URL,
     chrome: {
       storage: { session: { get: async () => ({ studyCapture: initial }), set: async (data) => { saved.push(structuredClone(data)) } } },
       runtime: { id: 'extension-id', getURL: (name) => `chrome-extension://extension-id/${name}` },
@@ -30,14 +31,19 @@ function worker(options = {}) {
     getSettings: async () => ({ consentGiven: true, dashboardUrl: 'http://localhost:5173', backendUrl: 'http://localhost:8000' }),
     siteStatus: async () => ({ state: options.siteState || 'approved' }),
     ALL_URLS: { origins: ['<all_urls>'] },
-    shrink: async () => { if (options.onShrink) await options.onShrink(current); return { base64: 'FRAME' } },
+    shrink: async () => {
+      if (options.onShrink) await options.onShrink(current)
+      const signature = typeof options.signature === 'function' ? options.signature() : options.signature
+      return { base64: 'FRAME', width: 1280, height: 720, sig: signature || new Array(4096).fill(0) }
+    },
+    changedTileAtlas: async (_dataUrl, tiles) => ({ base64: 'PATCH', tiles, frameWidth: 1280, frameHeight: 720 }),
     fetchWithTimeout: async (url, args) => {
-      uploads.push({ url, args })
+      uploads.push({ url, args: { ...args } })
       if (options.upload) return options.upload(url, args)
       return { ok: !options.backendFailure, status: options.backendFailure ? 502 : 200 }
     },
   })
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../study-capture.js'), 'utf8') + '\nthis.api = { studyBegin, studyStop, studyCapture, studyHeartbeat, studyPopupHandler, studyResumeHeartbeat, viewChanged: () => { studyViewEpoch++ }, state: async () => { await studyLoaded; return {...studyState} } }', context)
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../study-capture.js'), 'utf8') + '\nthis.api = { studyBegin, studyStop, studyCapture, studyHeartbeat, studyPopupHandler, studyResumeHeartbeat, update: studyUpdate, viewChanged: () => { studyViewEpoch++ }, state: async () => { await studyLoaded; return {...studyState} } }', context)
   return { api: context.api, current, target, saved, captured: () => captured, uploads: () => uploads }
 }
 
@@ -150,6 +156,48 @@ test('activation away and back during capture discards frame even if final tab m
   await w.api.studyCapture('generation')
   assert.equal(w.uploads().length, 0)
   assert.match((await w.api.state()).status, /discarded/)
+})
+
+test('continuous study capture sends one full frame then only changed tiles', async () => {
+  let signature = new Array(4096).fill(0)
+  const w = worker({ signature: () => signature })
+  const sender = { tab: { ...w.current } }
+  await w.api.studyHeartbeat({ url: w.target.url }, sender)
+  assert.equal(w.uploads().length, 1)
+  assert.equal(JSON.parse(w.uploads()[0].args.body).image.delta, undefined)
+
+  await w.api.studyHeartbeat({ url: w.target.url }, sender)
+  assert.equal(w.uploads().length, 1)
+
+  for (const offset of [16 * 64 + 16 + 2, 16 * 64 + 16 + 3, 16 * 64 + 16 + 4,
+    16 * 64 + 16 + 5, 16 * 64 + 16 + 6]) {
+    signature[offset] = 255
+  }
+  await w.api.update({ lastAttemptAt: Date.now() - 11_000 }, 'generation')
+  await w.api.studyHeartbeat({ url: w.target.url }, sender)
+  const payload = JSON.parse(w.uploads()[1].args.body)
+  assert.deepEqual(payload.image.delta.tiles, [5])
+  assert.equal(payload.image.base64, 'PATCH')
+  assert.equal((await w.api.state()).status, 'Watching for changes — only changed tiles are sent to AI.')
+})
+
+test('a changed-tile request retries with a full frame when the server has lost its baseline', async () => {
+  let signature = new Array(4096).fill(0)
+  const w = worker({
+    signature: () => signature,
+    upload: (_url, args) => JSON.parse(args.body).image.delta
+      ? { ok: false, status: 409 }
+      : { ok: true, status: 200 },
+  })
+  const sender = { tab: { ...w.current } }
+  await w.api.studyHeartbeat({ url: w.target.url }, sender)
+  for (const offset of [16 * 64 + 18, 16 * 64 + 19, 16 * 64 + 20, 16 * 64 + 21, 16 * 64 + 22]) signature[offset] = 255
+  await w.api.update({ lastAttemptAt: Date.now() - 11_000 }, 'generation')
+  await w.api.studyHeartbeat({ url: w.target.url }, sender)
+  assert.equal(w.uploads().length, 3)
+  assert.ok(JSON.parse(w.uploads()[1].args.body).image.delta)
+  assert.equal(JSON.parse(w.uploads()[2].args.body).image.delta, undefined)
+  assert.equal((await w.api.state()).tileSignature[16 * 64 + 18], 255)
 })
 
 

@@ -1,10 +1,12 @@
 """Study API behavior with model calls replaced; no hardware or API traffic."""
 import base64
+import io
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from PIL import Image
 
 from bridge.tests.conftest import TINY_JPEG_B64
 
@@ -13,6 +15,13 @@ def observe(client, session='study-test', **extra):
     return client.post('/api/study/observe', json={
         'sessionId': session, 'image': {'base64': TINY_JPEG_B64, 'mimeType': 'image/jpeg',
         'capturedAt': '2026-10-24T19:00:00Z', 'source': 'camera'}, **extra})
+
+
+def jpeg(width, height, color):
+    image = Image.new('RGB', (width, height), color)
+    output = io.BytesIO()
+    image.save(output, format='JPEG')
+    return base64.b64encode(output.getvalue()).decode()
 
 
 @pytest.fixture
@@ -48,6 +57,61 @@ def test_observe_uses_image_and_typed_followup_uses_same_image(client, study_mod
     assert events['latest']['image']['base64'] == TINY_JPEG_B64
     assert 'base64' not in json.dumps(events['events'])
     assert events['events'][0]['role'] == 'observation'
+
+
+def test_changed_tile_observation_sends_patch_and_publishes_reconstructed_frame(client, study_model):
+    full = jpeg(40, 40, (220, 20, 20))
+    patch = jpeg(10, 10, (20, 30, 220))
+    first = client.post('/api/study/observe', json={'sessionId': 'study-test', 'image': {
+        'base64': full, 'mimeType': 'image/jpeg', 'capturedAt': '2026-10-24T19:00:00Z', 'source': 'screen'}})
+    assert first.status_code == 200
+
+    changed = client.post('/api/study/observe', json={'sessionId': 'study-test', 'image': {
+        'base64': patch, 'mimeType': 'image/jpeg', 'capturedAt': '2026-10-24T19:00:05Z', 'source': 'screen',
+        'delta': {'grid': 4, 'frameWidth': 40, 'frameHeight': 40, 'tiles': [5]}}})
+    assert changed.status_code == 200, changed.text
+
+    delta_content = study_model[-1]['messages'][-1]['content']
+    delta_image = next(block for block in delta_content if block['type'] == 'image')
+    with Image.open(io.BytesIO(base64.b64decode(delta_image['source']['data']))) as received:
+        assert received.size == (10, 10)
+        assert received.getpixel((5, 5))[2] > received.getpixel((5, 5))[0]
+    prompt = json.loads(next(block['text'] for block in delta_content if block['type'] == 'text'))
+    assert prompt['imageCoverage'] == 'changed_tiles'
+    assert prompt['imageTileIndices'] == [5]
+
+    latest = client.get('/api/study/session/study-test').json()['latest']['image']
+    with Image.open(io.BytesIO(base64.b64decode(latest['base64']))) as reconstructed:
+        assert reconstructed.size == (40, 40)
+        assert reconstructed.getpixel((15, 15))[2] > reconstructed.getpixel((15, 15))[0]
+        assert reconstructed.getpixel((5, 5))[0] > reconstructed.getpixel((5, 5))[2]
+
+    client.post('/api/study/message', json={'sessionId': 'study-test', 'message': 'What changed?'})
+    typed_image = next(block for block in study_model[-1]['messages'][-1]['content'] if block['type'] == 'image')
+    with Image.open(io.BytesIO(base64.b64decode(typed_image['source']['data']))) as received:
+        assert received.size == (40, 40)
+
+
+def test_changed_tile_requires_a_previous_full_frame(client):
+    response = client.post('/api/study/observe', json={'sessionId': 'study-test', 'image': {
+        'base64': jpeg(10, 10, (20, 30, 220)), 'mimeType': 'image/jpeg',
+        'capturedAt': '2026-10-24T19:00:05Z', 'source': 'screen',
+        'delta': {'grid': 4, 'frameWidth': 40, 'frameHeight': 40, 'tiles': [5]}}})
+    assert response.status_code == 409
+    assert 'previous full image' in response.json()['error']
+
+
+@pytest.mark.parametrize('delta', [
+    {'grid': 3, 'frameWidth': 40, 'frameHeight': 40, 'tiles': [5]},
+    {'grid': 4, 'frameWidth': 40, 'frameHeight': 40, 'tiles': [5, 5]},
+    {'grid': 4, 'frameWidth': 40, 'frameHeight': 40, 'tiles': [16]},
+    {'grid': 4, 'frameWidth': 40, 'frameHeight': 40, 'tiles': [5], 'extra': True},
+])
+def test_invalid_delta_metadata_is_rejected(client, delta):
+    response = client.post('/api/study/observe', json={'sessionId': 'study-test', 'image': {
+        'base64': jpeg(10, 10, (20, 30, 220)), 'mimeType': 'image/jpeg',
+        'capturedAt': '2026-10-24T19:00:05Z', 'source': 'screen', 'delta': delta}})
+    assert response.status_code == 400
 
 
 def test_observation_duplicate_is_quiet_and_does_not_recall_model(client, study_model):

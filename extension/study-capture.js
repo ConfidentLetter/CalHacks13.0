@@ -13,7 +13,7 @@ chrome.windows.onFocusChanged?.addListener(() => { studyViewEpoch++ })
 let studyBusy = false
 let studyController = null
 const studyLoaded = chrome.storage.session.get(STUDY_KEY).then((stored) => {
-  studyState = stored[STUDY_KEY] || { sessionId: `study-${crypto.randomUUID()}`, running: false, status: 'Ready', intervalSec: 20 }
+  studyState = stored[STUDY_KEY] || { sessionId: `study-${crypto.randomUUID()}`, running: false, status: 'Ready', intervalSec: 5 }
   return studyState
 })
 
@@ -62,7 +62,7 @@ async function studyBegin(msg, timed) {
   studyController?.abort()
   await studyLoaded
   if (!StudyPolicy.validSessionId(msg.sessionId)) throw new Error('Invalid study session ID.')
-  if (timed && !StudyPolicy.validInterval(msg.intervalSec)) throw new Error('Choose 10, 20, 30, or 60 seconds.')
+  if (timed && !StudyPolicy.validInterval(msg.intervalSec)) throw new Error('Choose 5, 10, 20, 30, or 60 seconds.')
   if (studyBusy) throw new Error('A study capture is still finishing. Try again shortly.')
   const current = await chrome.tabs.get(msg.tabId).catch(() => null)
   const target = { tabId: msg.tabId, windowId: msg.windowId, url: msg.url }
@@ -72,7 +72,8 @@ async function studyBegin(msg, timed) {
   if (epoch !== studyEpoch) return { ...studyState }
   const generation = crypto.randomUUID()
   await studyUpdate({ ...target, sessionId: msg.sessionId, generation, running: true, timed,
-    intervalSec: timed ? msg.intervalSec : 20, lastAttemptAt: 0, busyUntil: 0, error: false, status: timed ? 'Timed capture started — close this popup to begin' : 'Capturing…' })
+    intervalSec: timed ? msg.intervalSec : 5, lastAttemptAt: 0, tileSignature: null, busyUntil: 0, error: false,
+    status: timed ? 'Change-aware capture started — close this popup to begin' : 'Capturing…' })
   if (timed) {
     try {
       await chrome.scripting.executeScript({ target: { tabId: target.tabId }, files: ['study-heartbeat.js'] })
@@ -86,18 +87,27 @@ async function studyBegin(msg, timed) {
 }
 
 async function studyCapture(generation) {
-  await studyLoaded
-  if (studyBusy || !StudyPolicy.isCurrent(studyState, generation)) return { ...studyState }
+  if (studyBusy) return { ...studyState }
   studyBusy = true
+  try {
+    await studyLoaded
+  } catch (err) {
+    studyBusy = false
+    throw err
+  }
+  if (!StudyPolicy.isCurrent(studyState, generation)) {
+    studyBusy = false
+    return { ...studyState }
+  }
   const target = { ...studyState }
   studyController = new AbortController()
   const controller = studyController
   let stage = 'checking'
+  let requestStarted = false
   try {
-    await studyUpdate({ lastAttemptAt: Date.now(), busyUntil: Date.now() + 65_000, error: false, status: 'Checking study tab…' }, generation)
     const settings = await studyEligibility(target)
     if (!StudyPolicy.isCurrent(studyState, generation)) return { ...studyState }
-    // Recheck after scripting and immediately around captureVisibleTab. Discard any raced frame.
+    // Check before and after capture because Chrome can photograph a different active tab.
     if (!(await studyTargetVisible(target))) throw new Error('Paused: return to the original study tab and URL.')
     const viewEpoch = studyViewEpoch
     stage = 'capturing'
@@ -106,21 +116,48 @@ async function studyCapture(generation) {
     if (!(await studyTargetVisible(target)) || viewEpoch !== studyViewEpoch) throw new Error('Study tab changed during capture; image discarded.')
     stage = 'processing'
     const image = await shrink(dataUrl)
+    const changedTiles = target.timed
+      ? TileDiff.changedTiles(target.tileSignature, image.sig)
+      : []
+    if (target.timed && target.tileSignature && !changedTiles.length) return { ...studyState }
+    if (target.timed && target.lastAttemptAt && Date.now() - target.lastAttemptAt < target.intervalSec * 1000) {
+      return { ...studyState }
+    }
     await studyEligibility(target)
     if (viewEpoch !== studyViewEpoch) throw new Error('Study tab changed during capture; image discarded.')
     if (!StudyPolicy.isCurrent(studyState, generation) || controller.signal.aborted) return { ...studyState }
-    await studyUpdate({ status: 'Sending study image to AI…' }, generation)
+    const capturedAt = new Date().toISOString()
+    let payloadImage = { base64: image.base64, mimeType: 'image/jpeg', capturedAt, source: 'screen' }
+    if (target.timed && target.tileSignature && changedTiles.length <= TileDiff.GRID_SIZE * TileDiff.GRID_SIZE / 2) {
+      const atlas = await changedTileAtlas(dataUrl, changedTiles)
+      payloadImage = {
+        ...payloadImage,
+        base64: atlas.base64,
+        delta: { grid: TileDiff.GRID_SIZE, frameWidth: atlas.frameWidth, frameHeight: atlas.frameHeight, tiles: atlas.tiles },
+      }
+    }
+    requestStarted = true
+    await studyUpdate({ lastAttemptAt: Date.now(), busyUntil: Date.now() + 65_000, error: false,
+      status: 'Sending changed study tiles to AI…' }, generation)
     if (viewEpoch !== studyViewEpoch) throw new Error('Study tab changed during capture; image discarded.')
     if (!StudyPolicy.isCurrent(studyState, generation) || controller.signal.aborted) return { ...studyState }
-    const capturedAt = new Date().toISOString()
     stage = 'uploading'
-    const response = await fetchWithTimeout(`${settings.backendUrl}/api/study/observe`, {
+    const endpoint = `${settings.backendUrl}/api/study/observe`
+    const request = {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-      body: JSON.stringify({ sessionId: target.sessionId, image: { base64: image.base64, mimeType: 'image/jpeg', capturedAt, source: 'screen' } }),
-    }, 45_000)
+      body: JSON.stringify({ sessionId: target.sessionId, image: payloadImage }),
+    }
+    let response = await fetchWithTimeout(endpoint, request, 45_000)
+    if (!response.ok && response.status === 409 && payloadImage.delta) {
+      payloadImage = { base64: image.base64, mimeType: 'image/jpeg', capturedAt, source: 'screen' }
+      request.body = JSON.stringify({ sessionId: target.sessionId, image: payloadImage })
+      response = await fetchWithTimeout(endpoint, request, 45_000)
+    }
     if (!response.ok) throw new Error(`Study service could not process this image${response.status ? ` (HTTP ${response.status})` : ''}. Check the backend and try again.`)
     if (StudyPolicy.isCurrent(studyState, generation)) {
-      await studyUpdate({ error: false, status: 'Study image sent. Open tutor for feedback.', lastCapturedAt: capturedAt }, generation)
+      await studyUpdate({ error: false, tileSignature: Array.from(image.sig),
+        status: target.timed ? 'Watching for changes — only changed tiles are sent to AI.' : 'Study image sent. Open tutor for feedback.',
+        lastCapturedAt: capturedAt }, generation)
     }
   } catch (err) {
     if (StudyPolicy.isCurrent(studyState, generation)) {
@@ -138,7 +175,7 @@ async function studyCapture(generation) {
   } finally {
     studyBusy = false
     if (studyController === controller) studyController = null
-    await studyUpdate({ busyUntil: 0, ...(!target.timed ? { running: false } : {}) }, generation)
+    if (requestStarted) await studyUpdate({ busyUntil: 0, ...(!target.timed ? { running: false } : {}) }, generation)
   }
   return { ...studyState }
 }
@@ -154,8 +191,9 @@ async function studyResumeHeartbeat(tabId, change, tab) {
 async function studyHeartbeat(msg, sender) {
   await studyLoaded
   if (!studyState.running || !studyState.timed || sender.tab?.id !== studyState.tabId || sender.tab?.windowId !== studyState.windowId || sender.tab?.url !== studyState.url || msg.url !== studyState.url) return { stop: true }
-  if (Date.now() - (studyState.lastAttemptAt || 0) < studyState.intervalSec * 1000) return
-  if (!StudyPolicy.isDue(studyState, sender.tab, true, Date.now(), studyBusy)) return
+  if (!StudyPolicy.isCurrent(studyState, studyState.generation) ||
+      !StudyPolicy.matchesTarget(studyState, sender.tab, true) || studyBusy ||
+      studyState.busyUntil > Date.now()) return
   return studyCapture(studyState.generation)
 }
 

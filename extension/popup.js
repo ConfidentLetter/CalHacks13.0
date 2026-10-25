@@ -148,7 +148,10 @@ async function renderShots() {
   const on = settings.screenshotsEnabled
   const [text, tone] = SHOT_STATUS[on ? shots.here : 'off'] || SHOT_STATUS.off
   const status = $('shots-status')
-  status.textContent = on && shots.here === 'ready' ? `on — every ${settings.screenshotIntervalSec}s while you read` : text
+  const cadence = settings.screenshotIntervalSec === 0
+    ? 'continuous · changed frames only'
+    : `every ${settings.screenshotIntervalSec}s while you read`
+  status.textContent = on && shots.here === 'ready' ? `on — ${cadence}` : text
   status.className = `shots-status ${tone}`
   const toggle = $('shots-toggle')
   toggle.textContent = on ? 'Turn off' : 'Turn on'
@@ -394,7 +397,9 @@ $('shots-toggle').addEventListener('click', async () => {
   }
   if (!granted) return flash('Snapshots need Chrome’s permission to capture the visible tab.', 'err')
   await send('popup:update-settings', { patch: { screenshotsEnabled: true } })
-  flash(`Snapshots on — only on approved sites, every ${state.settings.screenshotIntervalSec}s while you read`, 'ok')
+  flash(state.settings.screenshotIntervalSec === 0
+    ? 'Snapshots on — checking every second and saving changed frames only'
+    : `Snapshots on — only on approved sites, every ${state.settings.screenshotIntervalSec}s while you read`, 'ok')
   refresh({ full: false })
 })
 
@@ -419,7 +424,7 @@ $('min-reading').addEventListener('change', async (e) => {
 
 $('shot-interval').addEventListener('change', async (e) => {
   await send('popup:update-settings', { patch: { screenshotIntervalSec: Number(e.target.value) } })
-  flash(`Snapshot every ${e.target.value}s`, 'ok')
+  flash(e.target.value === '0' ? 'Continuous snapshots on — only changed frames are saved' : `Snapshot every ${e.target.value}s`, 'ok')
 })
 
 // Accepts "notion.so", "https://www.figma.com/file/…", "*.example.com" → bare host.

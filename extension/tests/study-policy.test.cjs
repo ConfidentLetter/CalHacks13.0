@@ -8,9 +8,9 @@ test('session IDs accept only bounded simple identifiers', () => {
   assert.equal(policy.validSessionId('study-123_ab'), true)
   for (const value of ['', '../session', 'a'.repeat(101), null, 25]) assert.equal(policy.validSessionId(value), false)
 })
-test('interval must be an explicit supported choice of at least ten seconds', () => {
-  for (const value of [10, 20, 30, 60]) assert.equal(policy.validInterval(value), true)
-  for (const value of [0, 9, 11, 61, '10', NaN]) assert.equal(policy.validInterval(value), false)
+test('AI cooldown must be an explicit supported choice of at least five seconds', () => {
+  for (const value of [5, 10, 20, 30, 60]) assert.equal(policy.validInterval(value), true)
+  for (const value of [0, 4, 6, 11, 61, '10', NaN]) assert.equal(policy.validInterval(value), false)
 })
 test('capture binds the exact visible tab, focused window and original URL', () => {
   assert.equal(policy.matchesTarget(target, tab, true), true)

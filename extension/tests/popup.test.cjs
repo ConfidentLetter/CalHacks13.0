@@ -60,6 +60,17 @@ test('polling preserves a focused snapshot interval selection', async () => {
   assert.equal(p.get('shot-interval').value, '60')
 })
 
+test('continuous page snapshots are labeled as changed-frame capture', async () => {
+  const current = fixture()
+  current.settings.screenshotsEnabled = true
+  current.settings.screenshotIntervalSec = 0
+  current.shots.here = 'ready'
+  const p = popup({ send: async msg => msg.type === 'popup:state' ? current : {} })
+  await tick()
+  assert.equal(p.get('shot-interval').value, '0')
+  assert.match(p.get('shots-status').textContent, /continuous · changed frames only/)
+})
+
 test('an older state response cannot overwrite newer Study state', async () => {
   const old = deferred()
   let polls = 0

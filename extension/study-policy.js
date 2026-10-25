@@ -1,7 +1,7 @@
 // Shared, side-effect-free rules, loaded by the worker and Node tests.
 ;(function (root) {
   const validSessionId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(id)
-  const validInterval = (seconds) => [10, 20, 30, 60].includes(seconds)
+  const validInterval = (seconds) => [5, 10, 20, 30, 60].includes(seconds)
   const matchesTarget = (target, tab, focused) => Boolean(target && tab && focused && tab.active &&
     tab.id === target.tabId && tab.windowId === target.windowId && tab.url === target.url && !tab.pendingUrl)
   function safeStudyUrl(url, dashboardUrl) {

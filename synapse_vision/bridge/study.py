@@ -62,6 +62,9 @@ repeating an unanswered question. On typed messages, respond to the actual messa
 image context when available; clearly state missing evidence rather than guessing.
 The currentImageCapturedAt and currentImageSource fields label the attached image's actual capture.
 On typed followups this may be a cached earlier image, not a live view; never imply live observation.
+An observation may contain a contact sheet of changed tiles instead of a full image. Its
+imageTileIndices list gives row-major positions in a 4×4 grid. Inspect only visible tiles, compare
+them with priorObservation and history, and do not claim unseen parts of the page are unchanged.
 Return JSON: observation (brief faithful description), reply, meaningfulChange (boolean),
 respondedToQuestion (boolean, true only when new work addresses the pending question).
 """
@@ -167,8 +170,57 @@ def _image(value):
     source = value.get('source', 'unknown')
     if not isinstance(source, str) or len(source) > 80:
         raise StudyError('image.source must be a short string.')
+    delta = value.get('delta')
+    if delta is not None:
+        if not isinstance(delta, dict) or set(delta) != {'grid', 'frameWidth', 'frameHeight', 'tiles'}:
+            raise StudyError('image.delta must describe a 4×4 grid of changed tiles.')
+        frame_width, frame_height, tiles = delta.get('frameWidth'), delta.get('frameHeight'), delta.get('tiles')
+        if (delta.get('grid') != 4 or type(frame_width) is not int or type(frame_height) is not int
+                or frame_width < 4 or frame_height < 4 or frame_width % 4 or frame_height % 4
+                or frame_width * frame_height > 20_000_000
+                or not isinstance(tiles, list) or not tiles or len(tiles) > 15
+                or any(type(tile) is not int or tile < 0 or tile >= 16 for tile in tiles)
+                or len(set(tiles)) != len(tiles)):
+            raise StudyError('image.delta contains invalid grid dimensions or tile indices.')
+        columns = min(4, len(tiles))
+        rows = (len(tiles) + 3) // 4
+        if width != (frame_width // 4) * columns or height != (frame_height // 4) * rows:
+            raise StudyError('Changed-tile image dimensions do not match image.delta.')
+        delta = {'grid': 4, 'frameWidth': frame_width, 'frameHeight': frame_height, 'tiles': tiles}
     return {'base64': base64.b64encode(data).decode('ascii'), 'mimeType': mime,
-            'capturedAt': captured, 'source': source, 'width': width, 'height': height}, hashlib.sha256(data).hexdigest()
+            'capturedAt': captured, 'source': source, 'width': width, 'height': height,
+            '_data': data, '_delta': delta}, hashlib.sha256(data).hexdigest()
+
+
+def _merge_delta(previous, patch):
+    delta = patch['_delta']
+    frame_width, frame_height = delta['frameWidth'], delta['frameHeight']
+    if not previous or previous.get('width') != frame_width or previous.get('height') != frame_height:
+        raise StudyError('A changed-tile image needs a matching previous full image.', 409)
+    try:
+        with Image.open(io.BytesIO(base64.b64decode(previous['base64']))) as base:
+            base.load()
+            if base.size != (frame_width, frame_height):
+                raise StudyError('Previous image dimensions do not match the changed tiles.', 409)
+            merged = base.convert('RGB')
+        with Image.open(io.BytesIO(patch['_data'])) as atlas:
+            atlas.load()
+            tile_width, tile_height = frame_width // 4, frame_height // 4
+            columns = min(4, len(delta['tiles']))
+            for index, tile in enumerate(delta['tiles']):
+                left, top = (index % columns) * tile_width, (index // columns) * tile_height
+                tile_image = atlas.crop((left, top, left + tile_width, top + tile_height))
+                merged.paste(tile_image, ((tile % 4) * tile_width, (tile // 4) * tile_height))
+        output = io.BytesIO()
+        merged.save(output, format='JPEG', quality=92, optimize=True)
+        data = output.getvalue()
+    except StudyError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise StudyError('Changed tiles could not be applied to the previous image.') from exc
+    return {'base64': base64.b64encode(data).decode('ascii'), 'mimeType': 'image/jpeg',
+            'capturedAt': patch['capturedAt'], 'source': patch['source'],
+            'width': frame_width, 'height': frame_height}, data
 
 
 def _event(role, content, captured):
@@ -176,7 +228,7 @@ def _event(role, content, captured):
 
 
 def _turn(session_id, payload, channel):
-    image, fingerprint = _image(payload.get('image')) if channel == 'observation' else (None, None)
+    image, _ = _image(payload.get('image')) if channel == 'observation' else (None, None)
     message = payload.get('message') if channel == 'typed_message' else None
     if channel == 'typed_message' and (not isinstance(message, str) or not message.strip() or len(message) > 8000):
         raise StudyError('message must contain 1–8000 characters.')
@@ -184,6 +236,19 @@ def _turn(session_id, payload, channel):
         raise StudyError('force must be a boolean.')
     with _session(session_id) as state:
         captured = image['capturedAt'] if image else now_iso()
+        model_image = None
+        image_tiles = None
+        fingerprint = None
+        if image:
+            image_tiles = image.pop('_delta')
+            patch_data = image.pop('_data')
+            model_image = {**image, '_data': patch_data}
+            if image_tiles:
+                image, full_data = _merge_delta(state.image, {**model_image, '_delta': image_tiles})
+                fingerprint = hashlib.sha256(full_data).hexdigest()
+            else:
+                image = {key: value for key, value in image.items() if not key.startswith('_')}
+                fingerprint = hashlib.sha256(patch_data).hexdigest()
         if image and fingerprint == state.fingerprint and not payload.get('force', False):
             return {'sessionId': session_id, 'observation': state.latest['observation'], 'reply': '', 'capturedAt': captured}
         current_image = image or state.image
@@ -191,11 +256,16 @@ def _turn(session_id, payload, channel):
                    'currentImageCapturedAt': current_image['capturedAt'] if current_image else None,
                    'currentImageSource': current_image['source'] if current_image else None,
                    'history': state.events, 'previousObservation': (state.latest or {}).get('observation'),
-                   'pendingQuestion': state.pending}
+                   'pendingQuestion': state.pending,
+                   'imageCoverage': 'changed_tiles' if image_tiles else 'full_frame',
+                   'imageTileIndices': image_tiles['tiles'] if image_tiles else None}
         content = []
         if current_image:
+            visible_image = model_image if channel == 'observation' else current_image
             content.append({'type': 'image', 'source': {'type': 'base64',
-                'media_type': current_image['mimeType'], 'data': current_image['base64']}})
+                'media_type': visible_image['mimeType'],
+                'data': base64.b64encode(visible_image['_data']).decode('ascii')
+                if '_data' in visible_image else visible_image['base64']}})
         content.append({'type': 'text', 'text': json.dumps(context, ensure_ascii=False)})
         started = time.perf_counter()
         try:

@@ -1,10 +1,10 @@
-importScripts('study-policy.js', 'study-capture.js')
+importScripts('tile-diff.js', 'study-policy.js', 'study-capture.js')
 
 // StudBud background service worker (Manifest V3).
 // - Registers the reading detector only on approved + permission-granted sites
 // - Turns content-script progress into reading records after the minimum active time
 // - Queues records in chrome.storage.local and syncs them to POST /api/reading
-// - Takes page snapshots every N seconds while you actively read an approved site (opt-in)
+// - Takes opt-in page snapshots at a chosen interval or continuously when tiles change
 // - Answers the popup and the dashboard bridge
 
 const READER_ID = 'synapse-reader'
@@ -31,6 +31,7 @@ async function getSettings() {
   const { settings } = await chrome.storage.local.get('settings')
   const merged = { ...DEFAULT_SETTINGS, ...(settings || {}) }
   if (!validReadingSeconds(merged.minReadingSeconds)) merged.minReadingSeconds = DEFAULT_SETTINGS.minReadingSeconds
+  if (![0, 10, 20, 30, 60].includes(merged.screenshotIntervalSec)) merged.screenshotIntervalSec = DEFAULT_SETTINGS.screenshotIntervalSec
   return merged
 }
 
@@ -216,28 +217,47 @@ function toBase64(buffer) {
   return btoa(binary)
 }
 
-/** Downscale to ≤1280px wide JPEG and compute a 16×16 grayscale signature for change detection. */
+/** Downscale to ≤1280px wide JPEG and compute a 4×4 grid of local pixel signatures. */
 async function shrink(dataUrl) {
   const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob())
   const scale = Math.min(1, SHOT_MAX_WIDTH / bitmap.width)
-  const width = Math.round(bitmap.width * scale)
-  const height = Math.round(bitmap.height * scale)
+  const width = Math.max(4, Math.floor(bitmap.width * scale / TileDiff.GRID_SIZE) * TileDiff.GRID_SIZE)
+  const height = Math.max(4, Math.floor(bitmap.height * scale / TileDiff.GRID_SIZE) * TileDiff.GRID_SIZE)
   const canvas = new OffscreenCanvas(width, height)
   canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height)
   const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.6 })
 
-  const tiny = new OffscreenCanvas(16, 16)
+  const tiny = new OffscreenCanvas(TileDiff.SAMPLE_SIZE, TileDiff.SAMPLE_SIZE)
   const tctx = tiny.getContext('2d')
-  tctx.drawImage(bitmap, 0, 0, 16, 16)
-  const px = tctx.getImageData(0, 0, 16, 16).data
-  const sig = []
-  for (let i = 0; i < px.length; i += 4) sig.push(((px[i] + px[i + 1] + px[i + 2]) / 3) | 0)
+  tctx.drawImage(canvas, 0, 0, TileDiff.SAMPLE_SIZE, TileDiff.SAMPLE_SIZE)
+  const sig = TileDiff.grayscale(tctx.getImageData(0, 0, TileDiff.SAMPLE_SIZE, TileDiff.SAMPLE_SIZE).data)
   bitmap.close()
 
   return { base64: toBase64(await blob.arrayBuffer()), width, height, sig }
 }
 
-const unchanged = (a, b) => a && b && a.reduce((sum, v, i) => sum + Math.abs(v - b[i]), 0) / a.length < 2
+async function changedTileAtlas(dataUrl, tiles) {
+  const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob())
+  const scale = Math.min(1, SHOT_MAX_WIDTH / bitmap.width)
+  const width = Math.max(4, Math.floor(bitmap.width * scale / TileDiff.GRID_SIZE) * TileDiff.GRID_SIZE)
+  const height = Math.max(4, Math.floor(bitmap.height * scale / TileDiff.GRID_SIZE) * TileDiff.GRID_SIZE)
+  const source = new OffscreenCanvas(width, height)
+  source.getContext('2d').drawImage(bitmap, 0, 0, width, height)
+  const tileWidth = width / TileDiff.GRID_SIZE
+  const tileHeight = height / TileDiff.GRID_SIZE
+  const columns = Math.min(TileDiff.GRID_SIZE, tiles.length)
+  const rows = Math.ceil(tiles.length / TileDiff.GRID_SIZE)
+  const atlas = new OffscreenCanvas(tileWidth * columns, tileHeight * rows)
+  const ctx = atlas.getContext('2d')
+  const ordered = [...tiles].sort((a, b) => a - b)
+  ordered.forEach((tile, index) => {
+    ctx.drawImage(source, (tile % TileDiff.GRID_SIZE) * tileWidth, Math.floor(tile / TileDiff.GRID_SIZE) * tileHeight,
+      tileWidth, tileHeight, (index % columns) * tileWidth, Math.floor(index / columns) * tileHeight, tileWidth, tileHeight)
+  })
+  bitmap.close()
+  const blob = await atlas.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
+  return { base64: toBase64(await blob.arrayBuffer()), tiles: ordered, frameWidth: width, frameHeight: height }
+}
 
 async function maybeSnapshot(msg, tab, settings) {
   const ready = msg.state === 'active' && (await snapshotEligibility(settings, msg.url)) === 'ready'
@@ -245,7 +265,7 @@ async function maybeSnapshot(msg, tab, settings) {
   if (!ready) return
 
   const prev = lastShot.get(tab.id)
-  if (prev && Date.now() - prev.at < settings.screenshotIntervalSec * 1000) return
+  if (settings.screenshotIntervalSec > 0 && prev && Date.now() - prev.at < settings.screenshotIntervalSec * 1000) return
   lastShot.set(tab.id, { ...prev, at: Date.now() }) // claim this slot before any await
 
   // captureVisibleTab photographs whatever is showing, so make sure it's still this page.
@@ -259,7 +279,7 @@ async function maybeSnapshot(msg, tab, settings) {
   } catch {
     return // window not focused, devtools open, or Chrome refused
   }
-  if (unchanged(prev?.sig, shot.sig)) return // nothing on screen changed — don't store a duplicate
+  if (!TileDiff.changedTiles(prev?.sig, shot.sig).length) return // no meaningful tile changed
   lastShot.set(tab.id, { at: Date.now(), sig: shot.sig })
 
   const shots = await getShots()

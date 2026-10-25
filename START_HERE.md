@@ -44,15 +44,15 @@ Open http://localhost:5173/#/capture. The current development test servers may a
 
 iPhone setup: enable Continuity Camera under iPhone Settings → General → AirPlay & Continuity, use the same Apple Account on both devices, connect over USB and trust the Mac, then lock the phone. If it is absent from the browser list, first check whether FaceTime's Video menu lists it. Close FaceTime before using it in Chrome. [Apple instructions](https://support.apple.com/en-us/102546).
 
-## Chrome extension: manual and timed screen mode
+## Chrome extension: manual and change-aware screen mode
 
 1. Open chrome://extensions, enable Developer mode, choose Load unpacked, and select this repository's `extension` folder. Reload the extension after updates.
 2. Pin/open StudBud on the study website, accept its consent screen, and Allow current website. Restricted and sensitive pages remain blocked.
-3. Under Study capture, Capture now sends the visible study tab once. Start timed captures sends it at the selected 10/20/30/60-second interval. The UI explicitly states that images are sent to the AI. Timed capture asks for Chrome's required tab-capture permission.
+3. Under Study capture, Capture now sends the visible study tab once. Start change-aware samples locally every second, compares a 4×4 tile grid, and sends the first full image followed by changed tiles. If more than half the screen changes, it sends a full frame instead. The selected 5/10/20/30/60-second value is a minimum AI-request cooldown. Timed capture asks for Chrome's required tab-capture permission.
 4. Open tutor opens the dashboard with that exact session ID. The latest still fits the preview and feedback appears in the same conversation. Return to the original study tab to continue automatic screen capture; capture pauses while it is not visible/focused, on another URL, or while the previous request is processing.
 5. Stop timed capture from the extension. Stop it before starting a different problem, click New problem in the dashboard, then resume on the new page. The screen session ID stays joined to the extension.
 
-The Camera study button opens a fresh camera session. Passive reading snapshots remain separate, with their existing opt-in sharing and retention controls. Deliberate study captures are sent immediately and are not queued for later upload when offline.
+The Camera study button opens a fresh camera session. Passive reading snapshots remain separate, with their existing opt-in sharing and retention controls. In the extension popup, **Page snapshot frequency → Continuous** checks for changes every second and stores only changed frames; this path does not call the AI. Deliberate study captures are sent immediately and are not queued for later upload when offline.
 
 ## Tutoring and limits
 

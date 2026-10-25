@@ -61,27 +61,28 @@
       <!-- Deliberate study capture: separate consent from passive reading snapshots. -->
       <section class="card study" aria-live="polite">
         <h2 class="section-title">Study capture</h2>
-        <p class="hint">Capture now or Start timer sends this approved tab to AI for guiding feedback.</p>
+        <p class="hint">Start change-aware capture to check this approved tab locally every second. Changed 4×4 tiles are sent at most once per selected cooldown; if more than half the screen changes, the full frame is sent.</p>
         <p class="study-status" id="study-status" role="status" aria-live="polite" aria-atomic="true">Ready</p>
         <label class="field">
-          <span>Timed capture interval</span>
+          <span>Minimum AI request interval</span>
           <select id="study-interval">
+            <option value="5" selected>5 seconds</option>
             <option value="10">10 seconds</option>
-            <option value="20" selected>20 seconds</option>
+            <option value="20">20 seconds</option>
             <option value="30">30 seconds</option>
             <option value="60">60 seconds</option>
           </select>
         </label>
         <div class="actions">
           <button class="btn secondary" id="study-now" type="button">Capture now</button>
-          <button class="btn primary" id="study-start" type="button">Start timer</button>
+          <button class="btn primary" id="study-start" type="button">Start change-aware</button>
           <button class="btn danger span2" id="study-stop" type="button" disabled>Stop timer</button>
         </div>
         <div class="study-links">
           <button class="btn ghost" id="study-screen" type="button">Open tutor</button>
           <button class="btn ghost" id="study-camera" type="button">Use camera</button>
         </div>
-        <p class="hint">Only this approved tab is captured. Switching tabs pauses the timer. Images are never queued for later upload.</p>
+        <p class="hint">Only this approved tab is sampled. Switching tabs pauses capture. The first image is full; later requests contain changed tiles unless most of the screen changed. Images are never queued for later upload.</p>
       </section>
 
       <!-- Page snapshots -->
@@ -127,9 +128,11 @@
           <input type="range" id="min-reading" min="1" max="10" step="1" value="5" />
         </label>
         <label class="field">
-          <span>Snapshot every</span>
+          <span>Page snapshot frequency</span>
           <select id="shot-interval">
+            <option value="0">Continuous · changed frames only</option>
             <option value="10">10 seconds</option>
+            <option value="20">20 seconds</option>
             <option value="30">30 seconds</option>
             <option value="60">60 seconds</option>
           </select>
@@ -137,7 +140,7 @@
         <label class="row">
           <span>
             <strong>Upload snapshots to backend</strong>
-            <small>Off: snapshots stay on this device (last 20 kept).</small>
+            <small>These snapshots are not sent to AI. Off: images stay on this device (last 20 kept).</small>
           </span>
           <input type="checkbox" id="upload-shots" />
         </label>
