@@ -27,14 +27,6 @@ function NavList({ onNavigate }) {
             aria-current={active ? 'page' : undefined}
             onClick={(e) => {
               e.preventDefault()
-              if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-                e.currentTarget.animate([
-                  { transform: 'scale(1)' },
-                  { transform: 'scale(1.035, 0.94)', offset: 0.35 },
-                  { transform: 'scale(0.99, 1.02)', offset: 0.7 },
-                  { transform: 'scale(1)' },
-                ], { duration: 260, easing: 'ease-out' })
-              }
               navigate(item.id)
               onNavigate?.()
             }}
