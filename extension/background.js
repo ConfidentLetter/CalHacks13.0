@@ -1,4 +1,4 @@
-importScripts('study-policy.js', 'study-capture.js', 'pdf-extract.js')
+importScripts('study-policy.js', 'study-capture.js', 'pdf-extract.js', 'pdf-diff.js', 'pdf-observer.js')
 
 // StudBud background service worker (Manifest V3).
 // - Registers the reading detector only on approved + permission-granted sites
@@ -23,6 +23,11 @@ const DEFAULT_SETTINGS = {
   screenshotsEnabled: false,
   screenshotIntervalSec: 10,
   uploadScreenshots: false,
+  // PDF observer: off until the user opts in; separate from text reading tracking.
+  pdfMode: 'manual', // 'manual' | 'smart'
+  pdfIntervalSec: 10,
+  pdfAutoConsent: false,
+  pdfCrops: {}, // host → { mode: 'auto' | 'custom' | 'full', rect? }
 }
 
 // ---- storage helpers --------------------------------------------------------
@@ -465,6 +470,34 @@ const handlers = {
   'popup:study-start': studyPopupHandler((msg) => studyBegin(msg, true)),
   'popup:study-stop': studyPopupHandler(() => studyStop()),
 
+  'pdf:heartbeat': pdfHeartbeat,
+  'pdf:crop': (msg, sender) => pdfSaveCrop(msg, sender).catch(async (err) => {
+    await pdfUpdate({ status: `Error — ${err.message}`, tone: 'err' })
+    throw err
+  }),
+  'popup:pdf-capture': studyPopupHandler(async (msg) => pdfCapture(await pdfPopupTab(msg), { manual: true })),
+  'popup:pdf-start': studyPopupHandler((msg) => pdfStart(msg)),
+  'popup:pdf-stop': studyPopupHandler(() => pdfStop('Off — paused by you')),
+  'popup:pdf-select-area': studyPopupHandler(async (msg) => {
+    const tab = await pdfPopupTab(msg)
+    if ((await siteStatus(tab.url)).state !== 'approved') throw new Error('Allow this website first.')
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['pdf-crop.js'] })
+      .catch(() => { throw new Error('This viewer can’t show the area picker. Use “Whole visible tab”.') })
+    return true
+  }),
+  'popup:pdf-settings': studyPopupHandler(async ({ url, mode, cropMode, autoConsent }) => {
+    if (mode === 'manual' || mode === 'smart') {
+      await setSettings({ pdfMode: mode })
+      if (mode === 'manual') await pdfStop()
+    }
+    if (typeof autoConsent === 'boolean') {
+      await setSettings({ pdfAutoConsent: autoConsent })
+      if (!autoConsent) await pdfStop()
+    }
+    if (cropMode) await pdfSetCropMode({ url, mode: cropMode })
+    return true
+  }),
+
   'reading:progress': (msg, sender) => sender.tab && handleProgress(msg, sender.tab),
 
   'popup:state': async ({ tabId, url }) => {
@@ -481,6 +514,7 @@ const handlers = {
       status,
       live: liveState && liveState.url === url ? liveState : null,
       study: await studyLoaded.then(() => ({ ...studyState })),
+      pdf: await pdfPopupState(url),
       savedCount: records.length,
       pendingCount: records.filter((r) => !r.synced).length,
       shots: {
@@ -555,6 +589,7 @@ const handlers = {
 
   'popup:delete-all': async () => {
     await studyStop()
+    await pdfStop()
     await deleteRecords((await getRecords()).map((r) => r.id))
     await setShots([])
     await chrome.storage.session.clear()

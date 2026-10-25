@@ -216,6 +216,7 @@ function render() {
   renderTimer()
   renderPdfPanel()
   renderStudy()
+  renderPdfObserver()
   const tracking = settings.trackingEnabled
   const toggle = $('toggle-tracking')
   toggle.textContent = tracking ? 'Pause tracking' : 'Resume tracking'
@@ -586,6 +587,73 @@ $('pdf-read').addEventListener('click', async () => {
     await refresh({ full: false })
   }
 })
+
+// ---- PDF observer ---------------------------------------------------------------
+
+let pdfObsPending = false
+let pdfObsNotice = ''
+const pdfTarget = () => ({ tabId: tab.id, windowId: tab.windowId, url: tab.url })
+
+function renderPdfObserver() {
+  const pdf = state?.pdf
+  if (!pdf) return
+  const approved = state.status.state === 'approved'
+  const smart = pdf.mode === 'smart'
+  const status = $('pdfobs-status')
+  status.textContent = pdfObsNotice || (!approved && !pdf.running ? 'Off — allow this website before PDF capture.' : pdf.status || 'Off')
+  status.setAttribute('data-tone', pdfObsNotice || pdf.tone === 'err' ? 'error' : pdf.tone === 'warn' ? 'warning' : pdf.tone || '')
+  if (document.activeElement !== $('pdfobs-mode')) $('pdfobs-mode').value = pdf.mode
+  if (document.activeElement !== $('pdfobs-interval')) $('pdfobs-interval').value = String(pdf.intervalSec)
+  if (document.activeElement !== $('pdfobs-crop')) $('pdfobs-crop').value = pdf.cropMode
+  $('pdfobs-consent').checked = pdf.autoConsent
+  $('pdfobs-interval-field').hidden = $('pdfobs-consent-row').hidden = !smart
+  $('pdfobs-start').hidden = $('pdfobs-stop').hidden = !smart
+  $('pdfobs-start').disabled = pdfObsPending || pdf.running || !approved || !pdf.autoConsent
+  $('pdfobs-stop').disabled = pdfObsPending || !pdf.running
+  $('pdfobs-interval').disabled = pdf.running
+  $('pdfobs-capture').disabled = pdfObsPending || !approved
+  $('pdfobs-select').hidden = pdf.cropMode !== 'custom'
+  $('pdfobs-select').textContent = pdf.hasCustomArea ? 'Reselect PDF area on page' : 'Select PDF area on page'
+  $('pdfobs-select').disabled = pdfObsPending || !approved
+  const last = pdf.lastSavedAt ? new Date(pdf.lastSavedAt).toLocaleTimeString() : '—'
+  $('pdfobs-stats').textContent = `${pdf.saved || 0} saved · ${pdf.skipped || 0} skipped unchanged · last saved ${last}`
+}
+
+async function pdfObsRun(fn) {
+  if (pdfObsPending || !tab?.id) return
+  pdfObsPending = true
+  pdfObsNotice = ''
+  renderPdfObserver()
+  try {
+    const result = await fn()
+    if (result?.error) pdfObsNotice = `Error — ${result.error}`
+  } catch (err) {
+    pdfObsNotice = `Error — ${err.message || 'PDF capture failed.'}`
+  } finally {
+    pdfObsPending = false
+    await refresh({ full: false })
+    setTimeout(() => { pdfObsNotice = ''; renderPdfObserver() }, 5000)
+  }
+}
+
+$('pdfobs-capture').addEventListener('click', () => pdfObsRun(() => send('popup:pdf-capture', pdfTarget())))
+$('pdfobs-start').addEventListener('click', () => pdfObsRun(async () => {
+  // Permission request stays the first await in the click gesture.
+  let granted = false
+  try { granted = await chrome.permissions.request(ALL_URLS) } catch { /* reported below */ }
+  if (!granted) throw new Error('Chrome capture permission was denied. Manual capture still works on this tab.')
+  const intervalSec = Number($('pdfobs-interval').value)
+  return send('popup:pdf-start', { ...pdfTarget(), intervalSec })
+}))
+$('pdfobs-stop').addEventListener('click', () => pdfObsRun(() => send('popup:pdf-stop')))
+$('pdfobs-select').addEventListener('click', () => pdfObsRun(async () => {
+  const result = await send('popup:pdf-select-area', pdfTarget())
+  if (!result?.error) window.close() // let the user drag on the page
+  return result
+}))
+$('pdfobs-mode').addEventListener('change', (e) => pdfObsRun(() => send('popup:pdf-settings', { url: tab.url, mode: e.target.value })))
+$('pdfobs-crop').addEventListener('change', (e) => pdfObsRun(() => send('popup:pdf-settings', { url: tab.url, cropMode: e.target.value })))
+$('pdfobs-consent').addEventListener('change', (e) => pdfObsRun(() => send('popup:pdf-settings', { autoConsent: e.target.checked })))
 
 // ---- boot -------------------------------------------------------------------
 

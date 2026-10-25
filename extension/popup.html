@@ -92,6 +92,47 @@
         <p class="hint">Only this approved tab is captured. Switching tabs pauses the timer. Images are never queued for later upload.</p>
       </section>
 
+      <!-- PDF observer: visual capture of the visible PDF, separate from text reading tracking. -->
+      <section class="card study pdfobs" aria-live="polite">
+        <h2 class="section-title">PDF observer</h2>
+        <p class="hint">Synapse watches the PDF pages you view and saves a new snapshot only when the visible content changes.</p>
+        <p class="study-status" id="pdfobs-status" role="status" aria-live="polite" aria-atomic="true">Off</p>
+        <label class="field">
+          <span>Mode</span>
+          <select id="pdfobs-mode">
+            <option value="manual">Manual</option>
+            <option value="smart">Smart interval</option>
+          </select>
+        </label>
+        <label class="field" id="pdfobs-interval-field">
+          <span>Check every (seconds, 5–300)</span>
+          <input type="number" id="pdfobs-interval" min="5" max="300" step="1" value="10" />
+        </label>
+        <label class="field">
+          <span>PDF area to compare</span>
+          <select id="pdfobs-crop">
+            <option value="auto">Auto-detect viewer</option>
+            <option value="custom">Custom area</option>
+            <option value="full">Whole visible tab</option>
+          </select>
+        </label>
+        <label class="row" id="pdfobs-consent-row">
+          <span>
+            <strong>Allow automatic screenshots</strong>
+            <small>Screenshots include anything visible in the PDF area. Nothing is redacted automatically.</small>
+          </span>
+          <input type="checkbox" id="pdfobs-consent" />
+        </label>
+        <div class="actions">
+          <button class="btn secondary span2" id="pdfobs-capture" type="button">Capture Current PDF Page</button>
+          <button class="btn primary" id="pdfobs-start" type="button">Auto capture: On</button>
+          <button class="btn danger" id="pdfobs-stop" type="button">Pause capture</button>
+          <button class="btn ghost span2" id="pdfobs-select" type="button">Select PDF area on page</button>
+        </div>
+        <p class="hint" id="pdfobs-stats">0 saved · 0 skipped unchanged · last saved —</p>
+        <p class="hint">Smart interval runs while the PDF tab stays visible and focused, and pauses when you switch away. Saved snapshots appear under Page snapshots and upload only if “Upload snapshots to backend” is on.</p>
+      </section>
+
       <!-- Page snapshots -->
       <section class="card shots" aria-live="polite">
         <div class="shots-head">
