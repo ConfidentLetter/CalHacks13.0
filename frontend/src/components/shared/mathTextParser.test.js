@@ -60,11 +60,9 @@ test('formats indexed terms in free-body diagram labels', () => {
   const tokens = parseMathText('Block 1 (N_21, m1g, f_s); block 2 (N_2, m2g, N_12, f_k, f_s, T).')
 
   assert.deepEqual(tokens.filter(({ type }) => type === 'math'), [
-    { type: 'math', value: '1', display: false },
     { type: 'math', value: 'N_{21}', display: false },
     { type: 'math', value: 'm_{1}g', display: false },
     { type: 'math', value: 'f_s', display: false },
-    { type: 'math', value: '2', display: false },
     { type: 'math', value: 'N_2', display: false },
     { type: 'math', value: 'm_{2}g', display: false },
     { type: 'math', value: 'N_{12}', display: false },
@@ -80,10 +78,16 @@ test('converts Unicode subscript digits and removes zero-width formatting marks'
   ])
 })
 
-test('preserves currency wording while rendering its numeric value', () => {
-  assert.deepEqual(parseMathText('The answer is $5.00.'), [
-    { type: 'text', value: 'The answer is $' },
-    { type: 'math', value: '5.00', display: false },
+test('keeps dates, counts, currency and ordinary numbers as text', () => {
+  for (const text of ['August 8th, 2026', 'The answer is $5.00.', 'Use 2 blocks and 50%.', '42', 'Page 8 of 26']) {
+    assert.deepEqual(parseMathText(text), [{ type: 'text', value: text }])
+  }
+})
+
+test('formats equations while leaving nearby dates unchanged', () => {
+  assert.deepEqual(parseMathText('August 8th, 2026: solve 8x+4=2.'), [
+    { type: 'text', value: 'August 8th, 2026: solve ' },
+    { type: 'math', value: '8x+4=2', display: false },
     { type: 'text', value: '.' },
   ])
 })
@@ -104,12 +108,6 @@ test('still formats calculus notation with differentials', () => {
   assert.deepEqual(math.map(({ value }) => value), ['dy/dx = 2x', String.raw`\sin x + 1 = 2`])
 })
 
-test('renders standalone numbers, decimals, percentages and mathematical symbols', () => {
-  const tokens = parseMathText('Use 2 blocks, 9.81 m/s, 50%, θ and ∞.')
-  const plain = tokens.filter(t => t.type === 'text').map(t => t.value).join('')
-  assert.doesNotMatch(plain, /[0-9θ∞%]/)
-})
-
 test('renders standalone variable labels without converting ordinary prose', () => {
   const tokens = parseMathText('Compare x with T and N; this is a sentence.')
   assert.deepEqual(tokens.filter(t => t.type === 'math').map(t => t.value), ['x', 'T', 'N'])
@@ -122,14 +120,14 @@ test('renders plain square roots and function arguments as complete math', () =>
 })
 
 test('accepts numeric and empty render values', () => {
-  assert.deepEqual(parseMathText(42), [{ type: 'math', value: '42', display: false }])
+  assert.deepEqual(parseMathText(42), [{ type: 'text', value: '42' }])
   assert.deepEqual(parseMathText(null), [])
 })
 
 
 test('preserves prose apostrophes and URLs while formatting their surrounding numbers', () => {
   const tokens = parseMathText("Pip's 2 examples: https://example.com/page/123")
-  assert.deepEqual(tokens.filter(t => t.type === 'math').map(t => t.value), ['2'])
+  assert.deepEqual(tokens.filter(t => t.type === 'math').map(t => t.value), [])
   assert.ok(tokens.some(t => t.type === 'text' && t.value.includes('https://example.com/page/123')))
 })
 

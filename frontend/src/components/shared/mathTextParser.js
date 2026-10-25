@@ -113,9 +113,9 @@ function explicitMathToken(value) {
 }
 
 
-// Render numeric and symbolic fragments left in prose after extracting full expressions.
-// URLs and ordinary words are kept intact; source text itself is never rewritten.
-const PROSE_ATOM = /https?:\/\/[^\s]+|(?<![\p{L}\p{N}_'’])(?:\d+(?:st|nd|rd|th)|\d+(?:,\d{3})*(?:\.\d+)?(?:ms|min|kg|cm|mm|Hz|s|h|m|N|J|W|%|°)?|[b-hj-zB-HJ-Z])(?=$|[^\p{L}\p{N}_])|[Α-Ωα-ω∞≈±≤≥≠×÷∑∫∂∇√+=<>]/gu
+// Only symbolic fragments are math outside expressions. Dates, counts, ordinals,
+// currency and other standalone numbers remain ordinary text.
+const PROSE_ATOM = /https?:\/\/[^\s]+|(?<![\p{L}\p{N}_'’])[b-hj-zB-HJ-Z](?=$|[^\p{L}\p{N}_])|[Α-Ωα-ω∞≈±≤≥≠×÷∑∫∂∇√+=<>]/gu
 function renderProseAtoms(value) {
   const tokens = []
   let last = 0
