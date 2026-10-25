@@ -81,3 +81,19 @@ test('leaves ordinary prose and currency untouched', () => {
     { type: 'text', value: 'The answer is $5.00.' },
   ])
 })
+
+test('keeps hyphenated prose and ordinals as plain text', () => {
+  for (const text of ['Your crossed-out line is fine.', 'the power-rule step', 'between the 3rd-4th lines']) {
+    assert.deepEqual(parseMathText(text).filter(({ type }) => type === 'math'), [], text)
+  }
+})
+
+test('does not glue a following word onto a bare equation', () => {
+  const math = parseMathText('the inside is 3x^2 + 1 and not just x').filter(({ type }) => type === 'math')
+  assert.deepEqual(math.map(({ value }) => value), ['3x^2 + 1'])
+})
+
+test('still formats calculus notation with differentials', () => {
+  const math = parseMathText('so dy/dx = 2x here, and sin x + 1 = 2 too').filter(({ type }) => type === 'math')
+  assert.deepEqual(math.map(({ value }) => value), ['dy/dx = 2x', 'x + 1 = 2'])
+})

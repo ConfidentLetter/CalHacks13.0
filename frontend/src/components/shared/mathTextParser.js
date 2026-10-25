@@ -1,5 +1,5 @@
 const EXPLICIT_MATH = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\\)\$(?!\s)[^$\n]+?\$)/g
-const MATH_TERM = String.raw`(?:\\[A-Za-z]+(?:\{[^{}]*\})*|(?:Σ|∑)?(?:\d+(?:\.\d+)?\s*)?[A-Za-zΑ-Ωα-ω](?:[A-Za-z0-9Α-Ωα-ω]*)(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))?|\d+(?:\.\d+)?)`
+const MATH_TERM = String.raw`(?:\\[A-Za-z]+(?:\{[^{}]*\})*|(?:Σ|∑)?(?:\d+(?:\.\d+)?)?[A-Za-zΑ-Ωα-ω](?:[A-Za-z0-9Α-Ωα-ω]*)(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))?|\d+(?:\.\d+)?)`
 const EQUATION = new RegExp(
   `${MATH_TERM}(?:\\s*(?:=|<=|>=|≤|≥|≠|<|>|[+\\-×÷*/])\\s*${MATH_TERM})+`,
 )
@@ -36,6 +36,16 @@ function normalizeMath(value) {
     .replace(/([A-Za-z])(\d+)(?=[A-Za-z]|\s|$)/g, '$1_{$2}')
 }
 
+// A run of 2+ letters is prose unless it is a LaTeX command, a known function name, or a differential (dx, dt).
+function containsProse(value) {
+  for (const { 0: word, index } of value.matchAll(/[A-Za-z]{2,}/g)) {
+    if (value[index - 1] === '\\') continue
+    if (LATEX_WORDS.has(word) || /^d[a-z]$/.test(word)) continue
+    return true
+  }
+  return false
+}
+
 function isFormulaLine(value) {
   if (!value || !FORMULA_LINE.test(value) || !/[=<>≤≥≠^_\\+*/×÷-]/.test(value)) return false
   return [...value.matchAll(/[A-Za-z]+/g)].every(([word]) => word.length === 1 || LATEX_WORDS.has(word))
@@ -68,6 +78,7 @@ function parsePlainText(value) {
       const start = match.index
       const end = start + match[0].length
       if (/[A-Za-z0-9]/.test(line[start - 1] || '') || /[A-Za-z0-9]/.test(line[end] || '')) continue
+      if (containsProse(match[0])) continue
       if (start > lastIndex) tokens.push({ type: 'text', value: line.slice(lastIndex, start) })
       tokens.push({ type: 'math', value: normalizeMath(match[0]), display: false })
       lastIndex = end
