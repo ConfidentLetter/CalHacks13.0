@@ -10,6 +10,7 @@ from transcribe.ids import new_page_id, new_snapshot_id, now_iso
 from transcribe.ink import resolve
 from transcribe.matching import match_to_previous
 from transcribe.page import QUALITY_BAD_CAP, transcribe_page
+from transcribe.edgepage import edge_page
 from transcribe.loosepage import loose_page
 from transcribe.rawframe import raw_frame_lines
 from transcribe.schema import load_mock_twin, validate_twin
@@ -110,11 +111,33 @@ def _error_twin(snapshot_path: str, previous_twin: dict | None, error: str, t0: 
     return validate_twin(twin)
 
 
+def _readable(lines: list[dict]) -> bool:
+    """At least one line was actually read (not all illegible): otherwise fall through to the next step."""
+    return any(l.get("status") != "illegible" for l in lines)
+
+
+EDGE_MAX_LINES = 60   # a flattened frame-filling sheet: T2 lines are real lines
+
+
+def _flatten_edge_page(abs_path: str, page: dict) -> tuple[dict, dict | None, bool]:
+    """T1 said no_page but the sheet fills the frame and touches its edge (phone held close): flatten it with
+    T1's quad finder (edge check relaxed) + T1's dewarp, then segment the flat page. Read once per line
+    (single_read): confidence is capped by quality.ok=False anyway, and dense pages must stay under budget.
+    Returns (page, layout, single_read) — (page, None, False) when this is not such a sheet."""
+    edge = edge_page(abs_path)
+    if not edge:
+        return page, None, False
+    layout = _segment(edge["dewarped_path"])
+    if not 0 < len(layout.get("lines") or []) <= int(cfg("transcribe.edge_max_lines", EDGE_MAX_LINES)):
+        return page, None, False
+    log("transcribe.fallback", 0.0, mode="edge_page", lines=len(layout["lines"]))
+    return ({**page, "dewarped_path": edge["dewarped_path"], "width": edge["width"], "height": edge["height"],
+             "detection": {"method": "edge_page", "quad": edge["quad"]}}, layout, True)
 LOOSE_MAX_LINES = 30  # more T2 lines than this on a loose crop = word fragments (tilted/two-column page)
 
 
 def _hand_held_fallback(abs_path: str, page: dict, layout: dict, quality: dict, previous_twin: dict | None):
-    """T1 found no page and T2 found no lines (a hand-held sheet).
+    """Nothing readable came back from a no-page frame (a hand-held sheet that is not frame-filling).
     1) loose page crop (sheet only, room painted white). If T2 finds a sane layout on it (1..LOOSE_MAX_LINES
        lines), run the normal per-line transcription: real per-line boxes.
     2) otherwise one page pass on that crop (or on the whole frame if no sheet was found): estimated boxes."""
@@ -123,8 +146,8 @@ def _hand_held_fallback(abs_path: str, page: dict, layout: dict, quality: dict, 
         loose_layout = _segment(loose["path"])
         n = len(loose_layout.get("lines") or [])
         if 0 < n <= int(cfg("transcribe.loose_max_lines", LOOSE_MAX_LINES)):
-            lines = transcribe_page(loose["path"], {**loose_layout, "quality": quality}, previous_twin)
-            if lines:
+            lines = transcribe_page(loose["path"], {**loose_layout, "quality": quality, "single_read": True}, previous_twin)
+            if _readable(lines):
                 log("transcribe.fallback", 0.0, mode="loose_page", lines=len(lines))
                 return ({**page, "dewarped_path": loose["path"], "width": loose["width"], "height": loose["height"]},
                         loose_layout, lines)
@@ -145,12 +168,15 @@ def _build(abs_path: str, snapshot_path: str, previous_twin: dict | None, t0: fl
         page = _detect(abs_path)
     latency["page"] = round(t.ms, 1)
     quality = page["quality"]
+    fallback_on = not quality.get("ok") and bool(cfg("transcribe.raw_frame_fallback", True))
     with Timer("transcribe.build.layout") as t:
-        layout = _segment(page["dewarped_path"])
+        page, layout, single = _flatten_edge_page(abs_path, page) if fallback_on and "no_page" in (quality.get("issues") or []) \
+            else (page, None, False)
+        layout = layout if layout is not None else _segment(page["dewarped_path"])
     latency["layout"] = round(t.ms, 1)
     with Timer("transcribe.build.transcribe") as t:
-        lines = transcribe_page(page["dewarped_path"], {**layout, "quality": quality}, previous_twin)
-        if not lines and not quality.get("ok") and cfg("transcribe.raw_frame_fallback", True):
+        lines = transcribe_page(page["dewarped_path"], {**layout, "quality": quality, "single_read": single}, previous_twin)
+        if fallback_on and not _readable(lines):
             page, layout, lines = _hand_held_fallback(abs_path, page, layout, quality, previous_twin)
     latency["transcribe"] = round(t.ms, 1)
     now = now_iso()

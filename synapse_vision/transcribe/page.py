@@ -98,6 +98,9 @@ def _region_for(line: dict, regions: list[dict]) -> str:
     return str(regions[0]["id"]) if regions else "R0"
 
 
+FALLBACK_PARALLEL = 12
+
+
 def _status(hint: str, crossed_answer: bool | None, illegible: bool) -> str:
     if illegible:
         return "illegible"
@@ -115,7 +118,11 @@ def transcribe_page(dewarped_path: str, layout: dict, previous_twin: dict | None
         quality = layout.get("quality") or {}
         issues = len(quality.get("issues") or [])
         threshold = float(cfg("transcribe.agreement_threshold", 0.92))
-        max_parallel = max(1, int(cfg("transcribe.max_parallel", 6)))
+        # single_read (set by build_page_twin's hand-held fallback, where confidence is capped anyway):
+        # one line pass per line, no page pass, no re-read round, wider pool.
+        single = bool(layout.get("single_read"))
+        max_parallel = max(1, int(cfg("transcribe.fallback_parallel", FALLBACK_PARALLEL) if single
+                                  else cfg("transcribe.max_parallel", 6)))
         min_h = float(cfg("layout.min_line_height_px", 28))
 
         prepped = _prep(lines, min_h)
@@ -123,7 +130,7 @@ def transcribe_page(dewarped_path: str, layout: dict, previous_twin: dict | None
         to_model = [p for p in prepped if not p.empty and p.cached is None]
         unsure = [p for p in prepped if p.line.get("status_hint") == "unsure" and not p.empty and p.cached is None]
 
-        skip_page = bool(previous_twin) and len(to_model) <= int(cfg("transcribe.page_pass_skip_below", PAGE_PASS_SKIP_BELOW))
+        skip_page = single or (bool(previous_twin) and len(to_model) <= int(cfg("transcribe.page_pass_skip_below", PAGE_PASS_SKIP_BELOW)))
         with ThreadPoolExecutor(max_workers=max_parallel) as ex:
             page_future = ex.submit(_timed, page_pass, get_tiles(dewarped_path)) if to_model and not skip_page else None
             line_futures = {p.i: ex.submit(_timed, line_pass, p.line) for p in to_model}
@@ -142,7 +149,7 @@ def transcribe_page(dewarped_path: str, layout: dict, previous_twin: dict | None
             plans = {i: decide.plan(line_readings[i], page_for[i], threshold=threshold,
                                     tall=next(p.tall for p in to_model if p.i == i)) for i in ordered}
             reread_futures = {i: ex.submit(_timed, reread, prepped[i].line["crop_path"], pl.line_r, pl.page_r)
-                              for i, pl in plans.items() if pl.needs_reread}
+                              for i, pl in plans.items() if pl.needs_reread and not single}
             rereads, crossed = {}, {}
             for i, f in reread_futures.items():
                 rereads[i], timings[i]["reread"] = f.result()

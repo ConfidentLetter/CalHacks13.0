@@ -25,6 +25,7 @@ def test_loose_page_crops_the_sheet_and_drops_the_face():
 
 
 def test_handheld_still_is_read_with_quality_reported_honestly(monkeypatch):
+    monkeypatch.setattr(twin_mod, "edge_page", lambda p: None)  # this test covers the loose-crop path
     calls = []
     monkeypatch.setattr(raw, "page_pass", lambda tiles: calls.append(tiles[0]["path"]) or [dict(r) for r in READS])
     twin = twin_mod.build_page_twin(str(FIXTURE))
@@ -51,6 +52,7 @@ def test_good_pages_never_take_the_handheld_path(monkeypatch):
 
 def test_empty_sheet_read_falls_through_to_the_whole_frame(monkeypatch):
     """If the sheet crop reads nothing (crop landed on the wrong bright thing), the whole frame gets one try."""
+    monkeypatch.setattr(twin_mod, "edge_page", lambda p: None)
     seen = []
 
     def fake_pass(tiles):
@@ -61,3 +63,55 @@ def test_empty_sheet_read_falls_through_to_the_whole_frame(monkeypatch):
     twin = twin_mod.build_page_twin(str(FIXTURE))
     assert len(seen) == 2 and seen[0].endswith("_loose.png") and seen[1].endswith("handheld_sheet_800.jpg")
     assert [l["latex"] for l in twin["lines"]] == [READS[0]["latex"]] and twin_errors(twin) == []
+
+
+PHONE = Path(__file__).parent / "fixtures" / "phone_sheet_540.jpg"
+
+
+def test_phone_still_touching_the_frame_edge_is_flattened_and_read_once_per_line(monkeypatch):
+    """Henry's iPhone still 20261025T162059 (downscaled 540x960, no faces): sheet fills the frame, its right
+    edge and bottom touch the frame, T1 says no_page. Must be flattened and read on the normal per-line path,
+    one model call per line (no page pass, no re-read round), with honest quality."""
+    import transcribe.page as page_mod
+
+    calls = {"line": 0, "page": 0, "reread": 0}
+
+    def fake_line(line):
+        calls["line"] += 1
+        return {"latex": "\\Sigma F=T-f_{kB}=m_{B}a", "text": "", "kind": "math", "illegible": False, "uncertain": []}
+
+    monkeypatch.setattr(page_mod, "line_pass", fake_line)
+    monkeypatch.setattr(page_mod, "page_pass", lambda tiles: calls.__setitem__("page", calls["page"] + 1) or [])
+    monkeypatch.setattr(page_mod, "reread", lambda *a: calls.__setitem__("reread", calls["reread"] + 1) or None)
+    monkeypatch.setattr(page_mod, "ask_crossed_out", lambda crop: False)
+    monkeypatch.setattr(twin_mod, "loose_page", lambda p: pytest.fail("edge page must be used, not the loose crop"))
+    twin = twin_mod.build_page_twin(str(PHONE))
+    assert twin_errors(twin) == []
+    assert twin["image"]["dewarped_path"].endswith("_edge.jpg")
+    assert twin["quality"]["ok"] is False and "no_page" in twin["quality"]["issues"]
+    modeled = [l for l in twin["lines"] if l["status"] != "illegible"]
+    assert len(modeled) >= 10 and calls["line"] == len(modeled)
+    assert calls["page"] == 0 and calls["reread"] == 0
+    assert all(not l.get("bbox_estimated") and l["confidence"] <= 0.4 for l in twin["lines"])
+    assert all(l["latex"] == "\\Sigma F=T-f_{kB}=m_{B}a" for l in modeled)  # verbatim pass-through
+
+
+def test_flat_upload_never_takes_the_edge_path(monkeypatch):
+    monkeypatch.setattr(twin_mod, "edge_page", lambda p: pytest.fail("good pages must not be re-flattened"))
+    monkeypatch.setattr(twin_mod, "_detect", lambda p: {"dewarped_path": p, "width": 10, "height": 10,
+                                                        "homography": twin_mod.IDENTITY, "quality": {"ok": True, "issues": []}})
+    monkeypatch.setattr(twin_mod, "_segment", lambda p: {"regions": [], "lines": []})
+    twin_mod.build_page_twin(str(PHONE))
+
+
+def test_edge_page_that_reads_nothing_falls_through_to_loose_and_whole_frame(monkeypatch):
+    import transcribe.page as page_mod
+
+    monkeypatch.setattr(page_mod, "line_pass", lambda line: {"latex": "", "text": "", "kind": "text", "illegible": True, "uncertain": []})
+    monkeypatch.setattr(page_mod, "ask_crossed_out", lambda crop: False)
+    seen = []
+    monkeypatch.setattr(raw, "page_pass", lambda tiles: seen.append(tiles[0]["path"]) or [dict(READS[0])])
+    twin = twin_mod.build_page_twin(str(PHONE))
+    assert seen, "edge page read nothing, so the page-pass fallback must run"
+    assert [l["latex"] for l in twin["lines"]] == [READS[0]["latex"]] and twin_errors(twin) == []
+    assert "no_page" in twin["quality"]["issues"]
