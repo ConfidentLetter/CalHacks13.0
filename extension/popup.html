@@ -58,6 +58,20 @@
         <p class="hint" id="timer-hint"></p>
       </section>
 
+      <!-- PDF import panel -->
+      <section class="card pdf" id="pdf-section" aria-live="polite" hidden>
+        <h2 class="section-title">PDF reading</h2>
+        <div id="pdf-info">
+          <p class="hint" id="pdf-title" style="font-weight: 500;"></p>
+          <p class="hint" id="pdf-status"></p>
+        </div>
+        <div id="pdf-actions" class="actions" style="margin: 0.75rem 0;">
+          <button class="btn secondary" id="pdf-import" type="button">Import PDF</button>
+          <button class="btn danger" id="pdf-clear" type="button">Clear</button>
+        </div>
+        <input type="file" id="pdf-file-input" accept=".pdf" style="display: none;" />
+      </section>
+
       <!-- Deliberate study capture: separate consent from passive reading snapshots. -->
       <section class="card study" aria-live="polite">
         <h2 class="section-title">Study capture</h2>

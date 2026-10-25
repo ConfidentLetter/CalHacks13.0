@@ -25,6 +25,12 @@
   "permissions": ["storage", "alarms", "scripting", "activeTab"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "optional_host_permissions": ["https://*/*", "http://*/*", "<all_urls>"],
+  "web_accessible_resources": [
+    {
+      "resources": ["pdf-extract.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": ["http://localhost/*", "http://127.0.0.1/*"],

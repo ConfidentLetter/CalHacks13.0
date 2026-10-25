@@ -214,6 +214,7 @@ function render() {
 
   renderSite()
   renderTimer()
+  renderPdfPanel()
   renderStudy()
   const tracking = settings.trackingEnabled
   const toggle = $('toggle-tracking')
@@ -544,6 +545,68 @@ $('delete-all').addEventListener('click', async (e) => {
   e.target.textContent = 'Delete all stored data'
   flash('All stored reading data deleted', 'ok')
   refresh({ full: false })
+})
+
+// ---- PDF import ---------------------------------------------------------------
+
+let pdfProcessing = false
+
+async function renderPdfPanel() {
+  const { live } = state || {}
+  const isPdf = live?.isPdf
+  const section = $('pdf-section')
+  if (!isPdf) {
+    section.hidden = true
+    return
+  }
+  section.hidden = false
+  $('pdf-title').textContent = live?.title || 'PDF Document'
+  const info = $('pdf-status')
+  info.textContent = `${live?.url || ''} · ${live?.activeSec || 0}s`
+}
+
+$('pdf-import').addEventListener('click', async () => {
+  if (pdfProcessing) return
+  pdfProcessing = true
+  const input = $('pdf-file-input')
+  input.click()
+})
+
+$('pdf-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0]
+  if (!file || !file.type.includes('pdf')) {
+    flash('Please select a PDF file', 'err')
+    pdfProcessing = false
+    return
+  }
+  try {
+    const buf = await file.arrayBuffer()
+    const result = await send('popup:import-pdf', {
+      filename: file.name,
+      buffer: Array.from(new Uint8Array(buf)),
+      url: tab?.url || '',
+    })
+    if (result.error) throw new Error(result.error)
+    const msg = result.scanned ? 'imported PDF (contains scanned pages)' : 'imported PDF'
+    flash(`${msg} · ${result.pages} pages extracted`, 'ok')
+    await refresh({ full: false })
+  } catch (err) {
+    flash(`PDF import failed: ${err.message}`, 'err')
+  } finally {
+    pdfProcessing = false
+    e.target.value = ''
+  }
+})
+
+$('pdf-clear').addEventListener('click', async () => {
+  if (pdfProcessing) return
+  try {
+    await send('popup:clear-pdf')
+    flash('PDF cleared', 'ok')
+    await refresh({ full: false })
+  } catch {
+    flash('Failed to clear PDF', 'err')
+  }
 })
 
 // ---- boot -------------------------------------------------------------------
