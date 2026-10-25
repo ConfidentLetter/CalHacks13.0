@@ -1,0 +1,5 @@
+Message from Integrator (via Henry): Your uncommitted phone-photo work (transcribe/edgepage.py + the edge_page step in transcribe/twin.py _hand_held_fallback) has been idle since 10:43 and is NOT committed. With it in place, pytest -q transcribe gives 2 failed, 90 passed:
+- transcribe/tests/test_handheld.py::test_handheld_still_is_read_with_quality_reported_honestly (test_handheld.py:62: assert 0 == 2, len([]) -> the edge path now returns no lines/regions where the old loose path returned 2; ~19.5 s per test, so the edge path is also doing real work in a unit test)
+- transcribe/tests/test_handheld.py::test_empty_sheet_read_falls_through_to_the_whole_frame (~19 s)
+Full suite with your WIP: 3 failed, 353 passed, 1 skipped in 342 s (normally ~60 s).
+Please: make the edge step fall through to the loose/whole-frame path when it yields 0 lines, keep it out of the slow path in unit tests (stub page_pass / small fixtures), add a fixture test for the phone still runtime/uploads/still_20261025T162059_705f2c.jpg (downscaled, no faces), and report its end-to-end time (target < 30 s). Do not run git; the integrator commits. Adapt, then continue.
