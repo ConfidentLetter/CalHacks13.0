@@ -1,4 +1,4 @@
-# Synapse Vision — hand-off API
+# StudBud Vision — hand-off API
 
 Base URL: `http://<laptop-ip>:8000` (Henry will tell you the IP). While the camera pipeline is being built the server runs in **mock mode** (`SV_MOCK=1`) and every route returns the mock page twin from `mocks/page_twin_product_rule.json` with fresh ids and timestamps. The shape is final: `contracts/page_twin.schema.json`.
 

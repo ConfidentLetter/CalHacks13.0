@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BookOpenText, Camera, Eraser, Mic, MicOff, RotateCw, Send, Sparkles } from 'lucide-react'
 import { useApp, useCamera, useStudyData } from '../context/contexts'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -52,7 +51,6 @@ function SourceChip({ source, onOpenSnapshot }) {
         rel="noreferrer noopener"
         className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-sage-deep bg-sage/50 px-2.5 py-1 text-xs text-sage-ink transition hover:bg-sage/50"
       >
-        <BookOpenText className="size-3.5 shrink-0" aria-hidden="true" />
         <span className="truncate">{source.title}</span>
       </a>
     )
@@ -63,7 +61,6 @@ function SourceChip({ source, onOpenSnapshot }) {
       onClick={() => onOpenSnapshot(source)}
       className="inline-flex items-center gap-1.5 rounded-lg border border-butter-deep bg-butter/50 px-2.5 py-1 text-xs text-honey transition hover:bg-butter/50"
     >
-      <Camera className="size-3.5" aria-hidden="true" />
       {source.title || 'Notebook snapshot'}
       {source.capturedAt && <span className="text-honey/60">· {formatClock(source.capturedAt)}</span>}
     </button>
@@ -95,7 +92,7 @@ function Message({ m, onRetry, onOpenSnapshot }) {
             </p>
           ))}
           {isError && onRetry && (
-            <Button size="sm" variant="ghost" icon={RotateCw} className="mt-2" onClick={() => onRetry(m)}>
+            <Button size="sm" variant="ghost" className="mt-2" onClick={() => onRetry(m)}>
               Try again
             </Button>
           )}
@@ -247,12 +244,11 @@ export function AITutor() {
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
-      <Card className="sheet flex h-[calc(100dvh-13rem)] min-h-[480px] flex-col overflow-hidden rounded-none lg:h-[calc(100dvh-9.5rem)]">
-        <div ref={scroller} className="ruled relative flex-1 space-y-7 overflow-y-auto bg-cream py-6 pr-4 pl-8 sm:pr-8 sm:pl-14" aria-live="polite">
+      <Card className="sheet flex h-[calc(100dvh-13rem)] min-h-[480px] flex-col overflow-hidden lg:h-[calc(100dvh-9.5rem)]">
+        <div ref={scroller} className="ruled relative flex-1 space-y-7 overflow-y-auto bg-white py-6 pr-4 pl-8 sm:pr-8 sm:pl-14" aria-live="polite">
           <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 w-px bg-clay/30 sm:left-9" />
           {messages.length === 0 ? (
             <EmptyState
-              icon={Sparkles}
               title="ask a little question"
               description="let’s work through it together — with the camera on, Pip gets one still of your page when you send."
               className="h-full"
@@ -289,7 +285,7 @@ export function AITutor() {
           }}
           className="border-t border-olive/12 bg-paper p-3 sm:p-4"
         >
-          <div className="flex items-end gap-2 rounded-sm border border-olive/14 bg-cream p-2 focus-within:border-butter-deep focus-within:ring-4 focus-within:ring-butter-deep">
+          <div className="flex items-end gap-2 rounded-sm border border-olive/14 bg-white p-2 focus-within:border-butter-deep focus-within:ring-4 focus-within:ring-butter-deep">
             <label htmlFor="tutor-input" className="sr-only">
               Message the AI tutor
             </label>
@@ -310,15 +306,16 @@ export function AITutor() {
             <Button
               variant={voice.listening ? 'danger' : 'ghost'}
               size="icon"
-              icon={voice.listening ? MicOff : Mic}
               onClick={voice.listening ? voice.stop : voice.start}
               disabled={!voice.supported}
               aria-pressed={voice.listening}
               aria-label={voice.listening ? 'Stop voice input' : 'Start voice input'}
               title={voice.supported ? undefined : 'Voice input isn’t supported in this browser — try Chrome or Edge'}
-              className={cx('h-10 w-10', voice.listening && 'animate-pulse')}
-            />
-            <Button type="submit" variant="primary" icon={Send} loading={sending} disabled={!input.trim()}>
+              className={cx('h-10', voice.listening && 'animate-pulse')}
+            >
+              {voice.listening ? 'Stop mic' : 'Mic'}
+            </Button>
+            <Button type="submit" variant="primary" loading={sending} disabled={!input.trim()}>
               Send
             </Button>
           </div>
@@ -384,7 +381,6 @@ export function AITutor() {
 
         <Button
           variant="ghost"
-          icon={Eraser}
           className="w-full justify-center"
           disabled={!messages.length || sending}
           onClick={() => setConfirmClear(true)}

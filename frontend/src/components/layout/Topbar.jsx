@@ -1,4 +1,3 @@
-import { Menu } from 'lucide-react'
 import { useApp, useCamera, useStudyData } from '../../context/contexts'
 import { NAV_ITEMS } from './navItems'
 import { StatusDot } from '../ui/Badge'
@@ -6,6 +5,7 @@ import { Logo } from './Sidebar'
 
 const SUBTITLES = {
   dashboard: 'everything from today, in one place',
+  capture: 'your work, a little guidance, one step at a time',
   notebook: 'one still, every line boxed and read exactly as written',
   reading: 'pages you actually sat with, on sites you approved',
   tutor: 'let’s work through it together',
@@ -24,16 +24,16 @@ export function Topbar({ onMenu }) {
         <button
           type="button"
           onClick={onMenu}
-          className="grid size-10 place-items-center rounded-xl text-olive/80 hover:bg-olive/12 lg:hidden"
+          className="h-9 rounded-sm px-3 text-sm text-olive/80 hover:bg-olive/12 lg:hidden"
           aria-label="Open navigation"
         >
-          <Menu className="size-5" />
+          Menu
         </button>
         <div className="lg:hidden">
           <Logo />
         </div>
         <div className="hidden min-w-0 lg:block">
-          <h1 className="text-[1.75rem] leading-tight text-olive">{item?.label}</h1>
+          <h1 className="paper-heading text-[1.75rem] leading-tight text-olive">{item?.label}</h1>
           <p className="truncate text-[13px] text-olive/65">{SUBTITLES[route]}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -48,7 +48,7 @@ export function Topbar({ onMenu }) {
         </div>
       </div>
       <div className="px-4 pb-3 sm:px-6 lg:hidden">
-        <h1 className="text-xl text-olive">{item?.label}</h1>
+        <h1 className="paper-heading text-xl text-olive">{item?.label}</h1>
         <p className="text-xs text-olive/65">{SUBTITLES[route]}</p>
       </div>
     </header>

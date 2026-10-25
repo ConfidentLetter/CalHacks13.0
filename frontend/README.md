@@ -1,6 +1,6 @@
-# Synapse — Frontend Dashboard
+# StudBud — Frontend Dashboard
 
-React 19 + Vite + Tailwind CSS v4 + lucide-react. A dark-themed study dashboard for the Synapse
+React 19 + Vite + Tailwind CSS v4 + lucide-react. A dark-themed study dashboard for the StudBud
 ambient study assistant.
 
 ## Run
@@ -18,7 +18,7 @@ Optional: `VITE_API_BASE_URL=http://192.168.1.20:8000 npm run dev` sets the defa
 You can also change it at runtime in **Settings**.
 
 ## Data
-There is no fake or sample data. Every panel shows real data from the Synapse backend
+There is no fake or sample data. Every panel shows real data from the StudBud backend
 (default `http://localhost:8000`) or the Chrome extension. When the backend is offline, a red banner says so
 and each panel shows an empty or error state.
 

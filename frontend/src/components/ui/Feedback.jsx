@@ -1,4 +1,3 @@
-import { AlertTriangle, RotateCw } from 'lucide-react'
 import { Button } from './Button'
 import { cx } from '../../utils/format'
 
@@ -22,12 +21,11 @@ export function ErrorState({ message, onRetry, className }) {
         className,
       )}
     >
-      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-clay" aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <p className="break-words">{message}</p>
       </div>
       {onRetry && (
-        <Button size="sm" variant="ghost" icon={RotateCw} onClick={onRetry}>
+        <Button size="sm" variant="ghost" onClick={onRetry}>
           Retry
         </Button>
       )}
@@ -45,7 +43,7 @@ export function LoadingDots({ label = 'Loading' }) {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="size-1.5 animate-bounce rounded-full bg-butter"
+          className="size-1.5 loading-dot rounded-full bg-butter"
           style={{ animationDelay: `${i * 0.15}s` }}
         />
       ))}

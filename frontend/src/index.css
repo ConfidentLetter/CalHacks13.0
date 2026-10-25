@@ -1,11 +1,20 @@
 @import 'tailwindcss';
 @import 'katex/dist/katex.min.css';
 
-/* Synapse stationery palette — cream canvas, paper surfaces, butter + sage accents, olive ink. */
+:root { --paper-marker: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20220%2040%22%20preserveAspectRatio%3D%22none%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23f8e5a0%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2028%20L22%2015%20L35%2028%20L50%2012%20L66%2027%20L84%2013%20L101%2028%20L121%2011%20L138%2027%20L158%2014%20L176%2027%20L195%2013%20L214%2023%22%20stroke-width%3D%2210%22%20opacity%3D%22.64%22%2F%3E%3Cpath%20d%3D%22M8%2027%20Q61%2021%20109%2025%20T210%2024%22%20stroke-width%3D%229%22%20opacity%3D%22.46%22%2F%3E%3Cpath%20d%3D%22M14%2033%20C59%2027%20140%2031%20206%2028%22%20stroke-width%3D%223%22%20opacity%3D%22.4%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"); }
+
+/* StudBud stationery palette — cream canvas, paper surfaces, butter + sage accents, olive ink. */
 @theme {
   --font-sans: 'Nunito', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Fredoka', 'Nunito', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 5px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 10px;
 
   /* T6: type scale for a projector at 3 m — body >= 15 px, small text 13 px. */
   --text-xs: 0.8125rem;
@@ -29,14 +38,14 @@
   /* T6: warm ink red, used ONLY for a wrong line and crossed-out hatching (clay stays for system errors). */
   --color-ink-red: #b23a2e;
 
-  --animate-fade-up: fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-fade-up: fade-up 0.18s ease-out both;
+  --animate-shimmer: shimmer 1.8s linear 3;
   --animate-highlight: highlight 2.4s ease-out both;
 
   @keyframes fade-up {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(2px);
     }
     to {
       opacity: 1;
@@ -98,12 +107,16 @@
 @layer components {
   /* A sheet of paper: white surface, thin warm border, soft resting shadow. */
   .glass {
-    @apply rounded-sm border border-olive/25 bg-white;
+    @apply border border-olive/20 bg-white;
+    border-radius: 6px;
+    box-shadow: 1px 2px 0 rgb(230 218 193 / 0.6);
   }
+  .glass.bg-transparent { box-shadow: none; }
   /* paper sheet with a small offset print, used sparingly for the main object on a page */
   .sheet {
-    @apply relative border border-olive/70 bg-white;
-    box-shadow: 5px 5px 0 0 var(--color-paper-deep);
+    @apply relative border border-olive/30 bg-white;
+    border-radius: 6px;
+    box-shadow: 2px 3px 0 var(--color-paper-deep);
   }
   /* Ruled notebook lines, drawn on top of a paper surface. */
   .ruled {
@@ -118,16 +131,48 @@
   }
   /* Butter sticky note. */
   .sticky-note {
-    @apply rounded-sm border border-olive/70 bg-butter text-olive;
-    box-shadow: 4px 4px 0 0 var(--color-olive);
+    @apply border border-olive/25 bg-butter text-olive;
+    border-radius: 4px;
+    box-shadow: 1px 2px 0 var(--color-butter-deep);
   }
-  /* hand-drawn underline for a single word in a heading */
-  .scribble {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 10' preserveAspectRatio='none'%3E%3Cpath d='M2 7 C 30 2, 60 9, 118 4' fill='none' stroke='%23a4ba8d' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
+  .paper-heading {
+    width: fit-content;
+    background-image: var(--paper-marker);
     background-repeat: no-repeat;
-    background-size: 100% 0.45em;
-    background-position: 0 100%;
-    padding-bottom: 0.1em;
+    background-size: 100% 100%;
+    padding-inline: 0.08em;
+    margin-inline: -0.08em;
+    box-decoration-break: clone;
+  }
+  .paper-button {
+    transition-property: background-color, border-color, color, transform;
+    transition-duration: 140ms;
+  }
+  .paper-button:not(:disabled):hover { transform: translateY(-1px); }
+  .paper-button:not(:disabled):active { transform: translateY(0); }
+  .status-pulse {
+    animation: status-pulse 1.8s ease-out 2 both;
+  }
+  @keyframes status-pulse {
+    from { opacity: 0.5; transform: scale(1); }
+    to { opacity: 0; transform: scale(1.7); }
+  }
+  .loading-dot {
+    animation: loading-dot 1.4s ease-in-out infinite;
+  }
+  @keyframes loading-dot {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  /* Loose, overlapping marker passes sit behind the lettering, never over it. */
+  .scribble {
+    background-image: var(--paper-marker);
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    background-position: center;
+    padding-inline: 0.08em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
   }
   .skeleton {
     @apply rounded-lg bg-olive/[0.06];
@@ -176,7 +221,7 @@
   .ink-fill {
     @apply h-3 rounded-sm bg-olive/15;
     transform-origin: left;
-    animation: ink-fill 1.8s ease-in-out infinite alternate;
+    animation: ink-fill 1.8s ease-in-out 3 alternate;
   }
   @keyframes ink-fill {
     from {
@@ -190,11 +235,11 @@
   }
   /* Side sheet slide-in. */
   .slide-in-right {
-    animation: slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: slide-in-right 0.2s ease-out both;
   }
   @keyframes slide-in-right {
     from {
-      transform: translateX(24px);
+      transform: translateX(8px);
       opacity: 0;
     }
     to {
@@ -215,7 +260,7 @@
   }
 
   .input {
-    @apply w-full rounded-sm border border-olive/30 bg-white px-3.5 py-2.5 text-sm text-olive placeholder:text-olive/45 transition outline-none focus:border-butter-deep focus:ring-4 focus:ring-butter/60;
+    @apply w-full rounded-sm border border-olive/30 bg-white px-3.5 py-2.5 text-sm text-olive placeholder:text-olive/45 transition outline-none focus:border-butter-deep focus:ring-2 focus:ring-butter/60;
   }
 }
 
@@ -226,6 +271,10 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  .paper-button:not(:disabled):hover, .paper-button:not(:disabled):active {
+    transform: none;
+    translate: none;
   }
 }
 
@@ -241,12 +290,12 @@
     transform: translateY(0);
   }
   40% {
-    transform: translateY(-8px);
+    transform: translateY(-3px);
   }
 }
 @keyframes pip-lean {
   50% {
-    transform: rotate(-4deg) translateY(-2px);
+    transform: rotate(-2deg) translateY(-1px);
   }
 }
 @keyframes pip-blink-dots {
@@ -272,7 +321,7 @@
   transform-origin: 50% 90%;
 }
 .pip-ready .pip-body {
-  animation: pip-bob 2.6s ease-in-out infinite;
+  animation: none;
 }
 .pip-listening .pip-body {
   animation: pip-lean 1.2s ease-in-out infinite;

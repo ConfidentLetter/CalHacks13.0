@@ -1,4 +1,4 @@
-// Centralized backend client for the Synapse dashboard.
+// Centralized backend client for the StudBud dashboard.
 //
 // Every exported function resolves to `{ data }` from the real backend, or throws an
 // ApiError. There is no simulated data: if the backend is offline, the UI shows that.
@@ -80,7 +80,7 @@ async function http(method, path, body, { baseUrl = runtime.baseUrl, timeoutMs =
     })
   } catch (err) {
     const timedOut = err?.name === 'AbortError'
-    throw new ApiError(timedOut ? 'Request timed out.' : 'Could not reach the Synapse backend.', {
+    throw new ApiError(timedOut ? 'Request timed out.' : 'Could not reach the StudBud backend.', {
       network: true,
       endpoint: path,
     })
@@ -290,4 +290,25 @@ export function sendChat({
     'POST /api/chat',
     () => http('POST', '/api/chat', body, { timeoutMs: 90_000 })
   )
+}
+
+// Shared session for deliberate screen capture and changed/stable camera stills.
+export function observeStudy(sessionId, image, force = false) {
+  return call('POST /api/study/observe', () =>
+    http('POST', '/api/study/observe', { sessionId, image, force }, { timeoutMs: 90_000 }))
+}
+
+export function sendStudyMessage(sessionId, message) {
+  return call('POST /api/study/message', () =>
+    http('POST', '/api/study/message', { sessionId, message }, { timeoutMs: 90_000 }))
+}
+
+export function getStudySession(sessionId) {
+  return call('GET /api/study/session', () =>
+    http('GET', `/api/study/session/${encodeURIComponent(sessionId)}`))
+}
+
+export function clearStudySession(sessionId) {
+  return call('DELETE /api/study/session', () =>
+    http('DELETE', `/api/study/session/${encodeURIComponent(sessionId)}`, null, { timeoutMs: 90_000 }))
 }

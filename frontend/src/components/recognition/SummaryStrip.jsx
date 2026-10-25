@@ -1,4 +1,3 @@
-import { Lightbulb } from 'lucide-react'
 import { Badge } from '../ui/Badge'
 import { cx } from '../../utils/format'
 import { readInSeconds } from './twinModel'
@@ -39,7 +38,7 @@ export function SummaryStrip({ model, className }) {
       {hints.length > 0 && (
         <aside className="sticky-note rotate-[-0.6deg] p-4 motion-reduce:rotate-0">
           <p className="flex items-center gap-1.5 font-display text-lg text-olive">
-            <Lightbulb className="size-4" aria-hidden="true" /> hints
+            hints
           </p>
           <ul className="mt-1.5 space-y-1.5 text-[15px] leading-relaxed text-olive">
             {hints.map((h, i) => (

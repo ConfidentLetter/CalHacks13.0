@@ -9,7 +9,7 @@ const TONES = {
   red: 'bg-clay/10 text-clay border-clay/40',
 }
 
-export function Badge({ tone = 'neutral', icon: Icon, className, children }) {
+export function Badge({ tone = 'neutral', icon: _icon, className, children }) {
   return (
     <span
       className={cx(
@@ -18,7 +18,6 @@ export function Badge({ tone = 'neutral', icon: Icon, className, children }) {
         className,
       )}
     >
-      {Icon && <Icon className="size-3" aria-hidden="true" />}
       {children}
     </span>
   )
@@ -35,7 +34,7 @@ const DOT = {
 export function StatusDot({ state = 'idle', pulse = false, label }) {
   return (
     <span className="relative inline-flex size-2.5 shrink-0" role={label ? 'img' : undefined} aria-label={label}>
-      {pulse && <span className={cx('absolute inset-0 animate-ping rounded-full opacity-60', DOT[state])} />}
+      {pulse && <span className={cx('absolute inset-0 status-pulse rounded-full', DOT[state])} />}
       <span className={cx('relative inline-flex size-2.5 rounded-full', DOT[state])} />
     </span>
   )

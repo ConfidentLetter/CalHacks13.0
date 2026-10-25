@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { ImageOff } from 'lucide-react'
 import { useElementSize } from '../../hooks/useElementSize'
 import { cx } from '../../utils/format'
 import { LineBox } from './LineBox'
@@ -61,7 +60,7 @@ export function PageTwin({ image, lines = [], selectedId, hoveredId, onSelect, o
           ) : (
             <div className="ruled absolute inset-0 grid place-items-center bg-paper text-olive/55">
               <span className="flex items-center gap-2 text-sm">
-                <ImageOff className="size-4" aria-hidden="true" /> {broken ? 'page image failed to load' : 'no page image'}
+                {broken ? 'page image failed to load' : 'no page image'}
               </span>
             </div>
           )}

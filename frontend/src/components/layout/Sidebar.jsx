@@ -1,4 +1,3 @@
-import { X } from 'lucide-react'
 import { useApp, useStudyData } from '../../context/contexts'
 import { useConnection } from '../../hooks/useConnection'
 import { NAV_ITEMS } from './navItems'
@@ -7,19 +6,9 @@ import { cx } from '../../utils/format'
 
 export function Logo() {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="relative grid size-9 place-items-center rounded-sm border border-butter-deep bg-butter">
-        <svg viewBox="0 0 24 24" className="size-5 text-olive" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-          <circle cx="6" cy="7" r="2.2" />
-          <circle cx="18" cy="6" r="2.2" />
-          <circle cx="12" cy="17.5" r="2.4" />
-          <path d="M8 7.6l8-1.2M7.2 9l3.8 6.6M16.9 8l-3.8 7.4" strokeLinecap="round" />
-        </svg>
-      </span>
-      <div className="leading-tight">
-        <p className="text-[15px] font-semibold tracking-tight text-olive">Synapse</p>
+    <div className="leading-tight">
+        <p className="text-[15px] font-semibold tracking-tight text-olive">StudBud</p>
         <p className="text-[11px] text-olive/55">your cozy study space</p>
-      </div>
     </div>
   )
 }
@@ -31,7 +20,6 @@ function NavList({ onNavigate }) {
     <nav aria-label="Main" className="flex flex-col gap-1">
       {NAV_ITEMS.map((item) => {
         const active = route === item.id
-        const Icon = item.icon
         return (
           <a
             key={item.id}
@@ -50,7 +38,6 @@ function NavList({ onNavigate }) {
             )}
           >
             <span className={cx('absolute inset-y-2.5 -right-1 w-1.5 rounded-l-sm', item.tab)} aria-hidden="true" />
-            <Icon className={cx('size-[18px]', active ? 'text-olive' : 'text-olive/55 group-hover:text-olive/80')} />
             {item.label}
             {item.id === 'reading' && readings.length > 0 && (
               <span className="ml-auto rounded-md bg-olive/12 px-1.5 py-0.5 text-[10px] text-olive/65 tabular-nums">
@@ -113,10 +100,10 @@ export function Sidebar({ mobileOpen, onClose }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="grid size-9 place-items-center rounded-lg text-olive/65 hover:bg-olive/12 hover:text-olive"
+                className="rounded-sm px-2 py-1 text-xs text-olive/65 hover:bg-olive/12 hover:text-olive"
                 aria-label="Close navigation"
               >
-                <X className="size-5" />
+                Close
               </button>
             </div>
             <NavList onNavigate={onClose} />

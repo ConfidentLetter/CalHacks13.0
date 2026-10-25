@@ -4,3 +4,20 @@ dist/
 *.local
 # accidental duplicate Vite scaffold (not part of the app)
 frontend/frontend/
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+._*
+
+# Local environments, caches, runtime data, and generated verification output.
+.venv/
+venv/
+*.py[cod]
+.coverage
+htmlcov/
+artifacts/
+runtime/
+*.sqlite3
+*.sqlite3-*

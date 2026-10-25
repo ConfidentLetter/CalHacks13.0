@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { RotateCw } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { StatusDot } from '../ui/Badge'
 import { getStreamInfo } from '../../services/api'
@@ -97,7 +96,7 @@ export function LiveFeed({ camera, enabled, backendOnline }) {
               {state === 'error' && result.message}
             </p>
             {state === 'error' && (
-              <Button size="sm" variant="primary" icon={RotateCw} onClick={() => setAttempt((a) => a + 1)}>
+              <Button size="sm" variant="primary" onClick={() => setAttempt((a) => a + 1)}>
                 Try again
               </Button>
             )}

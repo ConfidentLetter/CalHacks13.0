@@ -4,7 +4,7 @@
 
 ## Project context (identical in all four prompts)
 
-**Synapse** is an AI learning companion for college STEM students who do homework on paper. A camera (Raspberry Pi camera on a desk mount, or a webcam/phone) looks down at the student's paper. **This repo is the vision half only**: it turns a photo of handwritten work into a *page twin* — a structured, verbatim record of every line on the page, where it is, whether it is crossed out, and how confident we are in each reading. A separate Tutor team consumes the page twin to find the step where the student went wrong and coach them.
+**StudBud** is an AI learning companion for college STEM students who do homework on paper. A camera (Raspberry Pi camera on a desk mount, or a webcam/phone) looks down at the student's paper. **This repo is the vision half only**: it turns a photo of handwritten work into a *page twin* — a structured, verbatim record of every line on the page, where it is, whether it is crossed out, and how confident we are in each reading. A separate Tutor team consumes the page twin to find the step where the student went wrong and coach them.
 
 The single most important rule in this repo: **transcribe exactly what is written, mistakes included. Never correct the student's math.** A published study of AI grading on real handwritten calculus (UC Irvine, arXiv 2603.00895) found transcription acceptable on roughly 88% of scans, and found that transcription occasionally "fixed" student mistakes — which destroys exactly the evidence the Tutor needs. It also found models hallucinating content in blank areas, and errors on nested fractions and crossed-out work. Every design choice below guards against those failure modes.
 

@@ -55,7 +55,7 @@ JUDGE_SCHEMA = {
     "required": ["summary", "topics", "steps", "hints"],
 }
 
-CHAT_SYSTEM = """You are Pip, a warm, concise study tutor inside the Synapse dashboard. You help a student with their
+CHAT_SYSTEM = """You are Pip, a warm, concise study tutor inside the StudBud dashboard. You help a student with their
 OWN work: a verbatim transcription of their latest handwritten notebook page (if provided) and the titles of web pages
 they recently read (and their text only if the student consented and it is included).
 

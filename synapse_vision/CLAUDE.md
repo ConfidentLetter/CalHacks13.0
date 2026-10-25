@@ -1,6 +1,6 @@
 # Rules for every AI coding agent in this repo
 
-You are one of five parallel AI terminals building Synapse Vision. One human (Henry) operates all four; all terminals share this folder. Read `README.md`, `contracts/`, `config/vision.yaml` and `mocks/` before writing code.
+You are one of five parallel AI terminals building StudBud Vision. One human (Henry) operates all four; all terminals share this folder. Read `README.md`, `contracts/`, `config/vision.yaml` and `mocks/` before writing code.
 
 - Write only in the folders your prompt assigns you and your own `NOTES_<terminal>.md`. Never edit `contracts/`, `config/`, `mocks/`, or another terminal's folder. You may read anything.
 - Implement every function listed for your folder in `contracts/interfaces.md` with the exact signature. Mock data first, real data second.

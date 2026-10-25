@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Synapse Reading Tracker",
+  "name": "StudBud Reading Tracker",
   "version": "0.2.0",
-  "description": "Opt-in study reading tracker and page snapshots for the Synapse ambient study assistant.",
+  "description": "Opt-in study reading tracker and page snapshots for the StudBud ambient study assistant.",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Synapse",
+    "default_title": "StudBud",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

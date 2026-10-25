@@ -31,7 +31,7 @@ def _num(v: str | None) -> float | None:
         return None
 
 
-def plot(rows: list[dict], out: Path = OUT_PATH, title: str = "Synapse Vision — accuracy journey") -> Path:
+def plot(rows: list[dict], out: Path = OUT_PATH, title: str = "StudBud Vision — accuracy journey") -> Path:
     import matplotlib
 
     matplotlib.use("Agg")

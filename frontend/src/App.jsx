@@ -12,9 +12,11 @@ import { NotebookObserver } from './pages/NotebookObserver'
 import { ReadingMemory } from './pages/ReadingMemory'
 import { AITutor } from './pages/AITutor'
 import { Settings } from './pages/Settings'
+import { StudyCapture } from './pages/StudyCapture'
 
 const PAGES = {
   dashboard: Dashboard,
+  capture: StudyCapture,
   notebook: NotebookObserver,
   reading: ReadingMemory,
   tutor: AITutor,

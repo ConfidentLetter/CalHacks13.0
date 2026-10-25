@@ -1,0 +1,12 @@
+# Local browser capture + study tutor. Speech-to-text and hardware stacks are optional.
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+anthropic>=0.49,<1
+python-dotenv>=1.0,<2
+jsonschema>=4.21
+PyYAML>=6.0
+opencv-python>=4.9
+numpy>=1.26
+pillow>=10
+httpx>=0.27

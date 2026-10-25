@@ -1,4 +1,4 @@
-"""Synapse Vision + team-frontend bridge: ONE process on port 8000.
+"""StudBud Vision + team-frontend bridge: ONE process on port 8000.
 
     uvicorn bridge.server:app --host 0.0.0.0 --port 8000
     SV_MOCK=1 uvicorn bridge.server:app --port 8000     # mock twin, no camera, no model for the vision part
@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.server import app as vision_app
 from bridge.api import router as bridge_router
+from bridge.study import router as study_router
 
 DEFAULT_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 
@@ -33,6 +34,7 @@ def _extend(app) -> None:
     # resetting the lazily-built stack is safe: it is rebuilt on the next request.
     app.middleware_stack = None
     app.include_router(bridge_router)
+    app.include_router(study_router)
     app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(), allow_methods=["*"], allow_headers=["*"],
                        allow_credentials=False, max_age=600)
     app.state.bridge_installed = True
@@ -47,7 +49,7 @@ def main() -> None:
 
     import uvicorn
 
-    p = argparse.ArgumentParser(description="Synapse Vision bridge server (T4 routes + /api/* for the frontend)")
+    p = argparse.ArgumentParser(description="StudBud Vision bridge server (T4 routes + /api/* for the frontend)")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--mock", action="store_true", help="same as SV_MOCK=1")

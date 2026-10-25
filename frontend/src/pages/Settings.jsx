@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { CheckCircle2, XCircle } from 'lucide-react'
 import { useApp, useStudyData } from '../context/contexts'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
@@ -146,12 +145,12 @@ function BackendCard() {
           </div>
           {test.state === 'ok' && (
             <p className="flex items-center gap-1.5 text-xs text-sage-ink" role="status">
-              <CheckCircle2 className="size-3.5" aria-hidden="true" /> {test.message}
+              {test.message}
             </p>
           )}
           {test.state === 'error' && (
             <p className="flex items-center gap-1.5 text-xs text-clay" role="alert">
-              <XCircle className="size-3.5" aria-hidden="true" /> {test.message}
+              {test.message}
             </p>
           )}
           <p className="text-xs text-olive/55">
@@ -265,7 +264,7 @@ export function Settings() {
             />
       </Section>
 
-      <Section n="04" title="Privacy" note="What Synapse collects — and what it never does.">
+      <Section n="04" title="Privacy" note="What StudBud collects — and what it never does.">
             <ul className="space-y-3">
               {[
                 ['Opt-in only', 'Reading is tracked only on sites you approve, and only while the tab is visible, focused, and you’re interacting with it.'],
@@ -283,7 +282,7 @@ export function Settings() {
               ))}
             </ul>
             <p className="rounded-sm border border-olive/12 bg-olive/4 p-3 text-xs text-olive/65">
-              PDFs opened in Chrome’s built-in viewer don’t expose their text to extensions, so for PDFs Synapse records only the
+              PDFs opened in Chrome’s built-in viewer don’t expose their text to extensions, so for PDFs StudBud records only the
               title, URL and reading time.
             </p>
       </Section>

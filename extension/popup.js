@@ -1,4 +1,4 @@
-// Synapse popup. All state lives in background.js; this file only renders it.
+// StudBud popup. All state lives in background.js; this file only renders it.
 
 const $ = (id) => document.getElementById(id)
 const send = (type, data = {}) => chrome.runtime.sendMessage({ type, ...data })
@@ -8,6 +8,12 @@ let tab = null
 let state = null
 let confirmDeleteUntil = 0
 let shownShotId = null
+let studyPending = false
+let studyAction = 0
+let studyNotice = ''
+let studyProgress = ''
+let refreshVersion = 0
+let stateUnavailable = true
 const ALL_URLS = { origins: ['<all_urls>'] }
 const CANVAS_SITE = 'instructure.com'
 
@@ -26,7 +32,7 @@ function flash(text, tone = '') {
 
 // Runs inside the page (via chrome.scripting) for "Save Current Page".
 // Skips pages with password fields and strips every form control.
-function extractPageForSynapse() {
+function extractPageForStudBud() {
   if (document.querySelector('input[type="password"]')) return { sensitive: true }
   const isPdf = document.contentType === 'application/pdf'
   let text = ''
@@ -48,8 +54,10 @@ function renderSite() {
   $('site-title').textContent = tab?.title || 'No active tab'
   $('site-host').textContent = status.host || (tab?.url ? new URL(tab.url).protocol.replace(':', '') + ' page' : '')
   const icon = $('site-icon')
-  if (tab?.favIconUrl && /^https?:|^data:/.test(tab.favIconUrl)) icon.src = tab.favIconUrl
-  else icon.src = 'icons/icon32.png'
+  if (icon) {
+    if (tab?.favIconUrl && /^https?:|^data:/.test(tab.favIconUrl)) icon.src = tab.favIconUrl
+    else icon.src = 'icons/icon32.png'
+  }
 
   const el = $('site-status')
   const action = $('site-action')
@@ -58,7 +66,7 @@ function renderSite() {
 
   switch (status.state) {
     case 'restricted':
-      el.textContent = 'Synapse can’t run on browser pages (chrome://, the Web Store, new tabs).'
+      el.textContent = 'StudBud can’t run on browser pages (chrome://, the Web Store, new tabs).'
       el.className = 'site-status'
       break
     case 'blocked':
@@ -80,7 +88,7 @@ function renderSite() {
       action.textContent = 'Grant access'
       break
     case 'approved':
-      el.textContent = tracking ? '✓ Approved — tracking active reading' : 'Approved — tracking is paused'
+      el.textContent = tracking ? 'Approved — tracking active reading' : 'Approved — tracking is paused'
       el.className = `site-status ${tracking ? 'ok' : 'warn'}`
       action.hidden = false
       action.textContent = 'Remove this site'
@@ -112,7 +120,7 @@ function renderTimer() {
     pill.textContent = 'Waiting'
     hint.textContent = 'Scroll or move the mouse on the page to start the timer. Reload the tab if it was open before approval.'
   } else if (live.qualified) {
-    pill.textContent = 'Saved ✓'
+    pill.textContent = 'Saved'
     pill.className = 'pill saved'
     hint.textContent = live.isPdf
       ? 'Saved title, URL and time. PDF text can’t be read from Chrome’s viewer.'
@@ -206,6 +214,7 @@ function render() {
 
   renderSite()
   renderTimer()
+  renderStudy()
   const tracking = settings.trackingEnabled
   const toggle = $('toggle-tracking')
   toggle.textContent = tracking ? 'Pause tracking' : 'Resume tracking'
@@ -217,7 +226,7 @@ function render() {
   $('upload-shots').checked = settings.uploadScreenshots
   if (document.activeElement !== $('min-reading')) $('min-reading').value = String(settings.minReadingSeconds)
   $('min-reading-value').textContent = `${settings.minReadingSeconds}s`
-  $('shot-interval').value = String(settings.screenshotIntervalSec)
+  if (document.activeElement !== $('shot-interval')) $('shot-interval').value = String(settings.screenshotIntervalSec)
   $('add-canvas').hidden = settings.allowedSites.includes(CANVAS_SITE)
   renderShots()
   if (document.activeElement !== $('backend-url')) $('backend-url').value = settings.backendUrl
@@ -225,15 +234,113 @@ function render() {
 }
 
 async function refresh({ full = true } = {}) {
-  state = await send('popup:state', { tabId: tab?.id, url: tab?.url || '' })
-  render()
-  if (full && state.settings.consentGiven) renderSiteList()
+  const version = ++refreshVersion
+  try {
+    const next = await send('popup:state', { tabId: tab?.id, url: tab?.url || '' })
+    if (version !== refreshVersion) return
+    if (!next?.settings || !next.status) throw new Error('Missing popup state')
+    state = next
+    stateUnavailable = false
+    render()
+    if (full && state.settings.consentGiven) await renderSiteList()
+  } catch {
+    if (version !== refreshVersion) return
+    stateUnavailable = true
+    renderStudy()
+  }
 }
 
 async function checkConnection() {
-  const online = await send('popup:check-backend')
+  let online = false
+  try { online = await send('popup:check-backend') } catch { /* Retry on the next connection check. */ }
   $('conn-dot').className = `dot ${online ? 'online' : 'offline'}`
   $('conn-text').textContent = online ? 'Backend connected' : 'Offline · saving locally'
+}
+
+function renderStudy() {
+  const study = state?.study || {}
+  const eligible = !stateUnavailable && state?.status.state === 'approved' && !!tab?.id && !!study.sessionId
+  const status = $('study-status')
+  status.textContent = stateUnavailable
+    ? 'Study capture unavailable — reconnecting to the extension…'
+    : studyNotice || (studyPending && studyProgress) || (!eligible && !study.running
+      ? 'Allow this website in the card above before study capture.'
+      : study.status || 'Ready')
+  status.setAttribute('data-tone', stateUnavailable || studyNotice || (!studyPending && study.error) ? 'error' : '')
+  $('study-now').disabled = studyPending || study.running || !eligible
+  $('study-start').disabled = studyPending || study.running || !eligible
+  $('study-stop').disabled = !study.running && !studyPending
+  $('study-interval').disabled = study.running || studyPending
+  $('study-screen').disabled = $('study-camera').disabled = stateUnavailable || !study.sessionId
+  if (study.running && document.activeElement !== $('study-interval')) $('study-interval').value = String(study.intervalSec)
+}
+
+async function requestStudy(timed) {
+  if (studyPending || stateUnavailable || !tab?.id || !state?.study?.sessionId || state.status.state !== 'approved' || state.study.running) return
+  const action = ++studyAction
+  studyPending = true
+  studyNotice = ''
+  studyProgress = timed ? 'Waiting for Chrome capture permission…' : 'Capturing and sending to AI…'
+  const intervalSec = Number($('study-interval').value)
+  renderStudy()
+  try {
+    // Permission request remains the first await in the button gesture.
+    if (timed) {
+      let granted
+      try { granted = await chrome.permissions.request(ALL_URLS) }
+      catch { throw new Error('Chrome could not grant timed capture access.') }
+      if (action !== studyAction) return
+      if (!granted) throw new Error('Timed capture needs Chrome capture permission. Capture now works with this tab’s temporary access.')
+      studyProgress = 'Starting timed study capture…'
+      renderStudy()
+    }
+    const result = await send(timed ? 'popup:study-start' : 'popup:study-capture', {
+      tabId: tab.id, windowId: tab.windowId, url: tab.url,
+      sessionId: state.study.sessionId, intervalSec,
+    })
+    if (action === studyAction && result?.error) studyNotice = result.error
+  } catch (err) {
+    if (action === studyAction) studyNotice = err.message || 'Study capture could not start. Reopen the popup and try again.'
+  } finally {
+    if (action === studyAction) {
+      studyPending = false
+      renderStudy()
+      await refresh({ full: false })
+    }
+  }
+}
+
+$('study-now').addEventListener('click', () => requestStudy(false))
+$('study-start').addEventListener('click', () => requestStudy(true))
+$('study-stop').addEventListener('click', async () => {
+  ++studyAction
+  studyPending = true
+  studyNotice = ''
+  studyProgress = 'Stopping study capture…'
+  renderStudy()
+  try {
+    const result = await send('popup:study-stop')
+    if (result?.error) studyNotice = result.error
+  } catch { studyNotice = 'Study capture could not stop. Try again.' }
+  finally {
+    studyPending = false
+    renderStudy()
+    await refresh({ full: false })
+  }
+})
+for (const mode of ['screen', 'camera']) {
+  $(`study-${mode}`).addEventListener('click', async () => {
+    if (stateUnavailable || !state?.study?.sessionId) return
+    try {
+      const sessionId = mode === 'screen' ? state.study.sessionId : `study-${crypto.randomUUID()}`
+      const url = new URL(state.settings.dashboardUrl)
+      url.hash = `/capture?session=${encodeURIComponent(sessionId)}&mode=${mode}`
+      await chrome.tabs.create({ url: url.href })
+    } catch {
+      studyNotice = 'Could not open Study Capture. Check the Dashboard URL in settings and try again.'
+      renderStudy()
+    }
+  })
 }
 
 // ---- actions ----------------------------------------------------------------
@@ -364,10 +471,10 @@ $('save-page').addEventListener('click', async () => {
   try {
     const [{ result } = {}] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: extractPageForSynapse,
+      func: extractPageForStudBud,
     })
     if (!result) throw new Error('No response from page')
-    if (result.sensitive) return flash('This page has a password field — Synapse won’t save it.', 'err')
+    if (result.sensitive) return flash('This page has a password field — StudBud won’t save it.', 'err')
     const now = new Date().toISOString()
     const res = await send('popup:save-page', {
       record: {
@@ -384,7 +491,7 @@ $('save-page').addEventListener('click', async () => {
       },
     })
     flash(
-      res?.online ? 'Page saved and synced ✓' : 'Page saved locally — will sync when the backend is online',
+      res?.online ? 'Page saved and synced' : 'Page saved locally — will sync when the backend is online',
       'ok',
     )
   } catch (err) {
@@ -442,8 +549,17 @@ $('delete-all').addEventListener('click', async (e) => {
 // ---- boot -------------------------------------------------------------------
 
 ;(async () => {
-  ;[tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  await refresh()
+  renderStudy()
+  const load = async () => {
+    try {
+      if (!tab) [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      await refresh({ full: !state })
+    } catch {
+      stateUnavailable = true
+      renderStudy()
+    }
+  }
+  await load()
   checkConnection()
-  setInterval(() => refresh({ full: false }), 1000)
+  setInterval(load, 1000)
 })()

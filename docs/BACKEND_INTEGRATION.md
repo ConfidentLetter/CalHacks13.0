@@ -1,4 +1,4 @@
-# Synapse — Backend Integration Guide
+# StudBud — Backend Integration Guide
 
 This guide is for the backend / Claude / SpacetimeDB / camera teammates. It covers what the dashboard
 and the Chrome extension will send you, and what they expect back.

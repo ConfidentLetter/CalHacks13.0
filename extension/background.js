@@ -1,4 +1,6 @@
-// Synapse background service worker (Manifest V3).
+importScripts('study-policy.js', 'study-capture.js')
+
+// StudBud background service worker (Manifest V3).
 // - Registers the reading detector only on approved + permission-granted sites
 // - Turns content-script progress into reading records after the minimum active time
 // - Queues records in chrome.storage.local and syncs them to POST /api/reading
@@ -316,11 +318,16 @@ async function clearAllBadges() {
 
 async function fetchWithTimeout(url, opts = {}, ms = 4000) {
   const ctrl = new AbortController()
+  const externalSignal = opts.signal
+  const onAbort = () => ctrl.abort()
+  if (externalSignal?.aborted) ctrl.abort()
+  externalSignal?.addEventListener('abort', onAbort, { once: true })
   const t = setTimeout(() => ctrl.abort(), ms)
   try {
     return await fetch(url, { ...opts, signal: ctrl.signal })
   } finally {
     clearTimeout(t)
+    externalSignal?.removeEventListener('abort', onAbort)
   }
 }
 
@@ -414,6 +421,11 @@ async function bridgeInfo() {
 // ---- message router ---------------------------------------------------------
 
 const handlers = {
+  'study:heartbeat': studyHeartbeat,
+  'popup:study-capture': studyPopupHandler((msg) => studyBegin(msg, false)),
+  'popup:study-start': studyPopupHandler((msg) => studyBegin(msg, true)),
+  'popup:study-stop': studyPopupHandler(() => studyStop()),
+
   'reading:progress': (msg, sender) => sender.tab && handleProgress(msg, sender.tab),
 
   'popup:state': async ({ tabId, url }) => {
@@ -429,6 +441,7 @@ const handlers = {
       settings,
       status,
       live: liveState && liveState.url === url ? liveState : null,
+      study: await studyLoaded.then(() => ({ ...studyState })),
       savedCount: records.length,
       pendingCount: records.filter((r) => !r.synced).length,
       shots: {
@@ -502,6 +515,7 @@ const handlers = {
   },
 
   'popup:delete-all': async () => {
+    await studyStop()
     await deleteRecords((await getRecords()).map((r) => r.id))
     await setShots([])
     await chrome.storage.session.clear()
@@ -541,7 +555,7 @@ const handlers = {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handler = handlers[msg?.type]
   if (!handler) return false
-  Promise.resolve(handler(msg, sender))
+  Promise.resolve().then(() => handler(msg, sender))
     .then(sendResponse)
     .catch((err) => sendResponse({ error: String(err?.message || err) }))
   return true // async response
@@ -569,6 +583,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.permissions.onRemoved.addListener(() => syncContentScripts())
 chrome.tabs.onRemoved.addListener((tabId) => {
+  studyLoaded.then(() => { if (studyState.tabId === tabId) studyStop('Study tab closed') })
   chrome.storage.session.remove(`live:${tabId}`)
   lastShot.delete(tabId)
 })

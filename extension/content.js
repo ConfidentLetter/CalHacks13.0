@@ -1,4 +1,4 @@
-// Synapse reading detector.
+// StudBud reading detector.
 // Injected ONLY into sites the user approved (see background.js → syncContentScripts).
 // Counts "active reading" seconds: the tab must be visible, the window focused, and
 // the user must have scrolled / moved / pressed a key within the idle window.

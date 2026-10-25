@@ -1,4 +1,4 @@
-"""Synapse Vision hand-off API (FastAPI, port 8000). See app/API.md.
+"""StudBud Vision hand-off API (FastAPI, port 8000). See app/API.md.
 
     uvicorn app.server:app --port 8000            # real pipeline
     SV_MOCK=1 uvicorn app.server:app --port 8000  # serve the mock twin only
@@ -40,7 +40,7 @@ async def _lifespan(_app: FastAPI):
         await set_watch(False)
 
 
-app = FastAPI(title="Synapse Vision", version="0.1", lifespan=_lifespan)
+app = FastAPI(title="StudBud Vision", version="0.1", lifespan=_lifespan)
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -280,7 +280,7 @@ async def index():
     page = STATIC_DIR / "index.html"
     if page.exists():
         return HTMLResponse(page.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>Synapse Vision</h1><p>Viewer not built yet. Try <a href='/twin/latest'>/twin/latest</a>.</p>")
+    return HTMLResponse("<h1>StudBud Vision</h1><p>Viewer not built yet. Try <a href='/twin/latest'>/twin/latest</a>.</p>")
 
 
 if STATIC_DIR.exists():
@@ -300,7 +300,7 @@ def main() -> None:
 
     import uvicorn
 
-    p = argparse.ArgumentParser(description="Synapse Vision server")
+    p = argparse.ArgumentParser(description="StudBud Vision server")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--watch", action="store_true", help="start the stability watch loop immediately")

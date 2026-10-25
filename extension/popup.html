@@ -2,15 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Synapse</title>
+    <title>StudBud</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <header class="top">
       <div class="brand">
-        <img src="icons/icon32.png" alt="" width="28" height="28" />
         <div>
-          <p class="brand-name">Synapse</p>
+          <p class="brand-name">StudBud</p>
           <p class="brand-sub">reading tracker</p>
         </div>
       </div>
@@ -35,7 +34,6 @@
       <!-- Current site -->
       <section class="card">
         <div class="site">
-          <img id="site-icon" class="favicon" alt="" width="32" height="32" />
           <div class="site-text">
             <p class="site-title" id="site-title">—</p>
             <p class="site-host" id="site-host"></p>
@@ -60,6 +58,32 @@
         <p class="hint" id="timer-hint"></p>
       </section>
 
+      <!-- Deliberate study capture: separate consent from passive reading snapshots. -->
+      <section class="card study" aria-live="polite">
+        <h2 class="section-title">Study capture</h2>
+        <p class="hint">Capture now or Start timer sends this approved tab to AI for guiding feedback.</p>
+        <p class="study-status" id="study-status" role="status" aria-live="polite" aria-atomic="true">Ready</p>
+        <label class="field">
+          <span>Timed capture interval</span>
+          <select id="study-interval">
+            <option value="10">10 seconds</option>
+            <option value="20" selected>20 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button class="btn secondary" id="study-now" type="button">Capture now</button>
+          <button class="btn primary" id="study-start" type="button">Start timer</button>
+          <button class="btn danger span2" id="study-stop" type="button" disabled>Stop timer</button>
+        </div>
+        <div class="study-links">
+          <button class="btn ghost" id="study-screen" type="button">Open tutor</button>
+          <button class="btn ghost" id="study-camera" type="button">Use camera</button>
+        </div>
+        <p class="hint">Only this approved tab is captured. Switching tabs pauses the timer. Images are never queued for later upload.</p>
+      </section>
+
       <!-- Page snapshots -->
       <section class="card shots" aria-live="polite">
         <div class="shots-head">
@@ -79,7 +103,7 @@
       <div class="actions">
         <button class="btn primary" id="toggle-tracking" type="button">Pause tracking</button>
         <button class="btn secondary" id="save-page" type="button">Save Current Page</button>
-        <button class="btn ghost span2" id="open-dashboard" type="button">Open Dashboard ↗</button>
+        <button class="btn ghost span2" id="open-dashboard" type="button">Open Dashboard</button>
       </div>
 
       <p class="message" id="message" role="status"></p>
@@ -138,7 +162,7 @@
         </div>
         <p class="note">
           <strong>PDFs:</strong> Chrome’s built-in PDF viewer doesn’t let extensions read the document text. For PDFs,
-          Synapse records only the title, URL, and reading time. Snapshots only capture the tab you’re looking at —
+          StudBud records only the title, URL, and reading time. Snapshots only capture the tab you’re looking at —
           Chrome doesn’t let extensions photograph background tabs. Grade, inbox, profile, and quiz-taking pages are never
           captured. Local <code>file://</code> PDFs also need “Allow access to
           file URLs” in chrome://extensions.

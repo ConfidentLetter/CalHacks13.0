@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, ChevronUp, Copy, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { cx } from '../../utils/format'
 import { Latex } from './Latex'
@@ -52,7 +51,7 @@ function CopyLatex({ value }) {
     }
   }
   return (
-    <Button size="sm" variant="ghost" icon={done ? Check : Copy} onClick={copy} aria-label="Copy raw LaTeX">
+    <Button size="sm" variant="ghost" onClick={copy} aria-label="Copy raw LaTeX">
       {done ? 'copied' : 'copy'}
     </Button>
   )
@@ -93,7 +92,7 @@ export function LineInspector({ line, total, onClose, onStep }) {
         aria-label={`Line ${line.order} details`}
         className="slide-in-right sheet relative m-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[460px] flex-col overflow-hidden bg-cream sm:m-5"
       >
-        <header className="flex items-start justify-between gap-3 border-b border-olive/70 px-5 py-4">
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-olive/70 px-5 py-4">
           <div className="min-w-0">
             <Label>line {String(line.order).padStart(2, '0')} of {total}</Label>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -103,9 +102,9 @@ export function LineInspector({ line, total, onClose, onStep }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <Button size="icon" variant="ghost" icon={ChevronUp} onClick={() => onStep(-1)} aria-label="Previous line" />
-            <Button size="icon" variant="ghost" icon={ChevronDown} onClick={() => onStep(1)} aria-label="Next line" />
-            <Button size="icon" variant="ghost" icon={X} onClick={onClose} aria-label="Close line details" />
+            <Button size="icon" variant="ghost" onClick={() => onStep(-1)} aria-label="Previous line">Previous</Button>
+            <Button size="icon" variant="ghost" onClick={() => onStep(1)} aria-label="Next line">Next</Button>
+            <Button size="icon" variant="ghost" onClick={onClose} aria-label="Close line details">Close</Button>
           </div>
         </header>
 
@@ -141,7 +140,6 @@ export function LineInspector({ line, total, onClose, onStep }) {
                     r.agree ? 'text-sage-ink' : 'text-ink-red',
                   )}
                 >
-                  {r.agree ? <Check className="size-3.5" aria-hidden="true" /> : <X className="size-3.5" aria-hidden="true" />}
                   {r.agree ? 'agree' : 'disagree'}
                 </span>
               )}

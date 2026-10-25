@@ -1,12 +1,11 @@
-import { AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Sparkles } from 'lucide-react'
 import { Badge } from '../ui/Badge'
 import { EmptyState, ErrorState, LoadingDots, Skeleton } from '../ui/Feedback'
 import { cx, formatClock } from '../../utils/format'
 
 const STEP = {
-  correct: { icon: CheckCircle2, color: 'text-sage-ink', label: 'Correct' },
-  error: { icon: AlertCircle, color: 'text-clay', label: 'Issue' },
-  unclear: { icon: HelpCircle, color: 'text-honey', label: 'Check' },
+  correct: { color: 'text-sage-ink', label: 'Correct' },
+  error: { color: 'text-clay', label: 'Issue' },
+  unclear: { color: 'text-honey', label: 'Check' },
 }
 
 export function AnalysisPanel({ analysis, hasSnapshot, onRetry }) {
@@ -29,7 +28,6 @@ export function AnalysisPanel({ analysis, hasSnapshot, onRetry }) {
   if (!data) {
     return (
       <EmptyState
-        icon={Sparkles}
         title={hasSnapshot ? 'Ready to analyze' : 'Nothing to analyze yet'}
         description={
           hasSnapshot
@@ -61,7 +59,6 @@ export function AnalysisPanel({ analysis, hasSnapshot, onRetry }) {
         <ol className="space-y-2">
           {steps.map((s, i) => {
             const k = STEP[s.status] || STEP.unclear
-            const Icon = k.icon
             return (
               <li
                 key={i}
@@ -70,7 +67,7 @@ export function AnalysisPanel({ analysis, hasSnapshot, onRetry }) {
                   s.status === 'error' ? 'border-clay/40 bg-clay/10' : 'border-olive/8 bg-olive/4',
                 )}
               >
-                <Icon className={cx('mt-0.5 size-4 shrink-0', k.color)} aria-label={k.label} />
+                <span className={cx('shrink-0 text-xs font-semibold', k.color)}>{k.label}</span>
                 <div className="min-w-0">
                   <p className="font-mono text-[13px] text-olive">{s.label}</p>
                   {s.note && <p className="mt-0.5 text-xs leading-relaxed text-olive/65">{s.note}</p>}
@@ -84,7 +81,7 @@ export function AnalysisPanel({ analysis, hasSnapshot, onRetry }) {
       {data.hints?.length > 0 && (
         <div className="rounded-sm border border-sage-deep bg-sage/50 p-3.5">
           <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-sage-ink">
-            <Lightbulb className="size-3.5" aria-hidden="true" /> Hints
+            Hints
           </p>
           <ul className="list-disc space-y-1 pl-5 text-xs leading-relaxed text-olive/80">
             {data.hints.map((h, i) => (

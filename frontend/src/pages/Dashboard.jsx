@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ArrowRight, ArrowUpRight, Send } from 'lucide-react'
 import { useApp, useCamera, useStudyData } from '../context/contexts'
 import { Button } from '../components/ui/Button'
 import { StatusDot } from '../components/ui/Badge'
@@ -55,7 +54,7 @@ function Welcome() {
     <section className="grid gap-8 border-b border-olive/70 pb-8 md:grid-cols-[1.4fr_1fr] md:items-end">
       <div>
         <p className="flex flex-wrap items-center gap-x-3 text-xs font-semibold tracking-wide text-olive/60 uppercase">
-          <span className="text-sage-ink">✳ {greeting()}</span>
+          <span className="text-sage-ink">{greeting()}</span>
           <span aria-hidden="true">·</span>
           <span>{today()}</span>
         </p>
@@ -93,9 +92,9 @@ function Welcome() {
             type="submit"
             disabled={!q.trim()}
             aria-label="Ask the AI tutor"
-            className="grid size-8 place-items-center text-olive transition hover:bg-olive/10 disabled:opacity-40"
+            className="grid h-8 px-2 place-items-center text-olive transition hover:bg-olive/10 disabled:opacity-40"
           >
-            <Send className="size-4" aria-hidden="true" />
+            Ask
           </button>
         </div>
         <ul className="mt-3 space-y-1">
@@ -168,9 +167,9 @@ function StatusLedger() {
             type="button"
             onClick={() => navigate(r.to)}
             aria-label={`Open ${r.label}`}
-            className="grid size-7 shrink-0 place-items-center border border-olive/30 text-olive transition hover:bg-butter"
+            className="grid h-7 px-2 shrink-0 place-items-center border border-olive/30 text-olive transition hover:bg-butter"
           >
-            <ArrowRight className="size-3.5" aria-hidden="true" />
+            Open
           </button>
         </div>
       ))}
@@ -263,7 +262,7 @@ function Notebook() {
               )}
             </div>
             <Button variant="primary" className="self-start" onClick={() => navigate('notebook')}>
-              {recognition ? 'see every line' : camera.isLive ? 'ask about this page' : 'open the camera'} <ArrowRight className="size-4" aria-hidden="true" />
+              {recognition ? 'see every line' : camera.isLive ? 'ask about this page' : 'open the camera'}
             </Button>
           </div>
         </div>
@@ -362,7 +361,6 @@ function ReadingList() {
                 </span>
                 <span className="flex items-center gap-1 text-xs text-olive/70 tabular-nums">
                   {formatDuration(r.durationSec)}
-                  <ArrowUpRight className="size-3.5 opacity-0 transition group-hover:opacity-100" aria-hidden="true" />
                 </span>
               </a>
             </li>

@@ -25,4 +25,4 @@ export function useCamera() {
   return ctx
 }
 
-export const ROUTES = ['dashboard', 'notebook', 'reading', 'tutor', 'settings']
+export const ROUTES = ['dashboard', 'capture', 'notebook', 'reading', 'tutor', 'settings']

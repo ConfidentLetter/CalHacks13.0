@@ -1,4 +1,3 @@
-import { Camera, ImageOff } from 'lucide-react'
 import { useState } from 'react'
 import { Skeleton } from '../ui/Feedback'
 import { cx, formatClock, timeAgo } from '../../utils/format'
@@ -19,11 +18,6 @@ export function SnapshotFrame({ snapshot, loading, capturing, onOpen, className,
         )}
       >
         <div className="flex flex-col items-center gap-2 px-6 text-center">
-          {isBroken ? (
-            <ImageOff className="size-7 text-olive/55" aria-hidden="true" />
-          ) : (
-            <Camera className="size-7 text-olive/55" aria-hidden="true" />
-          )}
           <p className="text-sm text-olive/80">{isBroken ? 'Snapshot image failed to load' : 'No snapshot yet'}</p>
           {!compact && (
             <p className="max-w-xs text-xs text-olive/55">

@@ -1,19 +1,17 @@
-import { AlertCircle, CheckCircle2, HelpCircle, Scissors, Type } from 'lucide-react'
 import { cx } from '../../utils/format'
 import { TONE_LABEL } from './twinModel'
 
 const TONE = {
-  correct: { icon: CheckCircle2, cls: 'border-sage-deep bg-sage/60 text-sage-ink' },
-  error: { icon: AlertCircle, cls: 'border-ink-red bg-ink-red text-cream' },
-  crossed: { icon: Scissors, cls: 'border-olive/40 bg-paper text-olive/80' },
-  unclear: { icon: HelpCircle, cls: 'border-dashed border-olive/50 bg-white text-olive/80' },
-  read: { icon: Type, cls: 'border-olive/25 bg-white text-olive/70' },
+  correct: { cls: 'border-sage-deep bg-sage/60 text-sage-ink' },
+  error: { cls: 'border-ink-red bg-ink-red text-cream' },
+  crossed: { cls: 'border-olive/40 bg-paper text-olive/80' },
+  unclear: { cls: 'border-dashed border-olive/50 bg-white text-olive/80' },
+  read: { cls: 'border-olive/25 bg-white text-olive/70' },
 }
 
 /** correct / error / unclear / crossed out / read — same vocabulary on the twin, the ledger and the inspector. */
 export function StatusChip({ tone, size = 'md', className }) {
   const t = TONE[tone] || TONE.read
-  const Icon = t.icon
   return (
     <span
       className={cx(
@@ -23,7 +21,6 @@ export function StatusChip({ tone, size = 'md', className }) {
         className,
       )}
     >
-      <Icon className={size === 'sm' ? 'size-3' : 'size-3.5'} aria-hidden="true" />
       {TONE_LABEL[tone] || tone}
     </span>
   )

@@ -1,4 +1,4 @@
-# Henry's run sheet — Synapse Vision
+# Henry's run sheet — StudBud Vision
 
 ## 1. Setup (10 minutes)
 ```bash
@@ -17,22 +17,22 @@ In your tool's permission settings, allow `pytest`, `pip install`, `python` and 
 
 **T4 — App & Eval** (first: everyone imports its config and telemetry)
 ```
-You are T4 (App & Eval) in the Synapse Vision project. Read AGENTS.md, README.md, everything in contracts/, config/vision.yaml, mocks/, and then prompts/T4_app_eval.md in full. Follow prompts/T4_app_eval.md exactly, starting with Step 1. Write only inside app/, eval/ and NOTES_T4.md. After each step, run its tests, update NOTES_T4.md, and continue without waiting for me unless you are blocked.
+You are T4 (App & Eval) in the StudBud Vision project. Read AGENTS.md, README.md, everything in contracts/, config/vision.yaml, mocks/, and then prompts/T4_app_eval.md in full. Follow prompts/T4_app_eval.md exactly, starting with Step 1. Write only inside app/, eval/ and NOTES_T4.md. After each step, run its tests, update NOTES_T4.md, and continue without waiting for me unless you are blocked.
 ```
 
 **T1 — Capture**
 ```
-You are T1 (Capture) in the Synapse Vision project. Read AGENTS.md, README.md, everything in contracts/, config/vision.yaml, mocks/, hardware/, and then prompts/T1_capture.md in full. Follow prompts/T1_capture.md exactly, starting with Step 1. Write only inside capture/, hardware/ and NOTES_T1.md. After each step, run its tests, update NOTES_T1.md, and continue without waiting for me unless you are blocked. Use your synthetic test bench until real photos appear in eval/calibration/.
+You are T1 (Capture) in the StudBud Vision project. Read AGENTS.md, README.md, everything in contracts/, config/vision.yaml, mocks/, hardware/, and then prompts/T1_capture.md in full. Follow prompts/T1_capture.md exactly, starting with Step 1. Write only inside capture/, hardware/ and NOTES_T1.md. After each step, run its tests, update NOTES_T1.md, and continue without waiting for me unless you are blocked. Use your synthetic test bench until real photos appear in eval/calibration/.
 ```
 
 **T2 — Layout**
 ```
-You are T2 (Layout) in the Synapse Vision project. Read AGENTS.md, README.md, everything in contracts/, config/vision.yaml, mocks/, and then prompts/T2_layout.md in full. Follow prompts/T2_layout.md exactly, starting with Step 1. Write only inside layout/ and NOTES_T2.md. After each step, run its tests, update NOTES_T2.md, and continue without waiting for me unless you are blocked. Use synthetic pages until real ones appear in eval/testset/.
+You are T2 (Layout) in the StudBud Vision project. Read AGENTS.md, README.md, everything in contracts/, config/vision.yaml, mocks/, and then prompts/T2_layout.md in full. Follow prompts/T2_layout.md exactly, starting with Step 1. Write only inside layout/ and NOTES_T2.md. After each step, run its tests, update NOTES_T2.md, and continue without waiting for me unless you are blocked. Use synthetic pages until real ones appear in eval/testset/.
 ```
 
 **T3 — Transcribe**
 ```
-You are T3 (Transcribe) in the Synapse Vision project. Read AGENTS.md, README.md, everything in contracts/, config/vision.yaml, mocks/, and then prompts/T3_transcribe.md in full. Follow prompts/T3_transcribe.md exactly, starting with Step 1. Write only inside transcribe/ and NOTES_T3.md. After each step, run its tests, update NOTES_T3.md, and continue without waiting for me unless you are blocked. Never correct the student's mathematics.
+You are T3 (Transcribe) in the StudBud Vision project. Read AGENTS.md, README.md, everything in contracts/, config/vision.yaml, mocks/, and then prompts/T3_transcribe.md in full. Follow prompts/T3_transcribe.md exactly, starting with Step 1. Write only inside transcribe/ and NOTES_T3.md. After each step, run its tests, update NOTES_T3.md, and continue without waiting for me unless you are blocked. Never correct the student's mathematics.
 ```
 
 ## 3. Your physical work while they build

@@ -4,7 +4,7 @@
 > 读完这份文件 + `prompts/RUNSHEET.md` + `head -5 NOTES_T*.md`，你就能接着当 integrator。
 
 ## 项目一句话
-Synapse Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「page twin」（错误原样保留、绝不纠正；划掉的行标出；置信度诚实）→ HTTP/WebSocket 交给 Tutor 队。详见 `README.md`、`contracts/`。
+StudBud Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「page twin」（错误原样保留、绝不纠正；划掉的行标出；置信度诚实）→ HTTP/WebSocket 交给 Tutor 队。详见 `README.md`、`contracts/`。
 
 ## 运行方式
 - 六个 Claude Code 终端并行（T6 UI 在 H+9 加入，团队已同意改前端），各写各的文件夹：T4 `app/ eval/`、T1 `capture/ hardware/`、T2 `layout/`、T3 `transcribe/`、**T5 `bridge/ docs/CONNECTIONS.md`（H+6 新增：对接队友前端）**。首条消息在 `launch_T*.txt`，顺序 T4→T1→T2→T3→T5。

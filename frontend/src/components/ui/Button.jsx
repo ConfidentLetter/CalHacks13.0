@@ -15,13 +15,13 @@ const SIZES = {
   sm: 'h-8 px-3 text-xs gap-1.5 rounded-sm',
   md: 'h-10 px-4 text-sm gap-2 rounded-sm',
   lg: 'h-12 px-5 text-sm gap-2 rounded-sm',
-  icon: 'h-9 w-9 rounded-sm justify-center',
+  icon: 'h-9 px-3 text-xs gap-2 rounded-sm justify-center',
 }
 
 export function Button({
   variant = 'secondary',
   size = 'md',
-  icon: Icon,
+  icon: _icon,
   loading = false,
   disabled,
   className,
@@ -35,19 +35,15 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cx(
-        'inline-flex shrink-0 items-center font-medium whitespace-nowrap transition duration-150 select-none disabled:pointer-events-none disabled:opacity-45',
+        'paper-button inline-flex shrink-0 items-center font-medium whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-45',
         VARIANTS[variant],
         SIZES[size],
         className,
       )}
       {...rest}
     >
-      {loading ? (
-        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-      ) : (
-        Icon && <Icon className="size-4" aria-hidden="true" />
-      )}
-      {children}
+      {loading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+      {children ?? rest['aria-label']}
     </button>
   )
 }

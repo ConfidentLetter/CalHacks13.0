@@ -180,7 +180,7 @@ def _pct(v) -> str:
 
 def format_report(agg: dict) -> str:
     lines = [
-        f"== Synapse Vision eval — {agg['ts']} — {agg['note']}",
+        f"== StudBud Vision eval — {agg['ts']} — {agg['note']}",
         f"pages {agg['pages']} (reviewed {agg['reviewed_pages']}), truth lines {agg['lines_truth']}, model {agg['model']}",
         f"PLANTED-ERROR PRESERVATION  {_pct(agg['planted_preservation'])}  ({agg['planted_preserved']}/{agg['planted_total']})",
     ]

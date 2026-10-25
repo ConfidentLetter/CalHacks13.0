@@ -1,8 +1,6 @@
-import { CheckCircle2, Info, X, XCircle } from 'lucide-react'
 import { useApp } from '../../context/contexts'
 import { cx } from '../../utils/format'
 
-const ICONS = { success: CheckCircle2, error: XCircle, info: Info }
 const TONES = {
   success: 'text-sage-ink',
   error: 'text-clay',
@@ -18,13 +16,12 @@ export function Toasts() {
       role="status"
     >
       {toasts.map((t) => {
-        const Icon = ICONS[t.tone] || Info
         return (
           <div
             key={t.id}
             className="glass animate-fade-up pointer-events-auto rounded-sm flex w-full max-w-sm items-start gap-3 bg-paper px-4 py-3 text-sm text-olive"
           >
-            <Icon className={cx('mt-0.5 size-4 shrink-0', TONES[t.tone])} aria-hidden="true" />
+            <span className={cx('mt-0.5 text-xs font-semibold capitalize', TONES[t.tone])}>{t.tone || 'info'}</span>
             <p className="flex-1">{t.message}</p>
             <button
               type="button"
@@ -32,7 +29,7 @@ export function Toasts() {
               className="rounded text-olive/55 hover:text-olive"
               aria-label="Dismiss notification"
             >
-              <X className="size-4" />
+              Dismiss
             </button>
           </div>
         )

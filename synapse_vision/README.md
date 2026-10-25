@@ -1,6 +1,6 @@
-# Synapse Vision — handwritten work → verbatim page twin
+# StudBud Vision — handwritten work → verbatim page twin
 
-The vision half of Synapse. A camera over the desk photographs the student's paper; this repo turns the photo into a **page twin**: every line on the page, its box, reading order, crossed-out status, a verbatim LaTeX/text reading (mistakes preserved, never corrected), and an honest confidence. The Tutor team consumes it over HTTP/WebSocket (`app/API.md`).
+The vision half of StudBud. A camera over the desk photographs the student's paper; this repo turns the photo into a **page twin**: every line on the page, its box, reading order, crossed-out status, a verbatim LaTeX/text reading (mistakes preserved, never corrected), and an honest confidence. The Tutor team consumes it over HTTP/WebSocket (`app/API.md`).
 
 ## Pipeline
 

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
 import { Button } from './Button'
 import { cx } from '../../utils/format'
 
@@ -61,7 +60,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
       >
         <div className="flex items-center justify-between gap-4 border-b border-olive/12 px-5 py-4">
           <h2 className="truncate text-sm font-semibold text-olive">{title}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close dialog" icon={X} />
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close dialog" />
         </div>
         <div className="overflow-y-auto">{children}</div>
         {footer && (

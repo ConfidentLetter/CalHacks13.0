@@ -16,7 +16,7 @@ import { findDeskView } from '../utils/camera'
 // unload, and if the device disconnects.
 
 export const HARDWARE_SOURCE = 'hardware'
-const DEVICE_KEY = 'synapse.camera.device.v2' // v2 (H+12): stale webcam choices are dropped so the overhead rig is the default
+const DEVICE_KEY = 'studbud.camera.device.v3' // Local browser devices; no hardware/Pi default.
 const MAX_FRAME_WIDTH = 1600
 
 const ERROR_STATES = {
@@ -31,9 +31,9 @@ const ERROR_STATES = {
 /** Saved camera choice. Nothing saved → the overhead (backend-streamed) camera: the demo's Desk View rig (H+12). */
 function readDevice() {
   try {
-    return localStorage.getItem(DEVICE_KEY) || HARDWARE_SOURCE
+    return localStorage.getItem(DEVICE_KEY) || ''
   } catch {
-    return HARDWARE_SOURCE
+    return ''
   }
 }
 function hasSavedDevice() {
@@ -52,6 +52,7 @@ export function CameraProvider({ children }) {
   const [source, setSourceState] = useState(readDevice)
   const [stream, setStream] = useState(null)
   const streamRef = useRef(null)
+  const startGeneration = useRef(0)
   const videoRef = useRef(null) // off-screen <video> that frames are grabbed from, on any page
 
   const supported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
@@ -78,6 +79,7 @@ export function CameraProvider({ children }) {
   }, [])
 
   const release = useCallback(() => {
+    startGeneration.current++
     streamRef.current?.getTracks().forEach((t) => {
       t.onended = null
       t.stop()
@@ -95,6 +97,7 @@ export function CameraProvider({ children }) {
   const start = useCallback(
     async (sourceId = source) => {
       release()
+      const generation = startGeneration.current
       setError('')
       if (sourceId === HARDWARE_SOURCE) {
         setStatus('live') // LiveFeed reports its own connecting/offline/error state
@@ -115,8 +118,14 @@ export function CameraProvider({ children }) {
             height: { ideal: 1080 },
           },
         })
+        // A Stop, device switch, or unmount may have happened during the permission prompt.
+        if (generation !== startGeneration.current) {
+          media.getTracks().forEach((track) => track.stop())
+          return
+        }
         const [track] = media.getVideoTracks()
         track.onended = () => {
+          if (streamRef.current !== media) return
           // Unplugged, or the OS took the camera away.
           streamRef.current = null
           setStream(null)
@@ -130,6 +139,7 @@ export function CameraProvider({ children }) {
         if (actualId && !sourceId) setSourceState(actualId)
         refreshDevices() // labels only appear after permission is granted
       } catch (err) {
+        if (generation !== startGeneration.current) return
         const state = ERROR_STATES[err?.name] || 'error'
         setStatus(state)
         setError(
@@ -160,7 +170,7 @@ export function CameraProvider({ children }) {
         /* ignore */
       }
       // Switching while live restarts on the new camera; otherwise just remember the choice.
-      if (streamRef.current || (status === 'live' && source === HARDWARE_SOURCE)) start(id)
+      if (streamRef.current || status === 'starting' || (status === 'live' && source === HARDWARE_SOURCE)) start(id)
     },
     [start, status, source],
   )
@@ -206,14 +216,6 @@ export function CameraProvider({ children }) {
     if (stream) v.play().catch(() => {})
   }, [stream])
 
-  // Overhead mode needs no browser permission, so the demo page opens live (once per session; Stop is respected).
-  const autoStarted = useRef(false)
-  useEffect(() => {
-    if (autoStarted.current || source !== HARDWARE_SOURCE || status !== 'off') return
-    autoStarted.current = true
-    start(HARDWARE_SOURCE)
-  }, [source, status, start])
-
   // Keep the device list fresh (plug/unplug), and always release the camera on unload.
   useEffect(() => {
     refreshDevices()
@@ -244,8 +246,9 @@ export function CameraProvider({ children }) {
       start,
       stop,
       captureFrame,
+      refreshDevices,
     }),
-    [status, error, devices, source, setSource, supported, stream, start, stop, captureFrame],
+    [status, error, devices, source, setSource, supported, stream, start, stop, captureFrame, refreshDevices],
   )
 
   return (

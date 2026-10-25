@@ -1,4 +1,4 @@
-// Relays messages between the Synapse dashboard page and the extension.
+// Relays messages between the StudBud dashboard page and the extension.
 // Matches localhost, but only activates on pages carrying <meta name="synapse-dashboard">.
 
 ;(() => {

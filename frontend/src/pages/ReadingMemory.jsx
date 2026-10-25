@@ -1,15 +1,4 @@
 import { useMemo, useState } from 'react'
-import {
-  BookOpenText,
-  Bot,
-  ExternalLink,
-  Plus,
-  RefreshCw,
-  Search,
-  SearchX,
-  Trash2,
-  X,
-} from 'lucide-react'
 import { useApp, useStudyData } from '../context/contexts'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -17,7 +6,6 @@ import { Badge, StatusDot } from '../components/ui/Badge'
 import { Segmented } from '../components/ui/Controls'
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/Feedback'
 import { ConfirmDialog, Modal } from '../components/ui/Modal'
-import { Favicon } from '../components/shared/Favicon'
 import { useNow } from '../hooks/useInterval'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useConnection } from '../hooks/useConnection'
@@ -50,7 +38,6 @@ function ReadingDetail({ record, onDelete, onClose }) {
   if (!record) {
     return (
       <EmptyState
-        icon={BookOpenText}
         title="Select a page"
         description="Choose a reading session to see its details, captured text, and actions."
         className="h-full"
@@ -60,7 +47,6 @@ function ReadingDetail({ record, onDelete, onClose }) {
   return (
     <div className="animate-fade-up space-y-5 p-5">
       <div className="flex items-start gap-3">
-        <Favicon url={record.url} src={record.favicon} size={40} />
         <div className="min-w-0 flex-1">
           <h3 className="text-base leading-snug font-semibold text-olive">{record.title}</h3>
           <a
@@ -72,7 +58,7 @@ function ReadingDetail({ record, onDelete, onClose }) {
             {record.url}
           </a>
         </div>
-        {onClose && <Button variant="ghost" size="icon" icon={X} onClick={onClose} aria-label="Close details" />}
+        {onClose && <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close details" />}
       </div>
 
       <dl className="grid grid-cols-3 gap-2">
@@ -108,7 +94,6 @@ function ReadingDetail({ record, onDelete, onClose }) {
       <div className="flex flex-wrap gap-2">
         <Button
           variant="primary"
-          icon={Bot}
           onClick={() => askTutor(`Summarize the key ideas from "${record.title}" and quiz me on them.`)}
         >
           Ask tutor about this
@@ -119,9 +104,9 @@ function ReadingDetail({ record, onDelete, onClose }) {
           rel="noreferrer noopener"
           className="inline-flex h-10 items-center gap-2 rounded-sm border border-olive/14 bg-olive/12 px-4 text-sm font-medium text-olive transition hover:bg-olive/16"
         >
-          <ExternalLink className="size-4" aria-hidden="true" /> Open page
+          Open page
         </a>
-        <Button variant="danger" icon={Trash2} onClick={() => onDelete(record)}>
+        <Button variant="danger" onClick={() => onDelete(record)}>
           Delete
         </Button>
       </div>
@@ -268,21 +253,20 @@ export function ReadingMemory() {
       <div className="border-b border-olive/70 pb-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-olive/55" aria-hidden="true" />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search titles, URLs, and captured text…"
               aria-label="Search reading history"
-              className="input pl-10"
+              className="input"
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Segmented label="Time range" size="sm" value={range} onChange={setRange} options={RANGES} />
             <Segmented label="Sort" size="sm" value={sort} onChange={setSort} options={SORTS} />
-            <Button size="icon" variant="ghost" icon={RefreshCw} loading={refreshing} onClick={refresh} aria-label="Refresh history" />
-            <Button size="sm" variant="secondary" icon={Plus} onClick={() => setAdding(true)}>
+            <Button size="icon" variant="ghost" loading={refreshing} onClick={refresh} aria-label="Refresh history" />
+            <Button size="sm" variant="secondary" onClick={() => setAdding(true)}>
               Add page
             </Button>
           </div>
@@ -312,14 +296,12 @@ export function ReadingMemory() {
             </div>
           ) : !readings.length ? (
             <EmptyState
-              icon={BookOpenText}
               title="Your reading memory is empty"
-              description="Install the Synapse extension, allow a website, and read for a few seconds. Pages appear here automatically."
+              description="Install the StudBud extension, allow a website, and read for a few seconds. Pages appear here automatically."
               className="py-16"
             />
           ) : !filtered.length ? (
             <EmptyState
-              icon={SearchX}
               title="No matching pages"
               description="Try a different search or time range."
               action={
@@ -390,7 +372,7 @@ export function ReadingMemory() {
         </div>
 
         {isWide && (
-          <Card className="sheet sticky top-24 hidden self-start rounded-none lg:block">
+          <Card className="sheet sticky top-24 hidden self-start lg:block">
             <ReadingDetail record={selected} onDelete={setPendingDelete} />
           </Card>
         )}

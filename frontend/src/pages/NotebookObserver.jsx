@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Sparkles } from 'lucide-react'
 import { useCamera, useStudyData } from '../context/contexts'
 import { HARDWARE_SOURCE } from '../context/CameraProvider'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
@@ -76,7 +75,7 @@ export function NotebookObserver() {
     <div className="space-y-10">
       <div className={isHardware ? 'grid gap-8 xl:grid-cols-[1.6fr_1fr]' : 'grid gap-8 xl:grid-cols-[1.25fr_1fr]'}>
         {/* ---- live preview (Micha's card, untouched) ---- */}
-        <Card className="sheet rounded-none">
+        <Card className="sheet">
           <CardHeader
             title={isHardware ? (isDeskViewRig ? 'Desk View' : 'Overhead camera') : 'Live camera'}
             subtitle={
@@ -179,7 +178,7 @@ export function NotebookObserver() {
             title="What Pip analyzed"
             subtitle="A single still, read line by line"
             action={
-              <Button variant="primary" icon={Sparkles} loading={analysis.loading} disabled={!canGrab} onClick={analyzeNow}>
+              <Button variant="primary" loading={analysis.loading} disabled={!canGrab} onClick={analyzeNow}>
                 Analyze my page
               </Button>
             }

@@ -1,4 +1,4 @@
-// Talks to the Synapse Chrome extension through window.postMessage.
+// Talks to the StudBud Chrome extension through window.postMessage.
 // The extension injects extension/bridge.js into this dashboard page (only when
 // the page carries <meta name="synapse-dashboard">), which relays messages to
 // chrome.storage. This lets reading records captured by the extension show up

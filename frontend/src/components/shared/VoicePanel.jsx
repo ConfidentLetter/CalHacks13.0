@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Mic, Play, RotateCw, Square, X } from 'lucide-react'
 import { useApp, useCamera } from '../../context/contexts'
 import { useVoiceTutor } from '../../hooks/useVoiceTutor'
 import { MAX_RECORDING_SEC } from '../../hooks/useRecorder'
@@ -126,13 +125,12 @@ export function VoicePanel() {
             </>
           ) : (
             <>
-              <Mic className="size-5" aria-hidden="true" />
               {v.requestingMic ? 'Allow the mic…' : busy ? 'Pip is busy…' : 'Hold to talk'}
             </>
           )}
         </button>
         {listening && (
-          <Button variant="ghost" icon={X} onClick={v.cancelRecording}>
+          <Button variant="ghost" onClick={v.cancelRecording}>
             Cancel recording
           </Button>
         )}
@@ -173,7 +171,7 @@ export function VoicePanel() {
         <div role="alert" className="flex flex-wrap items-center gap-3 border-l-2 border-clay pl-3 text-sm text-clay">
           <span className="flex-1">{v.error.message}</span>
           {v.error.canRetry && (
-            <Button size="sm" variant="ghost" icon={RotateCw} onClick={v.retry}>
+            <Button size="sm" variant="ghost" onClick={v.retry}>
               Retry (same question)
             </Button>
           )}
@@ -197,17 +195,17 @@ export function VoicePanel() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {v.needsPlay && (
-              <Button size="sm" variant="primary" icon={Play} onClick={v.play}>
+              <Button size="sm" variant="primary" onClick={v.play}>
                 Play Pip’s reply
               </Button>
             )}
             {v.status === 'speaking' && (
-              <Button size="sm" variant="ghost" icon={Square} onClick={v.stopSpeaking}>
+              <Button size="sm" variant="ghost" onClick={v.stopSpeaking}>
                 Stop speaking
               </Button>
             )}
             {v.hasAudio && v.status === 'ready' && !v.needsPlay && (
-              <Button size="sm" variant="ghost" icon={RotateCw} onClick={v.replay}>
+              <Button size="sm" variant="ghost" onClick={v.replay}>
                 Replay response
               </Button>
             )}

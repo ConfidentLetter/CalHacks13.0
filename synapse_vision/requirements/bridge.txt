@@ -6,6 +6,7 @@ jsonschema>=4.21
 PyYAML>=6.0
 opencv-python>=4.9
 numpy>=1.26
+pillow>=10
 httpx>=0.27
 pytest>=8
 # Speech-to-text for POST /api/tutor/voice (installed cleanly on the demo Mac on 2026-10-24; optional —
