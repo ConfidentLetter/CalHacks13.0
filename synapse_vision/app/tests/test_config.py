@@ -13,7 +13,8 @@ def test_reads_real_config_values():
 
     raw = yaml.safe_load(config.path().read_text())
     assert config.get("capture.source") == raw["capture"]["source"]
-    assert config.get("capture.source") in {"pi", "webcam", "upload"}
+    src = config.get("capture.source")
+    assert src in {"pi", "webcam", "upload", "avf"} or src.startswith(("avf:", "upload:"))
     assert config.get("budget_ms.snapshot_to_twin_first") == raw["budget_ms"]["snapshot_to_twin_first"]
     assert isinstance(config.get("budget_ms.snapshot_to_twin_first"), int) and config.get("budget_ms.snapshot_to_twin_first") > 0
     assert config.get("transcribe.low_confidence") == pytest.approx(raw["transcribe"]["low_confidence"])
