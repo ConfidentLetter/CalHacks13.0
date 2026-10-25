@@ -1,12 +1,13 @@
 const EXPLICIT_MATH = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\\)\$(?!\s)[^$\n]+?\$)/g
 const FUNCTION_TERM = String.raw`(?:sin|cos|tan|log|ln)\s+[A-Za-zΑ-Ωα-ω](?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))?`
-const MATH_TERM = String.raw`(?:${FUNCTION_TERM}|(?:sqrt|sin|cos|tan|log|ln)\([^()\n]*\)|[A-Za-z](?:'+)?\([^()\n]*\)|\([^()\n]+\)|\\[A-Za-z]+(?:\{[^{}]*\})*|(?:Σ|∑)?(?:\d+(?:\.\d+)?)?[A-Za-zΑ-Ωα-ω](?:[A-Za-z0-9Α-Ωα-ω]*)(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))?|\d+(?:\.\d+)?)`
+const POWER = String.raw`(?:\^(?:\{[^{}]*\}|[A-Za-z0-9+-]+))?`
+const MATH_TERM = String.raw`(?:${FUNCTION_TERM}|(?:sqrt|sin|cos|tan|log|ln)\([^()\n]*\)|[A-Za-z](?:'+)?\([^()\n]*\)${POWER}|\([^()\n]+\)${POWER}|\\[A-Za-z]+(?:\{[^{}]*\})*|(?:Σ|∑)?(?:\d+(?:\.\d+)?)?[A-Za-zΑ-Ωα-ω](?:[A-Za-z0-9Α-Ωα-ω]*)(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))?|\d+(?:\.\d+)?)`
 const EQUATION = new RegExp(
   `${MATH_TERM}(?:\\s*(?:=|<=|>=|≤|≥|≠|<|>|[+\\-×÷*/])\\s*${MATH_TERM})+`,
 )
 const LATEX_COMMAND = String.raw`\\(?:frac|sqrt|sum|prod|int|lim|sin|cos|tan|log|ln|pi|theta|alpha|beta|gamma|delta|Delta|cdot|times|leq|geq|neq|approx|infty|pm|partial|nabla|dots|ldots|overline|mathbf|mathrm|text)\b(?:\{[^{}]*\})*(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))*`
 const MATH_ATOM = String.raw`(?:[A-Za-zΑ-Ωα-ω](?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))|[A-Za-z]\d+[A-Za-z])`
-const INLINE_MATH = new RegExp(`${EQUATION.source}|${LATEX_COMMAND}|${MATH_ATOM}|${FUNCTION_TERM}|(?:sqrt|sin|cos|tan|log|ln|[A-Za-z])\\([^()\\n]*\\)`, 'g')
+const INLINE_MATH = new RegExp(`${EQUATION.source}|${LATEX_COMMAND}|${MATH_ATOM}|${FUNCTION_TERM}|(?:sqrt|sin|cos|tan|log|ln|[A-Za-z]'*)\\([^()\\n]*\\)${POWER}|\\d+[xyzt](?![A-Za-z])`, 'g')
 const FORMULA_LINE = /^[A-Za-zΑ-Ωα-ω0-9\s\\{}()[\].,=<>_^+\-*/×÷%|Σ∑−≤≥≠₀-₉ₓ]+$/
 const LATEX_WORDS = new Set(['frac', 'sqrt', 'sum', 'prod', 'int', 'lim', 'sin', 'cos', 'tan', 'log', 'ln', 'mu', 'leq', 'geq', 'neq', 'times', 'div'])
 
@@ -115,7 +116,7 @@ function explicitMathToken(value) {
 
 // Only symbolic fragments are math outside expressions. Dates, counts, ordinals,
 // currency and other standalone numbers remain ordinary text.
-const PROSE_ATOM = /https?:\/\/[^\s]+|(?<![\p{L}\p{N}_'’])[b-hj-zB-HJ-Z](?=$|[^\p{L}\p{N}_])|[Α-Ωα-ω∞≈±≤≥≠×÷∑∫∂∇√+=<>]/gu
+const PROSE_ATOM = /https?:\/\/[^\s]+|(?<![\p{L}\p{N}_'’])(?<!\d\s)[b-hj-zB-HJ-Z](?=$|[^\p{L}\p{N}_])|[Α-Ωα-ω∞≈±≤≥≠×÷∑∫∂∇√+=<>]/gu
 function renderProseAtoms(value) {
   const tokens = []
   let last = 0

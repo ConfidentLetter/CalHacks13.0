@@ -42,6 +42,8 @@ Rules:
 - Notes are short (one sentence, at most 200 characters), concrete, and encouraging. Point at what to re-check;
   never state the corrected expression, the missing term or factor, or the right value.
 - summary: two sentences at most, naming the topic and the key issue (or confirming the work is right).
+- In summary, notes and hints, wrap every mathematical expression in $...$ as LaTeX, e.g. $f(x)=(3x^2+1)^4$,
+  $f'(x)$, $x=1$; keep words outside the dollar signs.
 - topics: 1-3 short topic names. hints: at most 3 short next-step questions or checks the student can act on, never the answer itself.
 Output strict JSON only."""
 

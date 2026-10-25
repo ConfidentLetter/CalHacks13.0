@@ -133,3 +133,8 @@ def test_hand_held_estimated_positions_reach_the_dashboard():
     ]}
     steps = [step_base(l) for l in twin_lines(twin)]
     assert [s["bboxEstimated"] for s in steps] == [True, False]
+
+
+def test_judge_wraps_math_in_dollar_signs_for_the_dashboard():
+    """The dashboard typesets $...$ exactly; bare math in prose is only guessed at (Henry, 2026-10-25)."""
+    assert "$...$" in tutor.JUDGE_SYSTEM

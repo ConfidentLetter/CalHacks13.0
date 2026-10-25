@@ -157,3 +157,23 @@ test('all recognized numeric and symbolic fragments are valid KaTeX', () => {
 test('renders LaTeX text and unit commands without exposing their source', () => {
   assert.deepEqual(parseMathText(String.raw`Mass uses \mathrm{kg} and \text{two blocks}.`).filter(t => t.type === 'math').map(t => t.value), [String.raw`\mathrm{kg}`, String.raw`\text{two blocks}`])
 })
+
+// Henry's 2026-10-25 screenshot: the "What Pip analyzed" card must read as typeset math, not half-rendered text.
+const mathOf = (s) => parseMathText(s).filter(({ type }) => type === 'math').map(({ value }) => value)
+
+test('a power applied to a bracket stays inside the formula', () => {
+  assert.deepEqual(mathOf('This is a chain rule problem on f(x) = (3x^2 + 1)^4. The power step is right'), ['f(x) = (3x^2 + 1)^4'])
+})
+
+test('a primed function call is one formula', () => {
+  assert.deepEqual(mathOf("Rewrite f'(x) with that extra factor, then substitute x = 1 again."), ["f'(x)", 'x = 1'])
+})
+
+test('a coefficient times a variable is math', () => {
+  assert.deepEqual(mathOf('the inner derivative 6x is missing'), ['6x'])
+})
+
+test('a unit after a number stays plain text', () => {
+  assert.deepEqual(mathOf('read in 8.1 s'), [])
+  assert.deepEqual(mathOf('captured 0:28 · 8h ago'), [])
+})
