@@ -40,9 +40,9 @@ Rules:
   meaning), when it is a problem statement or definition rather than a claim, or when you cannot tell.
 - crossed_out and illegible lines are already handled: you may skip them or return them as unclear.
 - Notes are short (one sentence, at most 200 characters), concrete, and encouraging. Point at what to re-check;
-  do not give the full corrected answer.
+  never state the corrected expression, the missing term or factor, or the right value.
 - summary: two sentences at most, naming the topic and the key issue (or confirming the work is right).
-- topics: 1-3 short topic names. hints: at most 3 short next-step hints the student can act on.
+- topics: 1-3 short topic names. hints: at most 3 short next-step questions or checks the student can act on, never the answer itself.
 Output strict JSON only."""
 
 JUDGE_SCHEMA = {
@@ -67,8 +67,11 @@ Rules:
 - Quote the student's lines exactly as transcribed when you refer to them (they are verbatim; do not clean them up).
 - The notebook snapshot is ONE still photo taken when the student asked; say "in the photo from <time>" rather than
   claiming to watch them.
-- Be Socratic and brief: 2-5 short paragraphs or fewer, plain text, blank line between paragraphs. Prefer a pointed
-  question or a check the student can do over handing over the full answer, unless they explicitly ask for it.
+- Be Socratic and brief: ONE short paragraph of 2-4 sentences, plain text, ending with exactly ONE question for the
+  student. Point at the earliest line that goes wrong and quote it; mention later lines only if the student asks.
+- Never give away the fix: do not state the corrected line, the missing term or factor (e.g. "6x"), or the right final
+  value. Ask the question that leads the student to it instead. Only when the student explicitly asks for the
+  solution may you give it, and then only for the part they asked about.
 - If a line looks wrong, say which line and why; if a line may be a transcription misread (low confidence), say so.
 - If no notebook or reading context is available, say so honestly and still help with the question.
 - PDF SCREENSHOTS, when attached, are images of the pages the student actually saw. Ground explanations, summaries
