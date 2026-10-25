@@ -1,0 +1,16 @@
+# Cloud runtime: combined bridge/study/transcription dependencies, without a desktop GUI.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+anthropic>=0.49,<1
+jsonschema>=4.21
+PyYAML>=6.0
+opencv-python-headless>=4.9
+numpy>=1.26
+pillow>=10
+httpx>=0.27
+faster-whisper>=1.1
+python-dotenv>=1.0,<2
+sympy>=1.13
+antlr4-python3-runtime==4.11
+lark>=1.1
