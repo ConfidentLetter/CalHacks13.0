@@ -523,45 +523,6 @@ const handlers = {
     return true
   },
 
-  'popup:import-pdf': async ({ filename, buffer, url }) => {
-    try {
-      if (!Array.isArray(buffer) || buffer.length === 0) throw new Error('Invalid PDF data')
-      const buf = new Uint8Array(buffer)
-      const result = await PDFExtractor.extractFromArrayBuffer(buf, filename || 'document.pdf')
-      if (result.error) throw new Error(result.error)
-      const now = new Date().toISOString()
-      const pdfRecord = {
-        id: `pdf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-        title: filename?.replace(/\.pdf$/i, '') || 'PDF Document',
-        url: url || 'file://local',
-        domain: url ? new URL(url).hostname.replace(/^www\./, '') : 'local',
-        text: result.text.slice(0, 8000),
-        excerpt: result.text.slice(0, 1000),
-        startedAt: now,
-        timestamp: now,
-        durationSec: 0,
-        source: 'pdf-import',
-      }
-      const records = await getRecords()
-      records.unshift(pdfRecord)
-      await setRecords(records)
-      flush()
-      return { pages: result.pages, error: null, scanned: result.scanned }
-    } catch (err) {
-      return { pages: 0, error: String(err.message || err), scanned: false }
-    }
-  },
-
-  'popup:clear-pdf': async () => {
-    const records = await getRecords()
-    const pdfRecords = records.filter((r) => r.source === 'pdf-import')
-    if (pdfRecords.length > 0) {
-      await deleteRecords(pdfRecords.map((r) => r.id))
-      return true
-    }
-    return false
-  },
-
   'bridge:get': () => bridgeInfo(),
   'bridge:delete': ({ id }) => deleteRecords([id]),
   'bridge:clear': async () => {

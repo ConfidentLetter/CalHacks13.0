@@ -547,9 +547,7 @@ $('delete-all').addEventListener('click', async (e) => {
   refresh({ full: false })
 })
 
-// ---- PDF import ---------------------------------------------------------------
-
-let pdfProcessing = false
+// ---- PDF reading status --------------------------------------------------------
 
 async function renderPdfPanel() {
   const { live } = state || {}
@@ -565,64 +563,11 @@ async function renderPdfPanel() {
   const hasText = live?.text && live.text.length > 0
   const pages = live?.pdfPages || '?'
   if (hasText) {
-    info.textContent = `✓ Extracted from PDF · ${pages} pages · ${live?.activeSec || 0}s`
+    info.textContent = `✓ Text extracted · ${pages} pages · ${live?.activeSec || 0}s`
   } else {
-    info.textContent = `PDF detected · ${pages} pages · ${live?.activeSec || 0}s`
-  }
-  // Update button label based on extraction status
-  const importBtn = $('pdf-import')
-  if (hasText) {
-    importBtn.textContent = '✓ Extracted'
-    importBtn.disabled = true
-  } else {
-    importBtn.textContent = 'Import PDF'
-    importBtn.disabled = false
+    info.textContent = `Extracting… · ${pages} pages · ${live?.activeSec || 0}s`
   }
 }
-
-$('pdf-import').addEventListener('click', async () => {
-  if (pdfProcessing) return
-  pdfProcessing = true
-  const input = $('pdf-file-input')
-  input.click()
-})
-
-$('pdf-file-input').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0]
-  if (!file || !file.type.includes('pdf')) {
-    flash('Please select a PDF file', 'err')
-    pdfProcessing = false
-    return
-  }
-  try {
-    const buf = await file.arrayBuffer()
-    const result = await send('popup:import-pdf', {
-      filename: file.name,
-      buffer: Array.from(new Uint8Array(buf)),
-      url: tab?.url || '',
-    })
-    if (result.error) throw new Error(result.error)
-    const msg = result.scanned ? 'imported PDF (contains scanned pages)' : 'imported PDF'
-    flash(`${msg} · ${result.pages} pages extracted`, 'ok')
-    await refresh({ full: false })
-  } catch (err) {
-    flash(`PDF import failed: ${err.message}`, 'err')
-  } finally {
-    pdfProcessing = false
-    e.target.value = ''
-  }
-})
-
-$('pdf-clear').addEventListener('click', async () => {
-  if (pdfProcessing) return
-  try {
-    await send('popup:clear-pdf')
-    flash('PDF cleared', 'ok')
-    await refresh({ full: false })
-  } catch {
-    flash('Failed to clear PDF', 'err')
-  }
-})
 
 // ---- boot -------------------------------------------------------------------
 
