@@ -14,7 +14,7 @@ function sameOriginDefault() {
   return local ? 'http://localhost:8000' : origin
 }
 
-export const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || sameOriginDefault()
+export const DEFAULT_API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || sameOriginDefault()
 
 export const SETTINGS_STORAGE_KEY = 'synapse.settings.v1'
 

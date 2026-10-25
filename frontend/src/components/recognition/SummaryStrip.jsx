@@ -12,8 +12,8 @@ export function SummaryStrip({ model, className }) {
       {(topics.length > 0 || judged) && (
         <div className="flex flex-wrap items-center gap-2">
           {judged && (
-            <Badge tone={counts.errors ? 'red' : analysisFailed ? 'neutral' : 'green'} className={cx('text-[12px]', counts.errors && 'border-ink-red bg-ink-red/10 text-ink-red')}>
-              {analysisFailed && !counts.total
+            <Badge tone={counts.errors ? 'red' : analysisFailed || !counts.total ? 'neutral' : 'green'} className={cx('text-[12px]', counts.errors && 'border-ink-red bg-ink-red/10 text-ink-red')}>
+              {!counts.total
                 ? 'nothing readable'
                 : counts.errors
                   ? <MathText>{`${counts.errors} error${counts.errors > 1 ? 's' : ''} caught`}</MathText>

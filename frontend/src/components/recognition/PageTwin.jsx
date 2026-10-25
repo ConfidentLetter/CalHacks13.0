@@ -39,7 +39,7 @@ export function PageTwin({ image, lines = [], selectedId, hoveredId, onSelect, o
   }
 
   const coords = W && H ? { width: W, height: H } : null
-  const boxes = showBoxes && coords ? lines.filter((l) => l.bbox) : []
+  const boxes = showBoxes && coords ? lines.filter((l) => l.bbox && !l.bboxEstimated) : []
 
   return (
     <div ref={holder} className={cx('w-full', className)}>

@@ -150,9 +150,11 @@ export function RecognitionView({ model, loading, startedAt, error, onRetry, emp
                 ? 'the still exactly as the camera saw it'
                 : effectiveView === 'writing'
                   ? 'the flattened page, zoomed to the writing · click a box for crops and both readings'
-                  : lines.some((l) => l.bbox)
+                  : lines.some((l) => l.bbox && !l.bboxEstimated)
                     ? 'the flattened page · click a box for crops and both readings'
-                    : 'the flattened page'}
+                    : lines.length && lines.every((l) => l.bboxEstimated)
+                      ? 'the sheet as photographed · positions estimated'
+                      : 'the flattened page'}
             </p>
           </div>
           <div className="space-y-5">

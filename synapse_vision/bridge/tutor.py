@@ -100,7 +100,7 @@ def twin_lines(twin: dict | None) -> list[dict]:
     return [{"id": str(l.get("id")), "latex": l.get("latex") or "", "text": l.get("text") or "",
              "status": l.get("status") or "active", "confidence": float(l.get("confidence") or 0.0),
              "uncertain_spans": list(l.get("uncertain_spans") or []), "parse_ok": bool(l.get("parse_ok", True)),
-             "bbox": _bbox(l.get("bbox")), "crop_path": l.get("crop_path"), "context_crop_path": l.get("context_crop_path"),
+             "bbox": _bbox(l.get("bbox")), "bbox_estimated": bool(l.get("bbox_estimated")), "crop_path": l.get("crop_path"), "context_crop_path": l.get("context_crop_path"),
              "readings": _readings(l)}
             for l in lines]
 
@@ -155,7 +155,7 @@ def step_base(line: dict) -> dict:
     from bridge.compat import file_url
 
     return {"id": line["id"], "label": label_of(line), "confidence": line["confidence"], "lineStatus": line["status"],
-            "bbox": line.get("bbox"), "cropUrl": file_url(line.get("crop_path")),
+            "bbox": line.get("bbox"), "bboxEstimated": bool(line.get("bbox_estimated")), "cropUrl": file_url(line.get("crop_path")),
             "contextCropUrl": file_url(line.get("context_crop_path")), "readings": line.get("readings") or
             {"page": None, "line": None, "reread": None, "agree": False, "notes": []},
             "uncertainSpans": list(line.get("uncertain_spans") or [])}

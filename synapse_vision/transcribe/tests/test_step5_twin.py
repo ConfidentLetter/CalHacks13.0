@@ -160,3 +160,41 @@ def test_absolute_and_relative_paths_both_work(fake_pipeline, tmp_path, monkeypa
         assert all(Path(p).is_absolute() for p in seen), "T1 always receives an absolute path"
     finally:
         img.unlink(missing_ok=True)
+
+
+def test_raw_frame_fallback_reads_a_hand_held_sheet(fake_pipeline, monkeypatch, tmp_path):
+    """No page found + no lines from T2 -> the still itself goes to the page pass; boxes are estimated bands."""
+    import cv2
+    import numpy as np
+
+    import transcribe.rawframe as raw
+
+    img = tmp_path / "upload_held.jpg"
+    cv2.imwrite(str(img), np.full((900, 1600, 3), 200, np.uint8))
+    fake_pipeline["quality"] = {"ok": False, "issues": ["no_page", "hand_in_frame"], "blur_score": 1.0, "glare_fraction": 0.0}
+    fake_pipeline["lines"] = []
+    reads = [{"latex": "f'(x)=2x\\cdot\\cos x", "text": "f'(x) = 2x cos x", "kind": "math", "illegible": False, "uncertain": []},
+             {"latex": "", "text": "", "kind": "text", "illegible": True, "uncertain": []},
+             {"latex": "x^{2}=", "text": "x^2 =", "kind": "math", "illegible": False, "uncertain": [{"span": "2", "alternatives": ["z"]}]}]
+    monkeypatch.setattr(raw, "page_pass", lambda tiles: [dict(r) for r in reads])
+    twin = twin_mod.build_page_twin(str(img))
+    assert twin_errors(twin) == []
+    assert [l["latex"] for l in twin["lines"]] == ["f'(x)=2x\\cdot\\cos x", "x^{2}="]  # verbatim, blank reading dropped
+    assert all(l["bbox_estimated"] and l["confidence"] <= 0.4 for l in twin["lines"])
+    assert twin["lines"][1]["uncertain_spans"] == [{"start": 3, "end": 4, "alternatives": ["z"]}]
+    assert twin["quality"]["ok"] is False and twin["regions"][0]["id"] == "R0"
+    b0, b1 = twin["lines"][0]["bbox"], twin["lines"][1]["bbox"]
+    assert b0[1] < b1[1] and b1[1] + b1[3] <= 900
+
+
+def test_raw_frame_fallback_off_by_config_and_never_for_good_pages(fake_pipeline, monkeypatch):
+    import transcribe.rawframe as raw
+
+    calls = []
+    monkeypatch.setattr(raw, "page_pass", lambda tiles: calls.append(1) or [])
+    fake_pipeline["lines"] = []
+    twin_mod.build_page_twin("a.jpg")  # quality ok, just an empty page: no extra model call
+    assert calls == []
+    fake_pipeline["quality"] = {"ok": False, "issues": ["no_page"], "blur_score": 1.0, "glare_fraction": 0.0}
+    monkeypatch.setattr(twin_mod, "cfg", lambda k, d=None: False if k == "transcribe.raw_frame_fallback" else d)
+    assert twin_mod.build_page_twin("b.jpg")["lines"] == [] and calls == []

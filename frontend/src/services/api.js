@@ -4,7 +4,7 @@
 // ApiError. There is no simulated data: if the backend is offline, the UI shows that.
 // See docs/BACKEND_INTEGRATION.md for the request/response contracts.
 
-import { DEFAULT_SETTINGS, normalizeBaseUrl } from './config'
+import { DEFAULT_SETTINGS, normalizeBaseUrl } from './config.js'
 
 const DEFAULT_TIMEOUT_MS = 10_000
 const NOT_IMPLEMENTED = new Set([404, 405, 501])

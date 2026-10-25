@@ -121,3 +121,15 @@ def test_prompts_never_ask_to_correct_the_transcription():
     for text in (tutor.JUDGE_SYSTEM, tutor.CHAT_SYSTEM):
         low = text.lower()
         assert not any(w in low for w in forbidden), text
+
+
+def test_hand_held_estimated_positions_reach_the_dashboard():
+    """T3's hand-held fallback marks rows as estimated; the step must carry that so the UI draws no boxes."""
+    from bridge.tutor import step_base, twin_lines
+
+    twin = {"lines": [
+        {"id": "L1", "order": 0, "latex": "x=1", "confidence": 0.4, "bbox": [0, 10, 800, 40], "bbox_estimated": True},
+        {"id": "L2", "order": 1, "latex": "y=2", "confidence": 0.9, "bbox": [100, 300, 200, 40]},
+    ]}
+    steps = [step_base(l) for l in twin_lines(twin)]
+    assert [s["bboxEstimated"] for s in steps] == [True, False]

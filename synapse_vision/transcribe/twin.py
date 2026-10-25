@@ -9,7 +9,9 @@ from transcribe.compat import REPO_ROOT, Timer, cfg, log
 from transcribe.ids import new_page_id, new_snapshot_id, now_iso
 from transcribe.ink import resolve
 from transcribe.matching import match_to_previous
-from transcribe.page import transcribe_page
+from transcribe.page import QUALITY_BAD_CAP, transcribe_page
+from transcribe.loosepage import loose_page
+from transcribe.rawframe import raw_frame_lines
 from transcribe.schema import load_mock_twin, validate_twin
 
 IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
@@ -108,6 +110,35 @@ def _error_twin(snapshot_path: str, previous_twin: dict | None, error: str, t0: 
     return validate_twin(twin)
 
 
+LOOSE_MAX_LINES = 30  # more T2 lines than this on a loose crop = word fragments (tilted/two-column page)
+
+
+def _hand_held_fallback(abs_path: str, page: dict, layout: dict, quality: dict, previous_twin: dict | None):
+    """T1 found no page and T2 found no lines (a hand-held sheet).
+    1) loose page crop (sheet only, room painted white). If T2 finds a sane layout on it (1..LOOSE_MAX_LINES
+       lines), run the normal per-line transcription: real per-line boxes.
+    2) otherwise one page pass on that crop (or on the whole frame if no sheet was found): estimated boxes."""
+    loose = loose_page(abs_path)
+    if loose:
+        loose_layout = _segment(loose["path"])
+        n = len(loose_layout.get("lines") or [])
+        if 0 < n <= int(cfg("transcribe.loose_max_lines", LOOSE_MAX_LINES)):
+            lines = transcribe_page(loose["path"], {**loose_layout, "quality": quality}, previous_twin)
+            if lines:
+                log("transcribe.fallback", 0.0, mode="loose_page", lines=len(lines))
+                return ({**page, "dewarped_path": loose["path"], "width": loose["width"], "height": loose["height"]},
+                        loose_layout, lines)
+    # One page pass on the cropped sheet; if there is no sheet crop or it reads nothing, on the whole frame.
+    targets = ([(loose["path"], loose["width"], loose["height"], "sheet_page_pass")] if loose else []) \
+        + [(abs_path, *_image_size(abs_path), "raw_frame")]
+    for target, w, h, mode in targets:
+        regions, lines = raw_frame_lines(str(resolve(target)), w, h, QUALITY_BAD_CAP)
+        if lines:
+            log("transcribe.fallback", 0.0, mode=mode, lines=len(lines))
+            return {**page, "dewarped_path": _rel(str(resolve(target))), "width": w, "height": h}, {**layout, "regions": regions}, lines
+    return page, layout, []
+
+
 def _build(abs_path: str, snapshot_path: str, previous_twin: dict | None, t0: float) -> dict:
     latency: dict[str, float] = {}
     with Timer("transcribe.build.page") as t:
@@ -119,6 +150,8 @@ def _build(abs_path: str, snapshot_path: str, previous_twin: dict | None, t0: fl
     latency["layout"] = round(t.ms, 1)
     with Timer("transcribe.build.transcribe") as t:
         lines = transcribe_page(page["dewarped_path"], {**layout, "quality": quality}, previous_twin)
+        if not lines and not quality.get("ok") and cfg("transcribe.raw_frame_fallback", True):
+            page, layout, lines = _hand_held_fallback(abs_path, page, layout, quality, previous_twin)
     latency["transcribe"] = round(t.ms, 1)
     now = now_iso()
     matched = match_to_previous(lines, previous_twin, now, quality_ok=bool(quality.get("ok")))

@@ -1,7 +1,7 @@
 // Pure helpers that turn the bridge's analyze result and/or T4's page twin into one line model
 // for the recognition view. Nothing here rewrites a label: `latex`/`text` are passed through verbatim.
 
-import { resolveUrl } from '../../services/api'
+import { resolveUrl } from '../../services/api.js'
 
 export const LOW_CONFIDENCE = 0.6
 
@@ -89,6 +89,8 @@ export function lineFromTwin(l) {
     confidence,
     lowConfidence: confidence < LOW_CONFIDENCE,
     bbox: bboxOf(l.bbox),
+    // hand-held fallback: one page read, rows only estimated — never drawn as boxes
+    bboxEstimated: Boolean(l.bbox_estimated),
     cropUrl: fileUrl(l.crop_path),
     contextCropUrl: fileUrl(l.context_crop_path),
     readings: normalizeReadings(l.readings, latex || text || null),
@@ -114,6 +116,7 @@ export function lineFromStep(s, order) {
     confidence,
     lowConfidence: confidence < LOW_CONFIDENCE,
     bbox: bboxOf(s.bbox),
+    bboxEstimated: Boolean(s.bboxEstimated),
     cropUrl: resolveUrl(s.cropUrl),
     contextCropUrl: resolveUrl(s.contextCropUrl),
     readings: normalizeReadings(s.readings, label || null),
@@ -139,6 +142,7 @@ export function mergeStepsWithTwin(steps = [], twin = null) {
       kind: t.kind,
       label: step.label || t.label,
       bbox: t.bbox || step.bbox,
+      bboxEstimated: t.bbox ? t.bboxEstimated : step.bboxEstimated,
       cropUrl: t.cropUrl || step.cropUrl,
       contextCropUrl: t.contextCropUrl || step.contextCropUrl,
       readings: t.readings.page != null || t.readings.line != null ? t.readings : step.readings,
@@ -207,7 +211,7 @@ export function readInSeconds(latencyMs) {
 export function inkRegion(lines, image, { margin = 0.05, minGain = 1.35 } = {}) {
   const W = image?.width
   const H = image?.height
-  const boxes = (lines || []).map((l) => l.bbox).filter(Boolean)
+  const boxes = (lines || []).filter((l) => !l.bboxEstimated).map((l) => l.bbox).filter(Boolean)
   if (!W || !H || !boxes.length) return null
   let x0 = Infinity
   let y0 = Infinity
