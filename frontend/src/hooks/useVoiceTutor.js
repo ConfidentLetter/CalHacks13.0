@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRecorder } from './useRecorder'
 import { createDemoClient, createLiveClient } from '../services/voiceTutorClient'
+import { pickVoice, spokenText } from '../utils/speech'
 
 /**
  * One voice/typed turn with Pip at a time:
@@ -53,7 +54,12 @@ export function useVoiceTutor({ apiBaseUrl, demo, camera }) {
       return
     }
     synth.cancel()
-    const u = new SpeechSynthesisUtterance(text)
+    // The browser's default voice follows the OS language (often Chinese here), so pick an English one and
+    // read math as words; the reply on screen keeps its notation.
+    const u = new SpeechSynthesisUtterance(spokenText(text))
+    const voice = pickVoice(synth.getVoices())
+    if (voice) u.voice = voice
+    u.lang = voice?.lang || 'en-US'
     u.rate = 1.02
     u.onstart = () => setStatus('speaking')
     u.onend = u.onerror = () => setStatus((s) => (s === 'speaking' ? 'ready' : s))
