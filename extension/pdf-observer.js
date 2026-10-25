@@ -209,8 +209,14 @@ async function pdfCapture(tab, { manual, generation }) {
     })
     const b = pdfBaselines.get(tab.id)
     chrome.storage.session.set({ [PDF_BASELINE_KEY]: { tabId: tab.id, key: b.key, w: b.w, h: b.h, b64: toBase64(b.pixels.buffer) } }).catch(() => {})
-    flushShots() // uploads only when “Upload snapshots to backend” is on; otherwise stays local
-    await pdfUpdate({ status: saved.reason === 'manual' ? 'Saved (manual)' : 'Saved — new PDF content', tone: 'ok', saved: (pdfState.saved || 0) + 1 })
+    // Uploads only when “Upload snapshots to backend” is on; the tutor can only see uploaded pages.
+    const what = saved.reason === 'manual' ? 'Saved (manual)' : 'Saved — new PDF content'
+    let where = ' · on this device only — turn on “Upload snapshots to backend” so the tutor can see it'
+    if (settings.uploadScreenshots) {
+      const pending = (await flushShots().then(getShots)).some((s) => !s.synced)
+      where = pending ? ' · upload failed, will retry — check the backend' : ' · uploaded; the tutor can see it'
+    }
+    await pdfUpdate({ status: what + where, tone: where.includes('failed') ? 'warn' : 'ok', saved: (pdfState.saved || 0) + 1 })
     return { ...pdfState }
   } catch (err) {
     const message = String(err?.message || 'PDF capture failed.')

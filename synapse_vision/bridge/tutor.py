@@ -7,6 +7,7 @@ quote it; it never changes a label. Transcription stays T3's business.
 """
 from __future__ import annotations
 
+import re
 import threading
 from collections import deque
 from typing import Any
@@ -21,6 +22,9 @@ MAX_HISTORY_TURNS = 20
 MAX_READING_ITEMS = 10
 MAX_READING_TEXT_CHARS = 1500
 MAX_NOTE_CHARS = 200
+MAX_SCREENSHOTS = 3        # images per tutor request (cost)
+MAX_IMAGE_SIDE = 1568      # px; larger images are downscaled by the API anyway
+SCREENSHOT_MAX_AGE_H = 12  # only recent uploads count as "what I'm reading"
 
 JUDGE_SYSTEM = """You are a patient math tutor reviewing ONE page of a student's handwritten work.
 
@@ -67,6 +71,10 @@ Rules:
   question or a check the student can do over handing over the full answer, unless they explicitly ask for it.
 - If a line looks wrong, say which line and why; if a line may be a transcription misread (low confidence), say so.
 - If no notebook or reading context is available, say so honestly and still help with the question.
+- PDF SCREENSHOTS, when attached, are images of the pages the student actually saw. Ground explanations, summaries
+  and quizzes in their visible text and diagrams, and name the screenshot/page you used. If a needed page is missing
+  or unreadable in them, say so. Never invent document content from a title or URL alone; if no screenshots are
+  attached, say you cannot see the document's pages.
 - petExpression: celebrating when the work is right, encouraging when there is a fixable mistake, curious when you ask
   a question, thinking when you reason through something, neutral otherwise.
 Output strict JSON only: {"reply": "...", "petExpression": "..."}."""
@@ -254,23 +262,75 @@ def _clean_history(history: Any) -> list[dict]:
     return merged
 
 
+def select_screenshots(shots: list[dict], message: str, limit: int = MAX_SCREENSHOTS) -> list[dict]:
+    """Newest uploaded screenshots of the most recent document; a page the student names ("page 31") goes first."""
+    if not shots:
+        return []
+    shots = sorted(shots, key=lambda s: str(s.get("capturedAt") or ""), reverse=True)
+    newest = shots[0]
+    doc = newest.get("documentId") or newest.get("url")
+    same = [s for s in shots if (s.get("documentId") or s.get("url")) == doc]
+    match = re.search(r"\bpage\s+(\d{1,4})\b", message or "", re.I)
+    if match:
+        same.sort(key=lambda s: s.get("pageNumber") != int(match.group(1)))  # stable: named page first, then newest
+    return same[:limit]
+
+
+def screenshot_blocks(shots: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Claude image content blocks (resized JPEG base64) + the shots actually included. Unreadable files are skipped."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    blocks: list[dict] = []
+    used: list[dict] = []
+    for shot in shots:
+        try:
+            with Image.open(shot["path"]) as img:
+                img = img.convert("RGB")
+                img.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))  # cost control; keeps aspect ratio
+                buf = io.BytesIO()
+                img.save(buf, "JPEG", quality=80)
+        except (OSError, KeyError, ValueError):
+            continue
+        n = len(used) + 1
+        page = f", page {shot['pageNumber']}" if shot.get("pageNumber") else ""
+        blocks.append({"type": "text", "text": f"SCREENSHOT {n}: {shot.get('title') or shot.get('url') or 'PDF'}{page}, "
+                                               f"captured {shot.get('capturedAt') or 'recently'}"})
+        blocks.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                   "data": base64.b64encode(buf.getvalue()).decode("ascii")}})
+        used.append(shot)
+    return blocks, used
+
+
 def respond(message: str, history: Any, *, twin: dict | None, readings: list[dict], include_text: bool,
-            context_notes: list[str] | None = None, timeout_s: float | None = None) -> dict:
-    """One model call → {reply, petExpression}. Raises llm.LLMError."""
-    context = "\n\n".join([notebook_context(twin), reading_context(readings, include_text), *(context_notes or [])])
+            context_notes: list[str] | None = None, timeout_s: float | None = None,
+            screenshots: list[dict] | None = None) -> dict:
+    """One model call → {reply, petExpression, screenshotsUsed}. Raises llm.LLMError."""
+    blocks, used = screenshot_blocks(select_screenshots(screenshots or [], message))
+    shot_note = (f"PDF SCREENSHOTS: {len(used)} attached below (images of pages the student viewed)." if used else
+                 "PDF SCREENSHOTS: none available. You cannot see any document pages; do not describe their content.")
+    context = "\n\n".join([notebook_context(twin), reading_context(readings, include_text), shot_note,
+                           *(context_notes or [])])
     turns = _clean_history(history)
     user = f"{context}\n\nSTUDENT ({now_iso()}): {message.strip()}"
-    messages = turns + [{"role": "user", "content": user}]
+    content: Any = [{"type": "text", "text": context}, *blocks,
+                    {"type": "text", "text": f"STUDENT ({now_iso()}): {message.strip()}"}] if used else user
+    messages = turns + [{"role": "user", "content": content}]
     out = llm.ask_json(CHAT_SYSTEM, messages, CHAT_SCHEMA, stage="bridge.chat",
                        timeout_s=timeout_s or float(cfg("bridge.chat_timeout_s", 40.0)))
     pet = out.get("petExpression") if out.get("petExpression") in PET_EXPRESSIONS else "neutral"
-    return {"reply": str(out.get("reply") or "").strip(), "petExpression": pet}
+    # Reported only after the model call succeeded with these images in the request.
+    return {"reply": str(out.get("reply") or "").strip(), "petExpression": pet, "screenshotsUsed": used}
 
 
-def sources_for(twin: dict | None, readings: list[dict]) -> list[dict]:
+def sources_for(twin: dict | None, readings: list[dict], screenshots: list[dict] | None = None) -> list[dict]:
     from bridge.compat import file_url
 
-    out: list[dict] = []
+    out: list[dict] = [{"type": "screenshot", "id": s.get("id"), "title": s.get("title") or "PDF screenshot",
+                        "url": s.get("url"), "pageNumber": s.get("pageNumber"), "capturedAt": s.get("capturedAt")}
+                       for s in screenshots or []]
     if twin and twin.get("lines"):
         image = twin.get("image") or {}
         out.append({"type": "notebook", "id": twin.get("snapshot_id"), "title": "Notebook snapshot",
