@@ -445,6 +445,7 @@ const handlers = {
   'popup:study-capture': studyPopupHandler((msg) => studyBegin(msg, false)),
   'popup:study-start': studyPopupHandler((msg) => studyBegin(msg, true)),
   'popup:study-stop': studyPopupHandler(() => studyStop()),
+  'popup:study-logs': studyPopupHandler(async () => ({ logs: await studyGetLogs() })),
 
   'reading:progress': (msg, sender) => sender.tab && handleProgress(msg, sender.tab),
 

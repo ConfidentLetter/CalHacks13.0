@@ -59,6 +59,18 @@ def test_observe_uses_image_and_typed_followup_uses_same_image(client, study_mod
     assert events['events'][0]['role'] == 'observation'
 
 
+def test_study_session_poll_is_not_cached_and_returns_new_capture(client, study_model):
+    before = client.get('/api/study/session/study-test')
+    assert before.headers['cache-control'] == 'no-store'
+    assert before.json()['events'] == []
+
+    response = observe(client)
+    assert response.status_code == 200
+    after = client.get('/api/study/session/study-test')
+    assert after.headers['cache-control'] == 'no-store'
+    assert after.json()['latest']['image']['base64'] == TINY_JPEG_B64
+
+
 def test_changed_tile_observation_sends_patch_and_publishes_reconstructed_frame(client, study_model):
     full = jpeg(40, 40, (220, 20, 20))
     patch = jpeg(10, 10, (20, 30, 220))

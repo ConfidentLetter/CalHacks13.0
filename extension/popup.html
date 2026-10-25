@@ -61,7 +61,7 @@
       <!-- Deliberate study capture: separate consent from passive reading snapshots. -->
       <section class="card study" aria-live="polite">
         <h2 class="section-title">Study capture</h2>
-        <p class="hint">Start change-aware capture to check this approved tab locally every second. Changed 4×4 tiles are sent at most once per selected cooldown; if more than half the screen changes, the full frame is sent.</p>
+        <p class="hint">Capture now compares with the last image in this study session and skips unchanged frames. Start change-aware capture to check locally every second. Changed 4×4 tiles are sent at most once per selected cooldown; if more than half the screen changes, the full frame is sent.</p>
         <p class="study-status" id="study-status" role="status" aria-live="polite" aria-atomic="true">Ready</p>
         <label class="field">
           <span>Minimum AI request interval</span>
@@ -82,7 +82,8 @@
           <button class="btn ghost" id="study-screen" type="button">Open tutor</button>
           <button class="btn ghost" id="study-camera" type="button">Use camera</button>
         </div>
-        <p class="hint">Only this approved tab is sampled. Switching tabs pauses capture. The first image is full; later requests contain changed tiles unless most of the screen changed. Images are never queued for later upload.</p>
+        <button class="btn ghost block" id="study-copy-logs" type="button">Copy capture diagnostics</button>
+        <p class="hint">Only this approved tab is sampled. Switching tabs pauses capture. The first image is full; later captures contain changed tiles unless most of the screen changed, and unchanged frames are not uploaded. Images are never queued for later upload.</p>
       </section>
 
       <!-- Page snapshots -->

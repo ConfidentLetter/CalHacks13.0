@@ -22,7 +22,7 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "alarms", "scripting", "activeTab"],
+  "permissions": ["storage", "alarms", "scripting", "activeTab", "clipboardWrite"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "optional_host_permissions": ["https://*/*", "http://*/*", "<all_urls>"],
   "content_scripts": [

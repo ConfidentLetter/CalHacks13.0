@@ -161,7 +161,11 @@ export function StudyDataProvider({ children }) {
   const readings = useMemo(() => {
     const byId = new Map()
     for (const r of remote.items) byId.set(r.id, r)
-    for (const r of ext.readings) if (!byId.has(r.id)) byId.set(r.id, api.normalizeReading(r))
+    for (const r of ext.readings) {
+      const extensionRecord = api.normalizeReading(r)
+      const existing = byId.get(r.id)
+      byId.set(r.id, existing ? { ...extensionRecord, ...existing, synced: r.synced } : extensionRecord)
+    }
     return [...byId.values()].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
   }, [remote.items, ext.readings])
 
@@ -183,9 +187,16 @@ export function StudyDataProvider({ children }) {
   const deleteReading = useCallback(
     async (record) => {
       if (record.source === 'extension') {
-        bridge.deleteReading(record.id)
-        notify('Removed from extension storage', 'success')
-        return true
+        try {
+          if (record.synced || remote.items.some((r) => r.id === record.id)) await api.deleteReading(record.id)
+          bridge.deleteReading(record.id)
+          setRemote((r) => ({ ...r, items: r.items.filter((x) => x.id !== record.id) }))
+          notify('Reading deleted', 'success')
+          return true
+        } catch (err) {
+          notify(`Delete failed: ${err.message}`, 'error')
+          return false
+        }
       }
       try {
         await api.deleteReading(record.id)
@@ -197,7 +208,7 @@ export function StudyDataProvider({ children }) {
         return false
       }
     },
-    [notify],
+    [notify, remote.items],
   )
 
   const clearReadings = useCallback(async () => {

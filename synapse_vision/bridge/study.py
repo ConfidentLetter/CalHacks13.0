@@ -365,7 +365,7 @@ def _reset(session_id):
 @router.get('/session/{session_id}')
 async def get_session(session_id: str):
     try:
-        return _read(session_id)
+        return JSONResponse(_read(session_id), headers={'Cache-Control': 'no-store'})
     except StudyError as exc:
         return JSONResponse({'error': str(exc)}, status_code=exc.status)
 

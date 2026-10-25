@@ -67,7 +67,7 @@ export class ApiError extends Error {
   }
 }
 
-async function http(method, path, body, { baseUrl = runtime.baseUrl, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+async function http(method, path, body, { baseUrl = runtime.baseUrl, timeoutMs = DEFAULT_TIMEOUT_MS, cache } = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   let res
@@ -77,6 +77,7 @@ async function http(method, path, body, { baseUrl = runtime.baseUrl, timeoutMs =
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
+      ...(cache ? { cache } : {}),
     })
   } catch (err) {
     const timedOut = err?.name === 'AbortError'
@@ -305,7 +306,7 @@ export function sendStudyMessage(sessionId, message) {
 
 export function getStudySession(sessionId) {
   return call('GET /api/study/session', () =>
-    http('GET', `/api/study/session/${encodeURIComponent(sessionId)}`))
+    http('GET', `/api/study/session/${encodeURIComponent(sessionId)}`, null, { cache: 'no-store' }))
 }
 
 export function clearStudySession(sessionId) {

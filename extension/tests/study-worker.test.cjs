@@ -43,7 +43,7 @@ function worker(options = {}) {
       return { ok: !options.backendFailure, status: options.backendFailure ? 502 : 200 }
     },
   })
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../study-capture.js'), 'utf8') + '\nthis.api = { studyBegin, studyStop, studyCapture, studyHeartbeat, studyPopupHandler, studyResumeHeartbeat, update: studyUpdate, viewChanged: () => { studyViewEpoch++ }, state: async () => { await studyLoaded; return {...studyState} } }', context)
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../study-capture.js'), 'utf8') + '\nthis.api = { studyBegin, studyStop, studyCapture, studyHeartbeat, studyPopupHandler, studyResumeHeartbeat, getLogs: studyGetLogs, update: studyUpdate, viewChanged: () => { studyViewEpoch++ }, state: async () => { await studyLoaded; return {...studyState} } }', context)
   return { api: context.api, current, target, saved, captured: () => captured, uploads: () => uploads }
 }
 
@@ -58,6 +58,54 @@ test('manual capture uses activeTab without requesting broad capture permission'
   assert.equal(payload.image.source, 'screen')
   assert.equal((await w.api.state()).running, false)
   assert.equal(JSON.stringify(w.saved).includes('FRAME'), false)
+})
+
+test('manual and timed capture can start from the popup while capture still requires focus', async () => {
+  const manual = worker({ focused: false })
+  await manual.api.studyBegin({ ...manual.target, sessionId: 'study-test' }, false)
+  assert.equal(manual.captured(), 1)
+  assert.equal(manual.uploads().length, 1)
+
+  const timed = worker({ focused: false })
+  await timed.api.studyBegin({ ...timed.target, sessionId: 'study-test', intervalSec: 10 }, true)
+  assert.equal(timed.captured(), 0)
+  await timed.api.studyHeartbeat({ url: timed.target.url }, { tab: timed.current })
+  assert.equal(timed.captured(), 0)
+  assert.equal(timed.uploads().length, 0)
+})
+
+test('capture diagnostics record progress and skip reasons without page URLs or image data', async () => {
+  const w = worker({ focused: false })
+  await w.api.studyBegin({ ...w.target, sessionId: 'study-test', intervalSec: 10 }, true)
+  await w.api.studyHeartbeat({ url: w.target.url }, { tab: w.current })
+  const logs = await w.api.getLogs()
+  assert.ok(logs.some((entry) => entry.event === 'capture_started' && entry.mode === 'change_aware'))
+  assert.ok(logs.some((entry) => entry.event === 'heartbeat_script_injected'))
+  assert.ok(logs.some((entry) => entry.event === 'eligibility_blocked' && entry.reason === 'target_not_visible'))
+  const exported = JSON.stringify(logs)
+  assert.equal(exported.includes(w.target.url), false)
+  assert.equal(exported.includes('FRAME'), false)
+})
+
+test('manual captures reuse the baseline, upload changed tiles, and skip unchanged frames', async () => {
+  let signature = new Array(4096).fill(0)
+  const w = worker({ signature: () => signature })
+  await w.api.studyBegin({ ...w.target, sessionId: 'study-test' }, false)
+  assert.equal(JSON.parse(w.uploads()[0].args.body).image.delta, undefined)
+
+  for (const offset of [16 * 64 + 16 + 2, 16 * 64 + 16 + 3, 16 * 64 + 16 + 4,
+    16 * 64 + 16 + 5, 16 * 64 + 16 + 6]) {
+    signature[offset] = 255
+  }
+  await w.api.studyBegin({ ...w.target, sessionId: 'study-test' }, false)
+  const changed = JSON.parse(w.uploads()[1].args.body).image
+  assert.deepEqual(changed.delta.tiles, [5])
+  assert.equal(changed.base64, 'PATCH')
+
+  await w.api.studyBegin({ ...w.target, sessionId: 'study-test' }, false)
+  assert.equal(w.uploads().length, 2)
+  assert.equal((await w.api.state()).running, false)
+  assert.match((await w.api.state()).status, /No meaningful changes/)
 })
 
 test('manual capture failure persists as an explicit error after the popup closes', async () => {

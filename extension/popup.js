@@ -315,6 +315,20 @@ async function requestStudy(timed) {
 
 $('study-now').addEventListener('click', () => requestStudy(false))
 $('study-start').addEventListener('click', () => requestStudy(true))
+$('study-copy-logs').addEventListener('click', async () => {
+  try {
+    const result = await send('popup:study-logs')
+    if (result?.error) throw new Error(result.error)
+    const logs = result?.logs || []
+    const text = logs.length
+      ? JSON.stringify({ exportedAt: new Date().toISOString(), entries: logs }, null, 2)
+      : 'No study capture diagnostics yet. Start or attempt a capture, then copy diagnostics again.'
+    await navigator.clipboard.writeText(text)
+    flash(logs.length ? `Copied ${logs.length} capture diagnostic entries` : 'No capture diagnostics yet')
+  } catch (err) {
+    flash(`Could not copy diagnostics: ${err.message || 'clipboard unavailable'}`, 'err')
+  }
+})
 $('study-stop').addEventListener('click', async () => {
   ++studyAction
   studyPending = true

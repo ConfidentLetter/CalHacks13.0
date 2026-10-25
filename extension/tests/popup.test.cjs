@@ -15,10 +15,11 @@ function popup(overrides = {}) {
   const document = { activeElement: null, getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id) }, createElement: element, createTextNode: text => text }
   const calls = []
   const intervals = []
-  const chrome = { runtime: { sendMessage: async msg => { calls.push(msg); return overrides.send ? overrides.send(msg) : msg.type === 'popup:state' ? fixture() : {} } }, tabs: { query: async () => [{ id: 1, windowId: 2, url: 'https://example.com', title: 'Study' }], create: overrides.create || (async () => {}) }, permissions: { contains: async () => true, request: overrides.permission || (async () => true) }, storage: { local: { get: async () => ({}) } } }
-  const context = vm.createContext({ document, chrome, URL, crypto: webcrypto, setTimeout: () => 1, clearTimeout() {}, setInterval: fn => intervals.push(fn), console })
+  const chrome = { runtime: { sendMessage: async msg => { calls.push(msg); return overrides.send ? overrides.send(msg) : msg.type === 'popup:state' ? fixture() : msg.type === 'popup:study-logs' ? { logs: [] } : {} } }, tabs: { query: async () => [{ id: 1, windowId: 2, url: 'https://example.com', title: 'Study' }], create: overrides.create || (async () => {}) }, permissions: { contains: async () => true, request: overrides.permission || (async () => true) }, storage: { local: { get: async () => ({}) } } }
+  const clipboard = { text: '', async writeText(text) { this.text = text } }
+  const context = vm.createContext({ document, chrome, URL, navigator: { clipboard }, crypto: webcrypto, setTimeout: () => 1, clearTimeout() {}, setInterval: fn => intervals.push(fn), console })
   vm.runInContext(fs.readFileSync(require.resolve('../popup.js'), 'utf8'), context)
-  return { context, calls, document, get: id => document.getElementById(id), click: id => document.getElementById(id).listeners.click(), poll: () => intervals[0]() }
+  return { context, calls, document, clipboard, get: id => document.getElementById(id), click: id => document.getElementById(id).listeners.click(), poll: () => intervals[0]() }
 }
 
 test('locks Study Start before the permission prompt resolves', async () => {
@@ -148,4 +149,14 @@ test('manual capture gives immediate progress while the backend is responding', 
   assert.equal(p.get('study-now').disabled, true)
   capture.resolve({})
   await request
+})
+
+test('copy diagnostics exports capture logs without requesting page content', async () => {
+  const entries = [{ at: '2026-10-25T08:00:00.000Z', event: 'heartbeat_received', tabId: 1 }]
+  const p = popup({ send: async msg => msg.type === 'popup:state' ? fixture() : msg.type === 'popup:study-logs' ? { logs: entries } : {} })
+  await tick()
+  await p.click('study-copy-logs')
+  assert.match(p.clipboard.text, /heartbeat_received/)
+  assert.match(p.clipboard.text, /exportedAt/)
+  assert.match(p.get('message').textContent, /Copied 1 capture diagnostic entries/)
 })
