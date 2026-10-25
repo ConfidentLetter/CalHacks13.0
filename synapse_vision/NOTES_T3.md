@@ -1,10 +1,11 @@
 # NOTES_T3 — Transcribe
 
-**Done:** Steps 1–5 + relays H+2/H+5/H+6/H+7. **H+7 latency root cause found and fixed: the 8 few-shot example *images* in every call's message history.** Same 420-token line-pass call: 8–35 s with the image prefix (even on cache hits), 1.8–3 s without. Examples are now text in the system prompt (same verbatim bank, zero image cost); structured output (+1.2 s/call) is off by default (validator + 1 retry guarantees the JSON shape). Demo page fresh snapshot→twin **11.1 s** (was 39–65 s), one-line incremental **2.6 s**, unchanged 0.3 s. 86 tests.
-**Next:** real pages in `eval/testset/` → T4 eval; replace synthetic example text/crops with real ones; watch `runtime/debug/verbatim_guard.jsonl`.
+**Done:** Steps 1–5 + relays through H+15. Phone/hand-held photos: when T1 says no_page, a frame-filling sheet is flattened with T1's quad (edge check relaxed) + T1 dewarp, then read once per line (no page pass/re-read; conf capped 0.4); otherwise loose crop → page pass. Phone still 20261025T162059: 10.9 s live /upload, 31 lines, real boxes (was >60 s). 95 tests.
+**Next:** real pages in eval; replace face fixture handheld_sheet_800.jpg if Henry asks (repo is public).
 **Blocked:** nothing.
 
 ## For other terminals
+- **T2:** `is_raw_photo` passes portrait phone frames (1080x1920) as if they were pages; T3 now flattens no_page frames first, but T2 segmenting raw portrait frames still yields scraps.
 - **T4:** `build_page_twin` is real now. Lines carry extra keys beyond the schema for the viewer: `crop_path`, `context_crop_path`, `crop_hash`, `status_hint`, `ink_density`, and `readings` = `{line, page, reread, notes, cached}` (both raw readings + which path decided). `latency_ms` has `page, layout, transcribe, total`. Telemetry stages: `transcribe.page`, `transcribe.page_pass`, `transcribe.line_pass`, `transcribe.reread`, `transcribe.crossed_out`, `transcribe.build`, `transcribe.build.{page,layout,transcribe}`. Each model-call record has `cache_read`/`cache_write` token counts.
 - **T4 (reply to H+2 relay):** done — `latency_ms.snapshot_to_twin` is set in the twin (equals `latency_ms.total`); incremental reads log under stage `transcribe.incremental` (`new_lines`, `rereads`, `page_pass`); every line now carries `crop_path`, `context_crop_path`, `readings`, `reread` (top-level, with `zoom_path` and `candidates` A/B) and `latency_ms` (`page_pass`, `line_pass`, `reread`, `crossed_out` per call). All paths are repo-relative (`runtime/crops/...`, `runtime/debug/zoom/...`).
 - **T1 (reply H+5):** confirmed — `synthetic_demo.jpg` now gives `quality.ok=True, issues=[]`; no confidence cap; demo twin lines at 0.92 except the flagged one.
@@ -35,6 +36,7 @@
 - Structured outputs are on (`output_config.format`); the API prefix cache is per call kind (line/page/reread/crossed-out), so the first call of each kind after a restart pays a cache write.
 
 ## Log
+- H+15: edge-page flattening before T2 for no_page frames + single_read mode; phone still 10.9 s; fallthrough test; phone fixture.
 - H+7: latency root cause = image few-shot prefix; examples → text; structured off; demo page 11.1 s fresh / 2.6 s incremental. 86 tests.
 - H+7: T5 relay — `build_page_twin` never raises (`_error` twin), path normalization, latency table for T5; mixed-line rule: when both passes agree on the prose but extract different math, the extraction that occurs contiguously in the prose wins without a re-read (the zoomed re-read was guessing on prose lines). 85 tests.
 - H+6: H+5 relay adapted — strict latex agreement (prime misread), three-way re-read rule, `parse_ok` on continuation lines, SDK timeout, test + NOTES cleanup; 79 tests / 224 repo-wide. Live demo page correct but 51 s under current API latency.
