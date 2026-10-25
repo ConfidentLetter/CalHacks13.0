@@ -1,11 +1,12 @@
 const EXPLICIT_MATH = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\\)\$(?!\s)[^$\n]+?\$)/g
-const MATH_TERM = String.raw`(?:\\[A-Za-z]+(?:\{[^{}]*\})*|(?:Σ|∑)?(?:\d+(?:\.\d+)?)?[A-Za-zΑ-Ωα-ω](?:[A-Za-z0-9Α-Ωα-ω]*)(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))?|\d+(?:\.\d+)?)`
+const FUNCTION_TERM = String.raw`(?:sin|cos|tan|log|ln)\s+[A-Za-zΑ-Ωα-ω](?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))?`
+const MATH_TERM = String.raw`(?:${FUNCTION_TERM}|(?:sqrt|sin|cos|tan|log|ln)\([^()\n]*\)|[A-Za-z](?:'+)?\([^()\n]*\)|\([^()\n]+\)|\\[A-Za-z]+(?:\{[^{}]*\})*|(?:Σ|∑)?(?:\d+(?:\.\d+)?)?[A-Za-zΑ-Ωα-ω](?:[A-Za-z0-9Α-Ωα-ω]*)(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))?|\d+(?:\.\d+)?)`
 const EQUATION = new RegExp(
   `${MATH_TERM}(?:\\s*(?:=|<=|>=|≤|≥|≠|<|>|[+\\-×÷*/])\\s*${MATH_TERM})+`,
 )
 const LATEX_COMMAND = String.raw`\\(?:frac|sqrt|sum|prod|int|lim|sin|cos|tan|log|ln|pi|theta|alpha|beta|gamma|delta|Delta|cdot|times|leq|geq|neq|approx|infty|pm|partial|nabla|dots|ldots|overline|mathbf|mathrm|text)\b(?:\{[^{}]*\})*(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))*`
 const MATH_ATOM = String.raw`(?:[A-Za-zΑ-Ωα-ω](?:[_^](?:\{[^{}]*\}|[A-Za-z0-9+-]+))|[A-Za-z]\d+[A-Za-z])`
-const INLINE_MATH = new RegExp(`${EQUATION.source}|${LATEX_COMMAND}|${MATH_ATOM}`, 'g')
+const INLINE_MATH = new RegExp(`${EQUATION.source}|${LATEX_COMMAND}|${MATH_ATOM}|${FUNCTION_TERM}|(?:sqrt|sin|cos|tan|log|ln|[A-Za-z])\\([^()\\n]*\\)`, 'g')
 const FORMULA_LINE = /^[A-Za-zΑ-Ωα-ω0-9\s\\{}()[\].,=<>_^+\-*/×÷%|Σ∑−≤≥≠₀-₉ₓ]+$/
 const LATEX_WORDS = new Set(['frac', 'sqrt', 'sum', 'prod', 'int', 'lim', 'sin', 'cos', 'tan', 'log', 'ln', 'mu', 'leq', 'geq', 'neq', 'times', 'div'])
 
@@ -23,6 +24,14 @@ const GREEK_COMMANDS = {
 
 function normalizeMath(value) {
   return value
+    .replace(/(?<![A-Za-z\\])sqrt\(([^()]*)\)/g, String.raw`\sqrt{$1}`)
+    .replace(/(?<![A-Za-z\\])(sin|cos|tan|log|ln)\b\s*/g, String.raw`\$1 `)
+    .replace(/_([A-Za-z0-9]{2,})/g, '_{$1}')
+    .replace(/(?<!\\)%/g, String.raw`\%`)
+    .replace(/√/g, String.raw`\surd`)
+    .replace(/∞/g, String.raw`\infty`)
+    .replace(/≈/g, String.raw`\approx`)
+    .replace(/±/g, String.raw`\pm`)
     .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
     .replace(/[₀-₉ₓ]+/g, (chars) => `_{${[...chars].map((char) => SUBSCRIPT_CHARS[char]).join('')}}`)
     .replace(/Σ(?=[A-Za-z])/g, String.raw`\sum `)
@@ -38,8 +47,9 @@ function normalizeMath(value) {
 
 // A run of 2+ letters is prose unless it is a LaTeX command, a known function name, or a differential (dx, dt).
 function containsProse(value) {
+  value = value.replace(/\\(?:text|mathrm|mathbf|operatorname)\{[^{}]*\}/g, '')
   for (const { 0: word, index } of value.matchAll(/[A-Za-z]{2,}/g)) {
-    if (value[index - 1] === '\\') continue
+    if (value[index - 1] === '\\' || value[index - 1] === '_' || /^[A-Z]+$/.test(word)) continue
     if (LATEX_WORDS.has(word) || /^d[a-z]$/.test(word)) continue
     return true
   }
@@ -102,7 +112,26 @@ function explicitMathToken(value) {
   return { type: 'math', value: value.slice(1, -1), display: false }
 }
 
+
+// Render numeric and symbolic fragments left in prose after extracting full expressions.
+// URLs and ordinary words are kept intact; source text itself is never rewritten.
+const PROSE_ATOM = /https?:\/\/[^\s]+|(?<![\p{L}\p{N}_'’])(?:\d+(?:st|nd|rd|th)|\d+(?:,\d{3})*(?:\.\d+)?(?:ms|min|kg|cm|mm|Hz|s|h|m|N|J|W|%|°)?|[b-hj-zB-HJ-Z])(?=$|[^\p{L}\p{N}_])|[Α-Ωα-ω∞≈±≤≥≠×÷∑∫∂∇√+=<>]/gu
+function renderProseAtoms(value) {
+  const tokens = []
+  let last = 0
+  for (const match of value.matchAll(PROSE_ATOM)) {
+    if (match[0].startsWith('http')) continue
+    if (match.index > last) tokens.push({ type: 'text', value: value.slice(last, match.index) })
+    const math = normalizeMath(match[0]).replace(/^(\d+(?:\.\d+)?)(ms|min|kg|cm|mm|Hz|s|h|m|N|J|W)$/, String.raw`$1\,\mathrm{$2}`).replace(/^(\d+)(st|nd|rd|th)$/, String.raw`$1\mathrm{$2}`).replace(/°/g, String.raw`^{\circ}`)
+    tokens.push({ type: 'math', value: math, display: false })
+    last = match.index + match[0].length
+  }
+  if (last < value.length) tokens.push({ type: 'text', value: value.slice(last) })
+  return tokens
+}
+
 export function parseMathText(value) {
+  value = value == null ? '' : String(value)
   const tokens = []
   let lastIndex = 0
 
@@ -114,5 +143,5 @@ export function parseMathText(value) {
   }
 
   if (lastIndex < value.length) tokens.push(...parsePlainText(value.slice(lastIndex)))
-  return tokens
+  return tokens.flatMap(token => token.type === 'text' ? renderProseAtoms(token.value) : [token])
 }

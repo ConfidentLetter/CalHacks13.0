@@ -1,3 +1,4 @@
+import { MathText } from '../shared/MathTextRenderer'
 import { Badge } from '../ui/Badge'
 import { cx } from '../../utils/format'
 import { readInSeconds } from './twinModel'
@@ -15,7 +16,7 @@ export function SummaryStrip({ model, className }) {
               {analysisFailed && !counts.total
                 ? 'nothing readable'
                 : counts.errors
-                  ? `${counts.errors} error${counts.errors > 1 ? 's' : ''} caught`
+                  ? <MathText>{`${counts.errors} error${counts.errors > 1 ? 's' : ''} caught`}</MathText>
                   : 'no errors caught'}
             </Badge>
           )}
@@ -28,7 +29,7 @@ export function SummaryStrip({ model, className }) {
       )}
 
       {summary ? (
-        <p className="text-[15px] leading-relaxed text-olive">{summary}</p>
+        <p className="text-[15px] leading-relaxed text-olive"><MathText>{summary}</MathText></p>
       ) : (
         <p className="text-[15px] leading-relaxed text-olive/65">
           transcribed only — press <strong className="text-olive">Analyze my page</strong> and Pip will check each line.
@@ -44,7 +45,7 @@ export function SummaryStrip({ model, className }) {
             {hints.map((h, i) => (
               <li key={i} className="flex gap-2">
                 <span aria-hidden="true">→</span>
-                <span>{h}</span>
+                <span><MathText>{h}</MathText></span>
               </li>
             ))}
           </ul>
@@ -52,9 +53,9 @@ export function SummaryStrip({ model, className }) {
       )}
 
       <p className="text-[13px] text-olive/55 tabular-nums">
-        {secs ? `read in ${secs} s` : 'latency unknown'} · {counts.total} line{counts.total === 1 ? '' : 's'}
-        {counts.crossed ? ` · ${counts.crossed} crossed out` : ''}
-        {counts.illegible ? ` · ${counts.illegible} illegible` : ''}
+        <MathText>{secs ? `read in ${secs} s` : 'latency unknown'}</MathText> · <MathText>{counts.total}</MathText> line{counts.total === 1 ? '' : 's'}
+        {counts.crossed ? <MathText>{` · ${counts.crossed} crossed out`}</MathText> : ''}
+        {counts.illegible ? <MathText>{` · ${counts.illegible} illegible`}</MathText> : ''}
         {model.quality && model.quality.ok === false && model.quality.issues?.length ? ` · page quality: ${model.quality.issues.join(', ')}` : ''}
       </p>
     </div>

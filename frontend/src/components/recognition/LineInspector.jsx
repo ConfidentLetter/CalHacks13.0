@@ -1,3 +1,4 @@
+import { MathText } from '../shared/MathTextRenderer'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '../ui/Button'
@@ -111,7 +112,7 @@ export function LineInspector({ line, total, onClose, onStep }) {
         <div className="space-y-6 overflow-y-auto px-5 py-5">
           <section>
             <Label>as written</Label>
-            <div className={cx('ruled mt-2 min-h-14 border border-olive/30 bg-white px-3 py-3 text-xl leading-9', tone === 'crossed' && 'opacity-80')}>
+            <div className={cx('mt-2 min-h-14 border border-olive/30 bg-white px-3 py-3 text-xl leading-9', tone === 'crossed' && 'opacity-80')}>
               {line.label ? (
                 <span className={cx(tone === 'crossed' && 'struck inline-block pr-1')}>
                   <Latex value={line.label} kind={line.kind} />
@@ -120,7 +121,7 @@ export function LineInspector({ line, total, onClose, onStep }) {
                 <span className="text-sm text-olive/40 italic">illegible — nothing transcribed</span>
               )}
             </div>
-            {line.note && <p className={cx('mt-2 text-[15px] leading-relaxed', tone === 'error' ? 'text-ink-red' : 'text-olive/75')}>{line.note}</p>}
+            {line.note && <p className={cx('mt-2 text-[15px] leading-relaxed', tone === 'error' ? 'text-ink-red' : 'text-olive/75')}><MathText>{line.note}</MathText></p>}
           </section>
 
           {(line.cropUrl || line.contextCropUrl) && (
@@ -149,7 +150,7 @@ export function LineInspector({ line, total, onClose, onStep }) {
               <Reading name="line pass" value={r.line} kind={line.kind} />
               {(r.reread != null || line.reread) && <Reading name="re-read" value={r.reread ?? line.reread?.reading ?? null} kind={line.kind} />}
             </div>
-            {r.notes?.length > 0 && <p className="mt-1 text-[12px] text-olive/50">{r.notes.join(' · ')}</p>}
+            {r.notes?.length > 0 && <p className="mt-1 text-[12px] text-olive/50"><MathText>{r.notes.join(' · ')}</MathText></p>}
           </section>
 
           {line.reread && (line.reread.zoomUrl || line.reread.candidates.length > 0) && (

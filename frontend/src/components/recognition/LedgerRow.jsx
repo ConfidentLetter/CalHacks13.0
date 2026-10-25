@@ -1,3 +1,4 @@
+import { MathText } from '../shared/MathTextRenderer'
 import { useEffect, useRef } from 'react'
 import { cx } from '../../utils/format'
 import { Latex } from './Latex'
@@ -32,7 +33,7 @@ export function LedgerRow({ line, selected, hovered, onSelect, onHover }) {
         aria-pressed={selected}
         className="grid w-full grid-cols-[2.25rem_1fr_auto] items-start gap-x-3 px-3 py-2.5 text-left outline-none focus-visible:bg-butter/40"
       >
-        <span className="pt-1 font-display text-[17px] leading-none text-olive/55 tabular-nums">{String(line.order).padStart(2, '0')}</span>
+        <span className="pt-1 font-display text-[17px] leading-none text-olive/55 tabular-nums"><MathText>{String(line.order).padStart(2, '0')}</MathText></span>
         <span className="min-w-0">
           <span className={cx('block min-h-7 leading-7 text-olive', tone === 'crossed' && 'struck inline-block pr-1 opacity-80')}>
             {empty ? (
@@ -42,7 +43,7 @@ export function LedgerRow({ line, selected, hovered, onSelect, onHover }) {
             )}
           </span>
           {line.note && line.note.trim().toLowerCase() !== 'crossed out' && (
-            <span className={cx('mt-1 block text-[14px] leading-relaxed', tone === 'error' ? 'text-ink-red' : 'text-olive/70')}>{line.note}</span>
+            <span className={cx('mt-1 block text-[14px] leading-relaxed', tone === 'error' ? 'text-ink-red' : 'text-olive/70')}><MathText>{line.note}</MathText></span>
           )}
         </span>
         <span className="flex flex-col items-end gap-1.5 pt-0.5">

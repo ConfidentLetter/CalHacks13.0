@@ -1,3 +1,4 @@
+import { MathText } from '../components/shared/MathTextRenderer'
 import { useState } from 'react'
 import { useApp, useCamera, useStudyData } from '../context/contexts'
 import { Button } from '../components/ui/Button'
@@ -26,7 +27,7 @@ const today = () =>
 function Eyebrow({ n, children, className }) {
   return (
     <p className={cx('flex items-center gap-2 text-[11px] font-bold tracking-[0.18em] text-olive/60 uppercase', className)}>
-      {n && <span className="font-display text-sm tracking-normal text-olive">{n}</span>}
+      {n && <span className="font-display text-sm tracking-normal text-olive"><MathText>{n}</MathText></span>}
       {n && <span aria-hidden="true">—</span>}
       {children}
     </p>
@@ -71,7 +72,7 @@ function Welcome() {
           {stats.map(([label, value]) => (
             <div key={label}>
               <dt className="text-[11px] font-semibold tracking-wide text-olive/55 uppercase">{label}</dt>
-              <dd className="font-display text-3xl text-olive tabular-nums">{value}</dd>
+              <dd className="font-display text-3xl text-olive tabular-nums"><MathText>{value}</MathText></dd>
             </div>
           ))}
         </dl>
@@ -163,7 +164,7 @@ function StatusLedger() {
             <dt className="text-[11px] font-semibold tracking-wide text-olive/55 uppercase">{r.label}</dt>
             <dd className="truncate text-sm text-olive">
               {r.value}
-              {r.note && <span className="text-olive/55"> · {r.note}</span>}
+              {r.note && <span className="text-olive/55"> · <MathText>{r.note}</MathText></span>}
             </dd>
           </div>
           <button
@@ -252,14 +253,14 @@ function Notebook() {
                   <span className="font-semibold text-olive">
                     notes on the page from {formatClock(recognition.capturedAt)} —{' '}
                   </span>
-                  {recognition.summary}
+                  <MathText>{recognition.summary}</MathText>
                 </>
               ) : recognition ? (
-                `${recognition.counts.total} lines read from the page at ${formatClock(recognition.capturedAt)} — open the notebook to have Pip check them.`
+                <MathText>{`${recognition.counts.total} lines read from the page at ${formatClock(recognition.capturedAt)} — open the notebook to have Pip check them.`}</MathText>
               ) : analysis.data ? (
-                analysis.data.summary
+                <MathText>{analysis.data.summary}</MathText>
               ) : lastFrame ? (
-                `Pip last looked at a still from ${formatClock(lastFrame.capturedAt)}.`
+                <MathText>{`Pip last looked at a still from ${formatClock(lastFrame.capturedAt)}.`}</MathText>
               ) : (
                 'the preview is just for you. Pip only sees a single still when you ask a question or press Analyze.'
               )}
@@ -294,9 +295,9 @@ function Journal() {
               key={e.id}
             >
               <a href={savedConversationLink(e)} className={journalLinkClass} aria-label={`Open conversation: ${e.title}`}>
-              <span className="font-display text-sm text-olive/50 tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+              <span className="font-display text-sm text-olive/50 tabular-nums"><MathText>{String(i + 1).padStart(2, '0')}</MathText></span>
               <div className="min-w-0">
-                <p className="truncate text-sm text-olive">{e.title}</p>
+                <p className="truncate text-sm text-olive"><MathText>{e.title}</MathText></p>
                 <p className="truncate text-xs text-olive/55">
                   {e.type === 'reading' ? `${domainOf(e.detail)} · read ${formatDuration(e.durationSec)}` : e.detail}
                 </p>
@@ -353,7 +354,7 @@ function ReadingList() {
                 aria-label={`Open conversation: ${r.title}`}
                 className={journalLinkClass}
               >
-                <span className="font-display text-sm text-olive/50 tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+                <span className="font-display text-sm text-olive/50 tabular-nums"><MathText>{String(i + 1).padStart(2, '0')}</MathText></span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-olive group-hover:underline group-hover:underline-offset-4">
                     {r.title}

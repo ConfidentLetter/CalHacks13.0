@@ -1,3 +1,4 @@
+import { MathText } from '../components/shared/MathTextRenderer'
 import { useMemo, useState } from 'react'
 import { useApp, useStudyData } from '../context/contexts'
 import { Card } from '../components/ui/Card'
@@ -48,7 +49,7 @@ function ReadingDetail({ record, onDelete, onClose }) {
     <div className="animate-fade-up space-y-5 p-5">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-base leading-snug font-semibold text-olive">{record.title}</h3>
+          <h3 className="text-base leading-snug font-semibold text-olive"><MathText>{record.title}</MathText></h3>
           <a
             href={record.url}
             target="_blank"
@@ -81,7 +82,7 @@ function ReadingDetail({ record, onDelete, onClose }) {
         </div>
         {record.excerpt ? (
           <p className="max-h-64 overflow-y-auto rounded-sm border border-olive/8 bg-paper p-4 text-sm leading-relaxed whitespace-pre-line text-olive/80">
-            {record.excerpt}
+            <MathText>{record.excerpt}</MathText>
           </p>
         ) : (
           <p className="rounded-sm border border-dashed border-olive/20 p-4 text-xs leading-relaxed text-olive/55">
@@ -349,10 +350,10 @@ export function ReadingMemory() {
                           {domainOf(r.url)}
                           {newIds.has(r.id) && <span className="ml-2 bg-butter px-1 text-olive">new</span>}
                         </p>
-                        <p className="mt-0.5 line-clamp-2 font-display text-base leading-snug text-olive">{r.title}</p>
+                        <p className="mt-0.5 line-clamp-2 font-display text-base leading-snug text-olive"><MathText>{r.title}</MathText></p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="font-display text-lg leading-none text-olive tabular-nums">{formatDuration(r.durationSec)}</p>
+                        <p className="font-display text-lg leading-none text-olive tabular-nums"><MathText>{formatDuration(r.durationSec)}</MathText></p>
                         <p className="mt-1 text-[11px] text-olive/55">{timeAgo(r.timestamp, now)}</p>
                       </div>
                     </button>

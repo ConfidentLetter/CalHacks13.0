@@ -1,3 +1,4 @@
+import { MathContent } from '../shared/MathTextRenderer'
 import { Loader2 } from 'lucide-react'
 import { cx } from '../../utils/format'
 
@@ -43,7 +44,7 @@ export function Button({
       {...rest}
     >
       {loading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-      {children ?? rest['aria-label']}
+      <MathContent>{children ?? rest['aria-label']}</MathContent>
     </button>
   )
 }

@@ -1,3 +1,4 @@
+import { MathText } from '../shared/MathTextRenderer'
 import { cx } from '../../utils/format'
 
 const BAR = {
@@ -23,7 +24,7 @@ export function ConfidenceMeter({ value, tone = 'read', className }) {
       <span className="relative h-1.5 w-16 overflow-hidden rounded-full bg-olive/12">
         <span className={cx('absolute inset-y-0 left-0 rounded-full', BAR[tone] || BAR.read)} style={{ width: `${v * 100}%` }} />
       </span>
-      <span className="font-display text-[15px] text-olive tabular-nums">{v.toFixed(2).replace(/^0/, '')}</span>
+      <span className="font-display text-[15px] text-olive tabular-nums"><MathText>{v.toFixed(2)}</MathText></span>
     </span>
   )
 }

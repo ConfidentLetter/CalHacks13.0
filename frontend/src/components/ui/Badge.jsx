@@ -1,3 +1,4 @@
+import { MathContent } from '../shared/MathTextRenderer'
 import { cx } from '../../utils/format'
 
 const TONES = {
@@ -18,7 +19,7 @@ export function Badge({ tone = 'neutral', icon: _icon, className, children }) {
         className,
       )}
     >
-      {children}
+      <MathContent>{children}</MathContent>
     </span>
   )
 }

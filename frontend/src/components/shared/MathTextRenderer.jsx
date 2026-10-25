@@ -1,3 +1,4 @@
+import { Children } from 'react'
 import { Latex } from '../recognition/Latex'
 import { parseMathText } from './mathTextParser'
 
@@ -11,4 +12,11 @@ export function MathText({ children }) {
           : <span key={`${index}-${partIndex}`}>{part}</span>,
       ),
   )
+}
+
+
+export function MathContent({ children }) {
+  return Children.map(children, (child) => typeof child === 'string' || typeof child === 'number'
+    ? <MathText>{child}</MathText>
+    : child)
 }

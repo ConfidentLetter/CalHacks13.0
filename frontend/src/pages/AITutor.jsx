@@ -52,7 +52,7 @@ function SourceChip({ source, onOpenSnapshot }) {
         rel="noreferrer noopener"
         className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-sage-deep bg-sage/50 px-2.5 py-1 text-xs text-sage-ink transition hover:bg-sage/50"
       >
-        <span className="truncate">{source.title}</span>
+        <span className="truncate"><MathText>{source.title}</MathText></span>
       </a>
     )
   }
@@ -62,7 +62,7 @@ function SourceChip({ source, onOpenSnapshot }) {
       onClick={() => onOpenSnapshot(source)}
       className="inline-flex items-center gap-1.5 rounded-lg border border-butter-deep bg-butter/50 px-2.5 py-1 text-xs text-honey transition hover:bg-butter/50"
     >
-      {source.title || 'Notebook snapshot'}
+      <MathText>{source.title || 'Notebook snapshot'}</MathText>
       {source.capturedAt && <span className="text-honey/60">· {formatClock(source.capturedAt)}</span>}
     </button>
   )

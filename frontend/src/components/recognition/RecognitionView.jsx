@@ -7,6 +7,7 @@ import { PageTwin } from './PageTwin'
 import { LineLedger } from './LineLedger'
 import { LineInspector } from './LineInspector'
 import { SummaryStrip } from './SummaryStrip'
+import { MathText } from '../shared/MathTextRenderer'
 import { inkRegion } from './twinModel'
 
 const SLOW_AFTER_MS = 20_000
@@ -15,7 +16,7 @@ const BUDGET_S = 60
 function Eyebrow({ n, children, className }) {
   return (
     <p className={cx('flex items-center gap-2 text-[11px] font-bold tracking-[0.18em] text-olive/60 uppercase', className)}>
-      {n && <span className="font-display text-sm tracking-normal text-olive">{n}</span>}
+      {n && <span className="font-display text-sm tracking-normal text-olive"><MathText>{n}</MathText></span>}
       {n && <span aria-hidden="true">—</span>}
       {children}
     </p>
@@ -34,7 +35,7 @@ function ReadingSkeleton({ startedAt }) {
           <div key={i} className="ink-fill mt-9 first:mt-3" style={{ width: `${[72, 58, 40, 64, 30, 52][i]}%`, animationDelay: `${i * 0.25}s` }} />
         ))}
         <p className="absolute right-4 bottom-3 text-[13px] text-olive/55 tabular-nums">
-          {slow ? `still reading your page… ${elapsed} s of a ${BUDGET_S} s budget` : `reading your page… ${elapsed} s`}
+          <MathText>{slow ? `still reading your page… ${elapsed} s of a ${BUDGET_S} s budget` : `reading your page… ${elapsed} s`}</MathText>
         </p>
       </div>
       <div className="space-y-3 pt-1">
@@ -52,7 +53,7 @@ function ReadingSkeleton({ startedAt }) {
 function EmptyPage({ copy }) {
   return (
     <div className="ruled-lg relative grid min-h-[320px] place-items-center border border-dashed border-sage-deep bg-white p-8 text-center">
-      <p className="max-w-md text-[15px] leading-relaxed text-olive/70">{copy}</p>
+      <p className="max-w-md bg-white px-5 py-3 text-[15px] leading-7 text-balance text-olive/70"><MathText>{copy}</MathText></p>
     </div>
   )
 }
