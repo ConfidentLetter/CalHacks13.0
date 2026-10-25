@@ -208,7 +208,7 @@ function frameBody(frame) {
 /** POST /api/camera/analyze { image } — analyze one still grabbed from the live camera. */
 export function analyzeFrame(frame) {
   return call('POST /api/camera/analyze', () =>
-    http('POST', '/api/camera/analyze', { image: frameBody(frame) }, { timeoutMs: 60_000 }),
+    http('POST', '/api/camera/analyze', { image: frameBody(frame) }, { timeoutMs: 110_000 }),
   )
 }
 

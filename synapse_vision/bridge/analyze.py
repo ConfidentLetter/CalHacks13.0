@@ -8,8 +8,8 @@ from typing import Any
 from bridge import images, tutor
 from bridge.compat import cfg, file_url, log, now_iso
 
-DEFAULT_PIPELINE_TIMEOUT_S = 45.0
-DEFAULT_TOTAL_BUDGET_S = 58.0  # the UI gives up at 60 s
+DEFAULT_PIPELINE_TIMEOUT_S = 80.0  # dense phone pages (84 lines) need ~45-60 s
+DEFAULT_TOTAL_BUDGET_S = 95.0  # under Cloudflare's 100 s origin timeout; the UI gives up at 110 s
 
 
 class ResolveError(ValueError):
