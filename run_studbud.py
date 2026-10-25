@@ -28,7 +28,7 @@ def configure_environment(root=ROOT):
     # The browser owns the camera, including the iPhone. Never probe or open a Pi.
     os.environ['SV_SOURCE'] = 'upload'
     os.environ['SV_CAMERA_PROBE'] = '0'
-    os.environ['SV_STT'] = '0'
+    os.environ['SV_STT'] = os.getenv('SV_STT', '1')
 
 
 def frontend(port):

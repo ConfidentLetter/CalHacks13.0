@@ -3,6 +3,7 @@ import { useApp, useCamera } from '../../context/contexts'
 import { useVoiceTutor } from '../../hooks/useVoiceTutor'
 import { MAX_RECORDING_SEC } from '../../hooks/useRecorder'
 import { Button } from '../ui/Button'
+import { MathText } from './MathTextRenderer'
 import { Toggle } from '../ui/Controls'
 import { PipPet } from './PipPet'
 import { cx, formatClock } from '../../utils/format'
@@ -16,7 +17,7 @@ const STEPS = [
 ]
 const ANNOUNCE = {
   ready: 'Pip is ready.',
-  listening: 'Listening. Release to send.',
+  listening: 'Listening. Speak your question, then click Done or pause to send.',
   sending: 'Sending your question to Pip.',
   thinking: 'Pip is thinking.',
   speaking: 'Pip is speaking.',
@@ -31,35 +32,27 @@ export function VoicePanel() {
 
   const listening = v.status === 'listening'
   const busy = v.status === 'sending' || v.status === 'thinking'
-  const holdDisabled = busy || !v.micSupported
+  const talkDisabled = busy || !v.micSupported
 
-  const keyIsTalk = (e) => e.key === ' ' || e.key === 'Enter'
-  const holdHandlers = {
-    onPointerDown: (e) => {
-      if (e.button !== 0 || holdDisabled) return
-      e.preventDefault()
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId) // keep receiving pointerup even if the finger slides off
-      } catch {
-        /* unusual pointer id — recording still works */
-      }
+  const toggleTalking = () => {
+    if (talkDisabled) return
+    if (listening) {
+      v.stopTalking()
+    } else {
       v.startTalking()
-    },
-    onPointerUp: () => v.stopTalking(),
-    onPointerCancel: () => v.cancelRecording(),
-    onKeyDown: (e) => {
-      if (keyIsTalk(e)) {
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault()
+      toggleTalking()
+    } else if (e.key === 'Escape') {
+      if (listening) {
         e.preventDefault()
-        if (!e.repeat && !holdDisabled) v.startTalking()
-      } else if (e.key === 'Escape') v.cancelRecording()
-    },
-    onKeyUp: (e) => {
-      if (keyIsTalk(e)) {
-        e.preventDefault()
-        v.stopTalking()
+        v.cancelRecording()
       }
-    },
-    onContextMenu: (e) => e.preventDefault(),
+    }
   }
 
   const submitTyped = async (e) => {
@@ -102,36 +95,42 @@ export function VoicePanel() {
         </p>
       )}
 
-      {/* hold to talk */}
+      {/* talk to Pip */}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          {...holdHandlers}
-          disabled={holdDisabled}
+          onClick={toggleTalking}
+          onKeyDown={handleKeyDown}
+          disabled={talkDisabled}
           aria-pressed={listening}
-          aria-describedby="hold-hint"
+          aria-describedby="talk-hint"
           className={cx(
-            'flex h-14 min-w-56 flex-1 touch-none items-center justify-center gap-3 border-2 border-olive px-5 font-display text-lg text-olive transition select-none sm:flex-none',
+            'flex h-14 min-w-56 flex-1 items-center justify-center gap-3 border-2 border-olive px-5 font-display text-lg text-olive transition select-none sm:flex-none cursor-pointer',
             listening ? 'translate-y-px bg-clay/15 shadow-none' : 'bg-butter shadow-[4px_4px_0_0_var(--color-olive)] hover:bg-[#fbeab0]',
-            holdDisabled && 'opacity-50',
+            talkDisabled && 'opacity-50 cursor-not-allowed',
           )}
         >
           {listening ? (
             <>
               <span className="size-3 animate-pulse rounded-full bg-clay" aria-hidden="true" />
               <span className="tabular-nums">
-                Release to send · {fmt(v.elapsed)} / {fmt(MAX_RECORDING_SEC)}
+                Done talking · {fmt(v.elapsed)} / {fmt(MAX_RECORDING_SEC)}
               </span>
             </>
           ) : (
             <>
-              {v.requestingMic ? 'Allow the mic…' : busy ? 'Pip is busy…' : 'Hold to talk'}
+              {v.requestingMic ? 'Allow the mic…' : busy ? 'Pip is busy…' : 'Talk to Pip'}
             </>
           )}
         </button>
         {listening && (
+          <Button variant="secondary" onClick={v.stopTalking}>
+            Send question
+          </Button>
+        )}
+        {listening && (
           <Button variant="ghost" onClick={v.cancelRecording}>
-            Cancel recording
+            Cancel
           </Button>
         )}
         {busy && (
@@ -140,9 +139,8 @@ export function VoicePanel() {
           </Button>
         )}
       </div>
-      <p id="hold-hint" className="-mt-1 text-[11px] text-olive/60">
-        Hold with mouse or finger, or hold Space / Enter. Esc cancels. Up to {MAX_RECORDING_SEC}s. The mic is only on while
-        you hold.
+      <p id="talk-hint" className="-mt-1 text-[11px] text-olive/60">
+        Click to talk, then click Done or pause when finished to send. Esc cancels. Up to {MAX_RECORDING_SEC}s.
       </p>
 
       {/* attached still */}
@@ -191,7 +189,7 @@ export function VoicePanel() {
             <p className="text-[10px] font-bold tracking-[0.18em] text-olive/55 uppercase">
               pip says{v.turn.simulated && <span className="ml-2 bg-butter px-1 text-olive">simulated</span>}
             </p>
-            <p className="text-sm leading-7 text-olive">{v.turn.replyText}</p>
+            <p className="text-sm leading-7 text-olive"><MathText>{v.turn.replyText}</MathText></p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {v.needsPlay && (

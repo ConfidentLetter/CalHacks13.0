@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button'
 import { Toggle } from '../components/ui/Controls'
 import { EmptyState, LoadingDots } from '../components/ui/Feedback'
 import { ConfirmDialog, Modal } from '../components/ui/Modal'
+import { MathText } from '../components/shared/MathTextRenderer'
 import * as api from '../services/api'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { cx, formatClock, uid } from '../utils/format'
@@ -88,7 +89,7 @@ function Message({ m, onRetry, onOpenSnapshot }) {
         >
           {m.content.split(/\n{2,}/).map((p, i) => (
             <p key={i} className={cx('whitespace-pre-line', i > 0 && 'mt-3')}>
-              {p}
+              <MathText>{p}</MathText>
             </p>
           ))}
           {isError && onRetry && (

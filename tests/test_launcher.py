@@ -18,6 +18,15 @@ def test_launcher_loads_parent_env_alias_and_uses_browser_capture(tmp_path):
         assert os.environ['ANTHROPIC_API_KEY'] == 'placeholder-for-test'
         assert os.environ['SV_SOURCE'] == 'upload'
         assert os.environ['SV_CAMERA_PROBE'] == '0'
+        assert os.environ['SV_STT'] == '1'
+
+
+def test_launcher_respects_explicit_speech_transcription_disable(tmp_path):
+    spec = importlib.util.spec_from_file_location('launcher_stt', ROOT / 'run_studbud.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with patch.dict(os.environ, {'SV_STT': '0'}, clear=True):
+        module.configure_environment(tmp_path)
         assert os.environ['SV_STT'] == '0'
 
 

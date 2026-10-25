@@ -49,7 +49,7 @@ export function useVoiceTutor({ apiBaseUrl, demo, camera }) {
   const speakDemo = useCallback((text) => {
     const synth = window.speechSynthesis
     if (!synth) {
-      setAudioError('This browser has no speech synthesis, so the demo reply is text only.')
+      setAudioError('This browser has no speech synthesis, so Pip’s reply is text only.')
       return
     }
     synth.cancel()
@@ -91,8 +91,8 @@ export function useVoiceTutor({ apiBaseUrl, demo, camera }) {
   )
 
   const replay = useCallback(() => {
-    if (turn?.demoAudio) speakDemo(turn.replyText)
-    else play()
+    if (turn?.audioUrl) play()
+    else if (turn?.replyText) speakDemo(turn.replyText)
   }, [turn, speakDemo, play])
 
   // ---- requests -----------------------------------------------------------------
@@ -125,7 +125,7 @@ export function useVoiceTutor({ apiBaseUrl, demo, camera }) {
         })
         setStatus('ready')
         if (res.replyAudioUrl) loadAudio(res.replyAudioUrl)
-        else if (res.simulated) speakDemo(res.replyText)
+        else if (res.replyText) speakDemo(res.replyText)
         else releaseAudio()
       } catch (err) {
         if (id !== turnId.current || err.kind === 'aborted') return
@@ -195,10 +195,6 @@ export function useVoiceTutor({ apiBaseUrl, demo, camera }) {
   )
 
   const listening = recorder.phase === 'recording'
-  useEffect(() => {
-    if (listening) setStatus('listening')
-    else setStatus((s) => (s === 'listening' ? 'ready' : s))
-  }, [listening])
 
   // Release everything when leaving the page.
   useEffect(
@@ -211,9 +207,15 @@ export function useVoiceTutor({ apiBaseUrl, demo, camera }) {
     [releaseAudio],
   )
 
+  const effectiveStatus = listening
+    ? 'listening'
+    : recorder.phase === 'requesting'
+    ? 'ready'
+    : status
+
   return {
     mode: client.mode,
-    status: recorder.phase === 'requesting' ? 'ready' : status,
+    status: effectiveStatus,
     requestingMic: recorder.phase === 'requesting',
     elapsed: recorder.elapsed,
     micError: recorder.error,
@@ -224,7 +226,7 @@ export function useVoiceTutor({ apiBaseUrl, demo, camera }) {
     audioError,
     attached,
     frameNote,
-    hasAudio: Boolean(turn?.audioUrl || turn?.demoAudio),
+    hasAudio: Boolean(turn?.audioUrl || turn?.replyText),
     startTalking,
     stopTalking: recorder.stop,
     cancelRecording: recorder.cancel,
