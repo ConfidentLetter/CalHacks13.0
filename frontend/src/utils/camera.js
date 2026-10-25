@@ -9,3 +9,12 @@ export function isDeskView(label) {
 export function findDeskView(devices) {
   return (devices || []).find((d) => isDeskView(d.label)) || null
 }
+
+/**
+ * getUserMedia video constraints. With no camera picked, ask for the back camera: on a phone the default is the
+ * selfie camera, which can't see the page (laptop webcams ignore facingMode). A picked camera is used exactly.
+ */
+export function videoConstraints(sourceId) {
+  const size = { width: { ideal: 1920 }, height: { ideal: 1080 } }
+  return sourceId ? { deviceId: { exact: sourceId }, ...size } : { facingMode: { ideal: 'environment' }, ...size }
+}

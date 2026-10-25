@@ -127,7 +127,7 @@ export function NotebookObserver() {
                 </span>
                 <select className="input h-10 py-0" value={camera.source} onChange={(e) => camera.setSource(e.target.value)}>
                   <option value={HARDWARE_SOURCE}>{overheadLabel}</option>
-                  <option value="">Browser webcam (default)</option>
+                  <option value="">This device’s camera (back camera on phones)</option>
                   {camera.devices.map((d, i) => (
                     <option key={d.deviceId || i} value={d.deviceId}>
                       {d.label ? (isDeskView(d.label) ? `${d.label} · desk view` : d.label) : `Camera ${i + 1}`}

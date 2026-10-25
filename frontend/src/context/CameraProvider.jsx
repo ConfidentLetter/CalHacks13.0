@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CameraContext } from './contexts'
 import * as api from '../services/api'
-import { findDeskView } from '../utils/camera'
+import { findDeskView, videoConstraints } from '../utils/camera'
 
 // Live notebook camera.
 //
@@ -112,11 +112,7 @@ export function CameraProvider({ children }) {
       try {
         const media = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: {
-            ...(sourceId ? { deviceId: { exact: sourceId } } : {}),
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-          },
+          video: videoConstraints(sourceId),
         })
         // A Stop, device switch, or unmount may have happened during the permission prompt.
         if (generation !== startGeneration.current) {
