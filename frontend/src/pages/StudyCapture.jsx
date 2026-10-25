@@ -5,9 +5,11 @@ import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Segmented, Toggle } from '../components/ui/Controls'
 import { LiveVideo } from '../components/shared/LiveVideo'
+import { MathText } from '../components/shared/MathTextRenderer'
 import * as api from '../services/api'
 import { FrameGate, grayscale } from '../features/study-capture/frameGate'
 import { StudyView, resetSessionId } from '../features/study-capture/studyView'
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 
 const newSession = () => `study-${crypto.randomUUID()}`
 function initialSession() {
@@ -41,6 +43,10 @@ export function StudyCapture() {
   const gate = useRef(new FrameGate())
   const sourceSeen = useRef(source)
   const view = useRef(new StudyView())
+
+  const voice = useSpeechRecognition({
+    onFinal: (phrase) => setMessage((prev) => (prev ? `${prev.trim()} ${phrase}` : phrase)),
+  })
 
   useEffect(() => {
     sessionStorage.setItem('studbud.study.session', session)
@@ -180,6 +186,7 @@ export function StudyCapture() {
   }
   const send = async (event) => {
     event.preventDefault()
+    voice.stop()
     const text = message.trim()
     if (!text || pending.current) return
     setMessage('')
@@ -214,8 +221,9 @@ export function StudyCapture() {
                 <select className="input mt-1 w-full" value={source === HARDWARE_SOURCE ? '' : source}
                   onChange={(e) => camera.setSource(e.target.value)}>
                   <option value="">Choose a local camera</option>
-                  {camera.devices.filter((d) => d.deviceId).map((d, i) =>
-                    <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>)}
+                  {camera.devices.filter((d) => d.deviceId).map((d, i) => (
+                    <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>
+                  ))}
                 </select>
               </label>
               <div className="flex flex-wrap gap-3">
@@ -242,14 +250,32 @@ export function StudyCapture() {
               {!events.length && <p className="text-sm text-olive/60">Capture your work to begin. Tudor will first establish what you’re trying to do.</p>}
               {events.map((event) => <div key={event.id} className={event.role === 'assistant' ? 'border-l-2 border-sage-deep bg-sage/20 p-3' : 'bg-paper p-3'}>
                 <p className="mb-1 text-xs font-bold text-olive/55">{event.role === 'assistant' ? 'Tudor' : event.role === 'observation' ? 'Visible work' : 'You'}</p>
-                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{event.content}</p>
+                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed"><MathText>{event.content}</MathText></p>
               </div>)}
             </div>
             <form onSubmit={send} className="space-y-3">
               <label className="block text-sm" htmlFor="study-reply">Your reply or question</label>
               <textarea id="study-reply" className="input min-h-24 w-full" maxLength={4000}
                 value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Here’s why I tried that step…" />
-              <Button type="submit" variant="primary" disabled={busy || resetting || !message.trim()}>Send reply</Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="submit" variant="primary" disabled={busy || resetting || !message.trim()}>Send reply</Button>
+                {voice.supported && (
+                  <Button
+                    type="button"
+                    variant={voice.listening ? 'danger' : 'ghost'}
+                    onClick={voice.listening ? voice.stop : voice.start}
+                    disabled={busy || resetting}
+                    className={voice.listening ? 'animate-pulse' : ''}
+                  >
+                    {voice.listening ? 'Stop talking' : 'Talk reply'}
+                  </Button>
+                )}
+                {voice.listening && (
+                  <span className="text-xs text-olive/65 italic">
+                    Listening… {voice.interim && `"${voice.interim}"`}
+                  </span>
+                )}
+              </div>
             </form>
             <p className="text-xs text-olive/55">Tudor gives hints and questions. If you want a solution, explicitly ask for the answer to that problem.</p>
           </CardBody>

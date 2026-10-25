@@ -30,16 +30,31 @@ const ERRORS = {
 }
 
 /**
- * Push-to-talk recorder. Permission is requested only inside `start()` (a user gesture).
+ * Conversational recorder with click-to-talk and automatic silence detection.
+ * Permission is requested only inside `start()` (a user gesture).
  * The mic track is stopped after every recording or cancel — nothing listens in the background.
  * Recordings live only in memory; they are never written to storage or logged.
  */
-export function useRecorder({ onComplete, onAutoStop } = {}) {
+export function useRecorder({ onComplete, onAutoStop, silenceTimeoutMs = 1800 } = {}) {
   // 'idle' | 'requesting' | 'recording'
   const [phase, setPhase] = useState('idle')
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState(null) // { code, message }
-  const r = useRef({ stream: null, recorder: null, chunks: [], startedAt: 0, timer: null, discard: false, releasedEarly: false, format: null })
+  const r = useRef({
+    stream: null,
+    recorder: null,
+    chunks: [],
+    startedAt: 0,
+    timer: null,
+    discard: false,
+    cancelled: false,
+    format: null,
+    audioCtx: null,
+    analyser: null,
+    dataArray: null,
+    hasSpoken: false,
+    lastSpokenAt: 0,
+  })
   const cb = useRef({ onComplete, onAutoStop })
   useEffect(() => {
     cb.current = { onComplete, onAutoStop }
@@ -51,6 +66,17 @@ export function useRecorder({ onComplete, onAutoStop } = {}) {
     const s = r.current
     clearInterval(s.timer)
     s.timer = null
+    try {
+      s.analyser?.disconnect()
+      s.audioCtx?.close()
+    } catch {
+      /* ignore audio context close errors */
+    }
+    s.audioCtx = null
+    s.analyser = null
+    s.dataArray = null
+    s.hasSpoken = false
+    s.lastSpokenAt = 0
     s.stream?.getTracks().forEach((t) => t.stop())
     s.stream = null
     s.recorder = null
@@ -79,7 +105,7 @@ export function useRecorder({ onComplete, onAutoStop } = {}) {
       setError({ code: 'unsupported', message: 'This browser can’t record audio here. Type your question instead.' })
       return
     }
-    s.releasedEarly = false
+    s.cancelled = false
     setPhase('requesting')
     let stream
     try {
@@ -90,23 +116,59 @@ export function useRecorder({ onComplete, onAutoStop } = {}) {
       setPhase('idle')
       return
     }
-    // The button was released while the permission prompt was open: don't record a stray clip.
-    if (s.releasedEarly) {
+    if (s.cancelled) {
       stream.getTracks().forEach((t) => t.stop())
       setPhase('idle')
-      setError({ code: 'hint', message: 'Microphone ready — now hold the button while you talk.' })
       return
     }
+
+    let audioCtx = null
+    let analyser = null
+    let dataArray = null
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (AudioCtx) {
+        audioCtx = new AudioCtx()
+        const sourceNode = audioCtx.createMediaStreamSource(stream)
+        analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 256
+        analyser.smoothingTimeConstant = 0.3
+        sourceNode.connect(analyser)
+        dataArray = new Uint8Array(analyser.frequencyBinCount)
+      }
+    } catch {
+      /* fallback gracefully if Web Audio is unavailable */
+    }
+
     let recorder
     try {
       recorder = new MediaRecorder(stream, { mimeType: format.mimeType })
     } catch {
+      try {
+        audioCtx?.close()
+      } catch {
+        /* ignore */
+      }
       stream.getTracks().forEach((t) => t.stop())
       setError({ code: 'unsupported', message: 'Recording isn’t supported in this browser. Type your question instead.' })
       setPhase('idle')
       return
     }
-    Object.assign(s, { stream, recorder, chunks: [], startedAt: performance.now(), discard: false, format })
+
+    Object.assign(s, {
+      stream,
+      recorder,
+      chunks: [],
+      startedAt: performance.now(),
+      discard: false,
+      format,
+      audioCtx,
+      analyser,
+      dataArray,
+      hasSpoken: false,
+      lastSpokenAt: 0,
+    })
+
     recorder.ondataavailable = (e) => e.data?.size && s.chunks.push(e.data)
     recorder.onstop = () => {
       const durationMs = performance.now() - s.startedAt
@@ -117,7 +179,7 @@ export function useRecorder({ onComplete, onAutoStop } = {}) {
       setPhase('idle')
       if (discard) return
       if (blob.size < MIN_BYTES || durationMs < MIN_MS) {
-        setError({ code: 'empty', message: 'That was too short to hear anything — hold the button while you talk.' })
+        setError({ code: 'empty', message: 'That was too short to hear anything — speak your question and click to send.' })
         return
       }
       cb.current.onComplete?.({
@@ -130,30 +192,53 @@ export function useRecorder({ onComplete, onAutoStop } = {}) {
     recorder.start(250)
     setPhase('recording')
     s.timer = setInterval(() => {
-      const sec = (performance.now() - s.startedAt) / 1000
+      const now = performance.now()
+      const sec = (now - s.startedAt) / 1000
       setElapsed(sec)
+
+      // Automatic silence detection: detects speech, then auto-sends after a natural pause
+      if (s.analyser && s.dataArray) {
+        s.analyser.getByteFrequencyData(s.dataArray)
+        let sum = 0
+        for (let i = 0; i < s.dataArray.length; i++) {
+          sum += s.dataArray[i]
+        }
+        const avg = sum / s.dataArray.length
+        if (sec > 0.4) {
+          if (avg > 16) {
+            s.hasSpoken = true
+            s.lastSpokenAt = now
+          } else if (s.hasSpoken && s.lastSpokenAt && now - s.lastSpokenAt > silenceTimeoutMs) {
+            cb.current.onAutoStop?.()
+            finish(false)
+            return
+          }
+        }
+      }
+
       if (sec >= MAX_RECORDING_SEC) {
         cb.current.onAutoStop?.()
         finish(false)
       }
     }, 100)
-  }, [format, phase, cleanup, finish])
+  }, [format, phase, cleanup, finish, silenceTimeoutMs])
 
-  /** Release the button: submit. If we're still waiting on permission, remember that. */
+  /** Stop talking: submit recording. */
   const stop = useCallback(() => {
     if (r.current.recorder) finish(false)
-    else r.current.releasedEarly = true
+    else r.current.cancelled = true
   }, [finish])
 
   const cancel = useCallback(() => {
-    r.current.releasedEarly = true
+    r.current.cancelled = true
     finish(true)
   }, [finish])
 
   // Never keep the mic after leaving the page or losing focus mid-recording.
   useEffect(() => {
+    const s = r.current
     const onBlur = () => {
-      if (r.current.recorder) {
+      if (s.recorder) {
         finish(true)
         setError({ code: 'blur', message: 'Recording cancelled because the window lost focus.' })
       }
@@ -161,12 +246,17 @@ export function useRecorder({ onComplete, onAutoStop } = {}) {
     window.addEventListener('blur', onBlur)
     return () => {
       window.removeEventListener('blur', onBlur)
-      const s = r.current
       if (s.recorder && s.recorder.state !== 'inactive') {
         s.discard = true
         s.recorder.stop()
       }
       s.stream?.getTracks().forEach((t) => t.stop())
+      try {
+        s.analyser?.disconnect()
+        s.audioCtx?.close()
+      } catch {
+        /* ignore */
+      }
       clearInterval(s.timer)
     }
   }, [finish])
