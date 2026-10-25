@@ -562,7 +562,22 @@ async function renderPdfPanel() {
   section.hidden = false
   $('pdf-title').textContent = live?.title || 'PDF Document'
   const info = $('pdf-status')
-  info.textContent = `${live?.url || ''} · ${live?.activeSec || 0}s`
+  const hasText = live?.text && live.text.length > 0
+  const pages = live?.pdfPages || '?'
+  if (hasText) {
+    info.textContent = `✓ Extracted from PDF · ${pages} pages · ${live?.activeSec || 0}s`
+  } else {
+    info.textContent = `PDF detected · ${pages} pages · ${live?.activeSec || 0}s`
+  }
+  // Update button label based on extraction status
+  const importBtn = $('pdf-import')
+  if (hasText) {
+    importBtn.textContent = '✓ Extracted'
+    importBtn.disabled = true
+  } else {
+    importBtn.textContent = 'Import PDF'
+    importBtn.disabled = false
+  }
 }
 
 $('pdf-import').addEventListener('click', async () => {

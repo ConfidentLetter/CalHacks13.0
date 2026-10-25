@@ -40,6 +40,18 @@
     return (clone.innerText || clone.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 4000)
   }
 
+  // Detect and extract PDF from URL (if PDF.js available)
+  async function tryExtractPdfFromUrl() {
+    if (document.contentType !== 'application/pdf') return null
+    try {
+      if (typeof PDFExtractor === 'undefined') return null
+      const result = await PDFExtractor.extractFromUrl(location.href)
+      return result.error ? null : result
+    } catch {
+      return null
+    }
+  }
+
   function isActive() {
     return (
       document.visibilityState === 'visible' && document.hasFocus() && Date.now() - lastInteraction < IDLE_LIMIT_MS
@@ -59,7 +71,20 @@
       isPdf: document.contentType === 'application/pdf',
     }
     if (qualified && !textSent) {
-      payload.text = payload.isPdf ? '' : extractReadableText()
+      if (payload.isPdf) {
+        // Try to extract PDF text asynchronously
+        tryExtractPdfFromUrl().then(result => {
+          if (result?.text) {
+            const followupPayload = { ...payload, text: result.text, pdfPages: result.pages }
+            try {
+              chrome.runtime.sendMessage(followupPayload).catch(() => {})
+            } catch {}
+          }
+        })
+        payload.text = ''
+      } else {
+        payload.text = extractReadableText()
+      }
       textSent = true
     }
     try {
