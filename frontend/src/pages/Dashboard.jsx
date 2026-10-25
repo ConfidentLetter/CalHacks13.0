@@ -246,7 +246,7 @@ function Notebook() {
             </div>
           )}
           <div className="flex flex-col gap-4">
-            <div className="ruled flex-1 border-l-2 border-clay/40 pl-4 text-sm leading-7 text-olive/80">
+            <div className="ruled flex-1 border-l-2 border-clay/40 pl-4 text-sm leading-7 text-olive/80 [background-position:0_0]">
               {recognition?.summary ? (
                 <>
                   <span className="font-semibold text-olive">
