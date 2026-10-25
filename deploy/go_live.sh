@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# One command to put StudBud online from this Mac via a free Cloudflare quick tunnel.
-# Starts the backend (:8000) and the site (:4173) if they are not already running,
-# then opens the tunnel and prints the public https://….trycloudflare.com address.
-# Keep this window open; Ctrl+C takes the site offline.
+# One command to put StudBud online from this Mac through Cloudflare.
+#   go_live.sh                      free quick tunnel, random https://….trycloudflare.com address
+#   go_live.sh studbud.example.com  permanent address on your own Cloudflare domain (named tunnel)
+# Starts the backend (:8000) and the site (:4173) if they are not already running, then opens the tunnel.
+# Keep this window open; Ctrl+C takes the site offline. The site is only up while this Mac is awake.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$ROOT/synapse_vision/runtime"
@@ -34,8 +35,19 @@ fi
 
 up http://127.0.0.1:4173/api/status || { echo "✗ the site cannot reach the backend through its proxy"; exit 1; }
 echo "✓ site → backend proxy works"
+HOST="${1:-}"
+TUNNEL=studbud
 echo
-echo "Opening the Cloudflare tunnel. Your public address is the https://….trycloudflare.com line below."
-echo "Anyone with it can use the app, see the desk camera stream, and spend the Claude key. Ctrl+C to go offline."
+echo "Anyone with the address can use the app, see the desk camera stream, and spend the Claude key. Ctrl+C to go offline."
+if [ -z "$HOST" ]; then
+  echo "Opening a quick tunnel. Your public address is the https://….trycloudflare.com line below."
+  echo
+  exec cloudflared tunnel --url http://127.0.0.1:4173 --no-autoupdate
+fi
+
+[ -f "$HOME/.cloudflared/cert.pem" ] || { echo "… authorize Cloudflare in the browser (pick the domain of $HOST)"; cloudflared tunnel login; }
+cloudflared tunnel info "$TUNNEL" >/dev/null 2>&1 || cloudflared tunnel create "$TUNNEL"
+cloudflared tunnel route dns --overwrite-dns "$TUNNEL" "$HOST"
+echo "✓ https://$HOST now points at this Mac"
 echo
-exec cloudflared tunnel --url http://127.0.0.1:4173 --no-autoupdate
+exec cloudflared tunnel --no-autoupdate run --url http://127.0.0.1:4173 "$TUNNEL"
