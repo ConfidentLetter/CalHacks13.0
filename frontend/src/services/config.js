@@ -5,8 +5,16 @@
 //   3. The default below
 // No secrets live here — API keys belong on the backend only.
 
-export const DEFAULT_API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Served from a public hostname (e.g. a Cloudflare Tunnel), the backend sits behind the same
+// origin via the Vite proxy, so default to that origin instead of the visitor's own localhost.
+function sameOriginDefault() {
+  if (typeof window === 'undefined') return 'http://localhost:8000'
+  const { hostname, origin } = window.location
+  const local = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+  return local ? 'http://localhost:8000' : origin
+}
+
+export const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || sameOriginDefault()
 
 export const SETTINGS_STORAGE_KEY = 'synapse.settings.v1'
 
