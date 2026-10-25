@@ -40,14 +40,38 @@
     return (clone.innerText || clone.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 4000)
   }
 
-  // Detect and extract PDF from URL (if PDF.js available)
+  // Detect and extract PDF from URL using PDF.js
   async function tryExtractPdfFromUrl() {
     if (document.contentType !== 'application/pdf') return null
     try {
-      if (typeof PDFExtractor === 'undefined') return null
-      const result = await PDFExtractor.extractFromUrl(location.href)
-      return result.error ? null : result
-    } catch {
+      // Load PDF.js library
+      if (typeof window.pdfjsLib === 'undefined') {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+          script.onload = resolve
+          script.onerror = reject
+          document.head.appendChild(script)
+        })
+      }
+
+      const pdf = window.pdfjsLib
+      pdf.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+
+      const doc = await pdf.getDocument(location.href).promise
+      const texts = []
+
+      for (let i = 1; i <= Math.min(doc.numPages, 10); i++) {
+        try {
+          const page = await doc.getPage(i)
+          const content = await page.getTextContent()
+          const pageText = content.items.map(item => (item.str || '').trim()).filter(s => s).join(' ')
+          if (pageText) texts.push(`[Page ${i}] ${pageText}`)
+        } catch {}
+      }
+
+      return { pages: doc.numPages, text: texts.join('\n'), error: null }
+    } catch (err) {
       return null
     }
   }
