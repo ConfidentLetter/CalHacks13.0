@@ -3,6 +3,11 @@
 > 最后更新：2026-10-24 13:55 PT（Cal Hacks 13.0 现场，H+8）。由 Henry 的 Claude Code integrator 会话维护。
 > 读完这份文件 + `prompts/RUNSHEET.md` + `head -5 NOTES_T*.md`，你就能接着当 integrator。
 
+## 2026-10-24 22:40 更新：队友合入 13 个提交
+- 项目改名 **StudBud**（原 Synapse），队友新增 `bridge/study.py`（`/api/study/observe|message|session`，Tudor 导师）、`bridge/llm.py`、`frontend/src/pages/StudyCapture.jsx`（浏览器直接拍照 + Web Speech 语音）、`run_studbud.py`（队友的启动器，强制 SV_SOURCE=upload，不用桌上视角）、`frontend/vercel.json`（前端部署到 Vercel）。
+- 语音「talk to Pip」改为点击说话 + 静音自动发送，仍调 `/api/tutor/voice` 与 `/api/tutor/message`，后端无需改；无 TTS 时前端用浏览器 speechSynthesis 朗读 replyText。
+- 本地桥接已于 22:40 用新代码重启（含 /api/study），`requirements/study.txt` 已装。
+
 ## 项目一句话
 StudBud Vision：相机俯拍学生手写数学推导 → 每行逐字 LaTeX「page twin」（错误原样保留、绝不纠正；划掉的行标出；置信度诚实）→ HTTP/WebSocket 交给 Tutor 队。详见 `README.md`、`contracts/`。
 
