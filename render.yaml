@@ -1,0 +1,23 @@
+# Render Blueprint for the StudBud backend (FastAPI bridge over the vision pipeline).
+# Render dashboard → New → Blueprint → pick this repo. Secrets marked sync:false are typed in the dashboard.
+services:
+  - type: web
+    name: studbud-backend
+    runtime: python
+    plan: starter            # 512 MB free instances can run out of memory on OpenCV + Claude calls
+    buildCommand: pip install -r deploy/render-requirements.txt
+    startCommand: cd synapse_vision && uvicorn bridge.server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/status
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: SV_SOURCE          # the browser owns the camera; the server only receives photos
+        value: upload
+      - key: SV_CAMERA_PROBE
+        value: "0"
+      - key: SV_STT             # local faster-whisper is heavy; the browser's own speech recognition is used instead
+        value: "0"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SV_CORS_ORIGINS    # the exact Vercel site URL, e.g. https://studbud.vercel.app
+        sync: false
