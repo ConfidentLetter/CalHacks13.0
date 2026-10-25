@@ -8,6 +8,7 @@ const BACKEND = process.env.STUDBUD_BACKEND || 'http://127.0.0.1:8000'
 const proxy = {
   '/api': { target: BACKEND, changeOrigin: true },
   '/files': { target: BACKEND, changeOrigin: true },
+  '/twin': { target: BACKEND, changeOrigin: true },
 }
 
 // https://vite.dev/config/
