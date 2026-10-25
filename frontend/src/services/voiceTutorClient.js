@@ -14,7 +14,7 @@ export const VOICE_PATHS = {
   voice: import.meta.env.VITE_TUTOR_VOICE_PATH || '/api/tutor/voice',
   message: import.meta.env.VITE_TUTOR_MESSAGE_PATH || '/api/tutor/message',
 }
-const TIMEOUT_MS = 45_000
+const TIMEOUT_MS = 90_000
 const SESSION_KEY = 'synapse.tutor.session'
 
 /** Anonymous per-tab session id; no account or personal data. */
@@ -75,7 +75,7 @@ function postForm(url, form, { signal, onUploaded }) {
       reject(
         new TutorError(
           notBuilt
-            ? `Pip’s voice endpoint isn’t built on the backend yet (HTTP ${xhr.status}). Turn on Demo voice to try the flow.`
+            ? `This speech upload service is unavailable (HTTP ${xhr.status}). Refresh the page to use browser voice input, or type your question.`
             : detail || `The backend answered HTTP ${xhr.status}.`,
           'http',
           xhr.status,
@@ -83,7 +83,7 @@ function postForm(url, form, { signal, onUploaded }) {
       )
     }
     xhr.onerror = () => reject(new TutorError('Couldn’t reach Pip’s backend. Check that it’s running, then retry.', 'network'))
-    xhr.ontimeout = () => reject(new TutorError('Pip took too long to answer (45s). You can retry.', 'timeout'))
+    xhr.ontimeout = () => reject(new TutorError('Pip took too long to answer. The free server may be waking up; please retry.', 'timeout'))
     xhr.onabort = () => reject(new TutorError('Request cancelled.', 'aborted'))
     if (signal) {
       if (signal.aborted) return xhr.abort()

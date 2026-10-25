@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRecorder } from './useRecorder'
+import { useSpeechRecorder } from './useSpeechRecorder'
 import { createDemoClient, createLiveClient } from '../services/voiceTutorClient'
 import { pickVoice, spokenText } from '../utils/speech'
 
@@ -154,13 +155,30 @@ export function useVoiceTutor({ apiBaseUrl, demo, camera }) {
 
   // ---- recording ----------------------------------------------------------------
 
-  const recorder = useRecorder({
+  const audioRecorder = useRecorder({
     onComplete: async (rec) => {
       const frame = await pendingFrame.current
       pendingFrame.current = null
       submit({ kind: 'voice', ...rec, frame })
     },
   })
+
+  const speechRecorder = useSpeechRecorder({
+    onComplete: async ({ transcript }) => {
+      const frame = await pendingFrame.current
+      pendingFrame.current = null
+      submit({ kind: 'text', message: transcript, frame })
+    },
+  })
+  // Production uses browser transcription + the real tutor endpoint, never the
+  // unavailable server transcription endpoint. Demo stays explicitly simulated.
+  const recorder = demo ? audioRecorder : speechRecorder
+  useEffect(() => {
+    audioRecorder.cancel()
+    speechRecorder.cancel()
+    // Cancel the prior input if the user switches modes mid-turn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo])
 
   /** Grab one fresh still for this question, if the camera is live. Voice-only otherwise. */
   const grabFrame = useCallback(async () => {

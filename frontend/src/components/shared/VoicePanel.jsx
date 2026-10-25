@@ -32,7 +32,7 @@ export function VoicePanel() {
 
   const listening = v.status === 'listening'
   const busy = v.status === 'sending' || v.status === 'thinking'
-  const talkDisabled = busy || !v.micSupported
+  const talkDisabled = busy || v.requestingMic || !v.micSupported
 
   const toggleTalking = () => {
     if (talkDisabled) return
@@ -48,7 +48,7 @@ export function VoicePanel() {
       e.preventDefault()
       toggleTalking()
     } else if (e.key === 'Escape') {
-      if (listening) {
+      if (listening || v.requestingMic) {
         e.preventDefault()
         v.cancelRecording()
       }
@@ -128,7 +128,7 @@ export function VoicePanel() {
             Send question
           </Button>
         )}
-        {listening && (
+        {(listening || v.requestingMic) && (
           <Button variant="ghost" onClick={v.cancelRecording}>
             Cancel
           </Button>
@@ -142,6 +142,21 @@ export function VoicePanel() {
       <p id="talk-hint" className="-mt-1 text-[11px] text-olive/60">
         Click to talk, then click Done or pause when finished to send. Esc cancels. Up to {MAX_RECORDING_SEC}s.
       </p>
+
+      {v.requestingMic && (
+        <p role="status" className="border-l-2 border-butter-deep bg-butter/30 px-3 py-2 text-sm text-olive">
+          Waiting for microphone permission. Choose <strong>Allow</strong> in the browser prompt near the address bar.
+          Listening starts after you allow access. Cancel to type your question below.
+        </p>
+      )}
+      {!v.micSupported && (
+        <p role="status" className="text-sm text-clay">
+          Voice input isn’t available in this browser. Open this site in Chrome or Safari, or type your question below.
+        </p>
+      )}
+      {!settings.voiceDemo && v.micSupported && (
+        <p className="text-[11px] text-olive/60">Your browser transcribes your speech; Pip answers using the same AI as typed questions.</p>
+      )}
 
       {/* attached still */}
       {(v.attached || v.frameNote) && (
@@ -225,9 +240,9 @@ export function VoicePanel() {
           onChange={(e) => setTyped(e.target.value)}
           placeholder="or type a question…"
           autoComplete="off"
-          disabled={busy || listening}
+          disabled={busy || listening || v.requestingMic}
         />
-        <Button type="submit" variant="secondary" disabled={!typed.trim() || busy || listening}>
+        <Button type="submit" variant="secondary" disabled={!typed.trim() || busy || listening || v.requestingMic}>
           Ask
         </Button>
       </form>
