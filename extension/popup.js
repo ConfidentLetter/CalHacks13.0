@@ -123,7 +123,7 @@ function renderTimer() {
     pill.textContent = 'Saved'
     pill.className = 'pill saved'
     hint.textContent = live.isPdf
-      ? 'Saved title, URL and time. PDF text can’t be read from Chrome’s viewer.'
+      ? (live.text ? 'PDF text saved to Reading Memory.' : 'Title and time saved. Use Read this PDF to extract text.')
       : 'Saved to Reading Memory. Time keeps updating while you read.'
   } else if (live.state === 'active') {
     pill.textContent = 'Reading…'
@@ -214,6 +214,7 @@ function render() {
 
   renderSite()
   renderTimer()
+  renderPdfPanel()
   renderStudy()
   const tracking = settings.trackingEnabled
   const toggle = $('toggle-tracking')
@@ -544,6 +545,46 @@ $('delete-all').addEventListener('click', async (e) => {
   e.target.textContent = 'Delete all stored data'
   flash('All stored reading data deleted', 'ok')
   refresh({ full: false })
+})
+
+// ---- PDF reading status --------------------------------------------------------
+
+function renderPdfPanel() {
+  const { live } = state || {}
+  const isPdf = live?.isPdf || /\.pdf(?:[?#]|$)/i.test(tab?.url || '') || /\.pdf\b/i.test(tab?.title || '')
+  const section = $('pdf-section')
+  if (!isPdf) {
+    section.hidden = true
+    return
+  }
+  section.hidden = false
+  $('pdf-title').textContent = live?.title || 'PDF Document'
+  const info = $('pdf-status')
+  const hasText = live?.text && live.text.length > 0
+  const pages = live?.pdfPages || '?'
+  if (hasText) {
+    info.textContent = `✓ Text extracted · ${pages} pages · ${live?.activeSec || 0}s`
+  } else {
+    info.textContent = 'Extract text from this PDF into Reading Memory.'
+  }
+  $('pdf-read').disabled = pdfReading || state.status?.state !== 'approved'
+}
+
+let pdfReading = false
+$('pdf-read').addEventListener('click', async () => {
+  pdfReading = true
+  $('pdf-read').disabled = true
+  $('pdf-status').textContent = 'Reading PDF…'
+  try {
+    const result = await send('popup:read-pdf', { tabId: tab.id, url: tab.url })
+    if (result?.error) throw new Error(result.error)
+    flash(`PDF text saved · ${result.pages} pages`, 'ok')
+  } catch (err) {
+    flash(err.message || 'Could not read PDF', 'err')
+  } finally {
+    pdfReading = false
+    await refresh({ full: false })
+  }
 })
 
 // ---- boot -------------------------------------------------------------------

@@ -58,6 +58,14 @@
         <p class="hint" id="timer-hint"></p>
       </section>
 
+      <!-- PDF reading panel -->
+      <section class="card pdf" id="pdf-section" aria-live="polite" hidden>
+        <h2 class="section-title">PDF reading</h2>
+        <p class="hint" id="pdf-title" style="font-weight: 500;"></p>
+        <p class="hint" id="pdf-status"></p>
+        <button class="btn secondary block" id="pdf-read" type="button">Read this PDF</button>
+      </section>
+
       <!-- Deliberate study capture: separate consent from passive reading snapshots. -->
       <section class="card study" aria-live="polite">
         <h2 class="section-title">Study capture</h2>
@@ -161,11 +169,10 @@
           <button class="btn ghost quick-add" id="add-canvas" type="button">+ Canvas (instructure.com)</button>
         </div>
         <p class="note">
-          <strong>PDFs:</strong> Chrome’s built-in PDF viewer doesn’t let extensions read the document text. For PDFs,
-          StudBud records only the title, URL, and reading time. Snapshots only capture the tab you’re looking at —
+          <strong>PDFs:</strong> On an approved PDF tab, choose Read this PDF to save text from its first 10 pages.
+          Scanned or locked PDFs may need screen capture instead. Snapshots only capture the tab you’re looking at —
           Chrome doesn’t let extensions photograph background tabs. Grade, inbox, profile, and quiz-taking pages are never
-          captured. Local <code>file://</code> PDFs also need “Allow access to
-          file URLs” in chrome://extensions.
+          captured. PDF text extraction supports online documents only.
         </p>
         <button class="btn danger block" id="delete-all" type="button">Delete all stored data</button>
       </details>
