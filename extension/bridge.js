@@ -19,6 +19,18 @@
     }
   }
 
+  async function mutate(msg, command, result) {
+    let payload = result
+    try {
+      const response = await chrome.runtime.sendMessage(command)
+      if (response?.error) throw new Error(response.error)
+      await pushState()
+    } catch (err) {
+      payload = { error: err.message || 'Extension deletion failed' }
+    }
+    window.postMessage({ source: FROM_EXTENSION, type: 'mutation-result', requestId: msg.requestId, payload }, location.origin)
+  }
+
   window.addEventListener('message', (event) => {
     if (event.source !== window || event.origin !== location.origin) return
     const msg = event.data
@@ -28,10 +40,10 @@
         pushState('hello')
         break
       case 'delete-reading':
-        chrome.runtime.sendMessage({ type: 'bridge:delete', id: msg.payload?.id })
+        mutate(msg, { type: 'bridge:delete', id: msg.payload?.id }, { deletedIds: [String(msg.payload?.id)] })
         break
       case 'clear-readings':
-        chrome.runtime.sendMessage({ type: 'bridge:clear' })
+        mutate(msg, { type: 'bridge:clear' }, { cleared: true })
         break
       case 'update-settings':
         chrome.runtime.sendMessage({ type: 'bridge:settings', settings: msg.payload || {} })

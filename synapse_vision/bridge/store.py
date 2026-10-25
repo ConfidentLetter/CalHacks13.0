@@ -150,6 +150,20 @@ class ReadingStore:
                 break
         return out
 
+    def recent_screenshots(self, max_age_h: float, limit: int = 20) -> list[dict]:
+        """Uploaded screenshots newer than max_age_h whose image file exists, each with its local `path`."""
+        cutoff = datetime.now().astimezone().timestamp() - max_age_h * 3600
+        out = []
+        for rec in self.list_screenshots(limit=limit):
+            path = self.shots_dir / f"{rec.get('id')}.jpg"
+            try:
+                captured = datetime.fromisoformat(str(rec.get("capturedAt") or rec.get("storedAt")).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if captured.timestamp() >= cutoff and path.is_file():
+                out.append({**rec, "path": str(path)})
+        return out
+
 
 # ---------------------------------------------------------------------- helpers
 

@@ -195,6 +195,14 @@ async def reading_screenshot(request: Request):
     return {"stored": rec["id"], "sessionId": rec.get("sessionId"), "bytes": rec["bytes"]}
 
 
+@router.get("/reading/screenshots")
+@guarded("reading_screenshots")
+async def reading_screenshots(limit: int = 20):
+    """Metadata of stored screenshots (no image bytes, no local paths)."""
+    items = await asyncio.to_thread(default_store().list_screenshots, None, max(1, min(int(limit), 100)))
+    return {"items": [{k: v for k, v in s.items() if k != "path"} for s in items]}
+
+
 @router.get("/reading/history")
 @guarded("reading_history")
 async def reading_history(limit: int = 100):
@@ -237,6 +245,10 @@ def _readings(include: bool) -> list[dict]:
     return default_store().list(limit=tutor.MAX_READING_ITEMS) if include else []
 
 
+def _screenshots(include: bool) -> list[dict]:
+    return default_store().recent_screenshots(tutor.SCREENSHOT_MAX_AGE_H) if include else []
+
+
 @router.post("/chat")
 @guarded("chat")
 async def chat(request: Request):
@@ -253,14 +265,16 @@ async def chat(request: Request):
         twin = None
     readings = _readings(bool(body.get("includeReading", True)))
     include_text = bool(body.get("includeReadingText", False))
+    shots = _screenshots(bool(body.get("includeReading", True)))
     remaining = max(10.0, budget - (time.perf_counter() - t0))
     try:
         out = await asyncio.wait_for(asyncio.to_thread(
             tutor.respond, message, body.get("history"), twin=twin, readings=readings, include_text=include_text,
-            context_notes=notes, timeout_s=min(remaining - 2, 60.0)), timeout=remaining)
+            context_notes=notes, timeout_s=min(remaining - 2, 60.0), screenshots=shots), timeout=remaining)
     except (llm.LLMError, asyncio.TimeoutError) as exc:
         return JSONResponse(error_body(f"Pip could not answer: {exc if str(exc) else 'timed out'}"), 502)
-    return {"reply": out["reply"], "petExpression": out["petExpression"], "sources": tutor.sources_for(twin, readings)}
+    return {"reply": out["reply"], "petExpression": out["petExpression"],
+            "sources": tutor.sources_for(twin, readings, out["screenshotsUsed"])}
 
 
 async def _form(request: Request) -> dict:
@@ -293,17 +307,19 @@ async def _tutor_turn(fields: dict, message: str, *, transcript: str | None) -> 
     twin, notes = await _twin_for_question(image, pipeline_timeout_s=float(cfg("bridge.tutor_pipeline_timeout_s", DEFAULT_TUTOR_PIPELINE_S)),
                                            include_notebook=True)
     readings = _readings(True)
+    shots = _screenshots(True)
     remaining = max(8.0, budget - (time.perf_counter() - t0))
     try:
         out = await asyncio.wait_for(asyncio.to_thread(
             tutor.respond, message, tutor.sessions.history(session_id), twin=twin, readings=readings,
-            include_text=False, context_notes=notes, timeout_s=min(remaining - 1, 40.0)), timeout=remaining)
+            include_text=False, context_notes=notes, timeout_s=min(remaining - 1, 40.0), screenshots=shots),
+            timeout=remaining)
     except (llm.LLMError, asyncio.TimeoutError) as exc:
         return JSONResponse({**error_body(f"Pip could not answer: {exc if str(exc) else 'timed out'}"),
                              "requestId": request_id}, 502)
     tutor.sessions.record(session_id, message, out["reply"])
     return {"requestId": request_id, "transcript": transcript, "replyText": out["reply"], "replyAudioUrl": None,
-            "petExpression": out["petExpression"], "sources": tutor.sources_for(twin, readings)}
+            "petExpression": out["petExpression"], "sources": tutor.sources_for(twin, readings, out["screenshotsUsed"])}
 
 
 @router.post("/tutor/message")

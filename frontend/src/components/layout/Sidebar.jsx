@@ -31,16 +31,22 @@ function NavList({ onNavigate }) {
               onNavigate?.()
             }}
             className={cx(
-              'group relative flex items-center gap-3 rounded-sm px-3 py-2.5 text-sm font-medium transition',
+              'sidebar-tab group relative isolate flex items-center gap-3 rounded-sm px-3 py-2.5 text-sm font-medium transition',
               active
                 ? 'border border-paper-deep bg-white text-olive shadow-sm'
                 : 'border border-transparent text-olive/65 hover:bg-white/60 hover:text-olive',
             )}
           >
-            <span className={cx('absolute inset-y-2.5 -right-1 w-1.5 rounded-l-sm', item.tab)} aria-hidden="true" />
-            {item.label}
+            <span
+              className={cx(
+                'sidebar-tab-fill',
+                item.tab,
+              )}
+              aria-hidden="true"
+            />
+            <span className="relative">{item.label}</span>
             {item.id === 'reading' && readings.length > 0 && (
-              <span className="ml-auto rounded-md bg-olive/12 px-1.5 py-0.5 text-[10px] text-olive/65 tabular-nums">
+              <span className="relative ml-auto rounded-md bg-olive/12 px-1.5 py-0.5 text-[10px] text-olive/65 tabular-nums">
                 {readings.length}
               </span>
             )}

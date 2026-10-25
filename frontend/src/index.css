@@ -317,6 +317,32 @@
     opacity: 0;
   }
 }
+.sidebar-tab-fill {
+  position: absolute;
+  pointer-events: none;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  width: 6px;
+  border-radius: 0 4px 4px 0;
+  transform: scaleY(0.75);
+  transform-origin: center;
+  /* Wait before collapsing so brief pointer exits do not restart the bounce. */
+  transition: transform 180ms ease-out 120ms;
+}
+.sidebar-tab:hover .sidebar-tab-fill,
+.sidebar-tab:focus-visible .sidebar-tab-fill,
+.sidebar-tab[aria-current='page'] .sidebar-tab-fill {
+  transform: scaleY(1);
+  /* A transition runs only when height changes; expanded tabs never replay it. */
+  transition: transform 320ms cubic-bezier(0.2, 1.8, 0.4, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-tab-fill,
+  .sidebar-tab:hover .sidebar-tab-fill,
+  .sidebar-tab:focus-visible .sidebar-tab-fill,
+  .sidebar-tab[aria-current='page'] .sidebar-tab-fill { transition: none; }
+}
 .pip-body {
   transform-origin: 50% 90%;
 }

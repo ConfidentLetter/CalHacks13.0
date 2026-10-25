@@ -44,7 +44,7 @@ export function PageTwin({ image, lines = [], selectedId, hoveredId, onSelect, o
   return (
     <div ref={holder} className={cx('w-full', className)}>
       <div
-        className="relative mx-auto overflow-hidden border border-olive/70 bg-paper"
+        className="relative mx-auto overflow-hidden border border-olive/70 bg-white"
         style={w ? { width: w, height: h } : { aspectRatio: `${ratio}` }}
       >
         <div className="absolute" style={stage}>
@@ -58,7 +58,7 @@ export function PageTwin({ image, lines = [], selectedId, hoveredId, onSelect, o
               draggable={false}
             />
           ) : (
-            <div className="ruled absolute inset-0 grid place-items-center bg-paper text-olive/55">
+            <div className="ruled absolute inset-0 grid place-items-center bg-white text-olive/55">
               <span className="flex items-center gap-2 text-sm">
                 {broken ? 'page image failed to load' : 'no page image'}
               </span>

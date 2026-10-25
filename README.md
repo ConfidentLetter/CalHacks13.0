@@ -4,6 +4,8 @@
 
 See [Architecture](docs/ARCHITECTURE.md) for the component layout, test locations, and local runtime directories.
 
+For GitHub-connected Vercel hosting, see [Deployment](docs/DEPLOYMENT.md).
+
 Ambient AI study assistant: an overhead camera watches your notebook, a Chrome extension remembers what you
 read, and an AI tutor answers questions using both.
 
@@ -48,8 +50,10 @@ need a page refresh to pick up the reader.
   never captured. Unchanged frames are skipped. The last 20 stay on your device and are uploaded only if you enable
   "Upload snapshots to backend". Turning snapshots on asks for Chrome's "read all sites" permission, because
   that's the only way Chrome allows tab capture.
-- **PDFs:** Chrome's built-in PDF viewer doesn't expose document text to extensions. For PDFs, only the
-  title, URL, and time are recorded. `chrome://` pages and the Web Store can't be accessed by any extension.
+- **PDFs:** On an approved online PDF tab, use **Read this PDF** in the popup. The bundled PDF.js parser
+  saves up to 4,000 characters from the first 10 pages. Scanned or locked PDFs may need screen capture;
+  local files are not supported. Text uploads still require the text-sharing setting. Chrome 116+ is required.
+  `chrome://` pages and the Web Store can't be accessed by any extension.
 
 ## Manual test checklist
 **Dashboard (no backend running)**

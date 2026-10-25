@@ -51,7 +51,7 @@ function ReadingSkeleton({ startedAt }) {
 /** Camera-off / nothing-read state: an empty ruled page and one line of copy — never blank. */
 function EmptyPage({ copy }) {
   return (
-    <div className="ruled-lg relative grid min-h-[320px] place-items-center border border-dashed border-sage-deep bg-paper/70 p-8 text-center">
+    <div className="ruled-lg relative grid min-h-[320px] place-items-center border border-dashed border-sage-deep bg-white p-8 text-center">
       <p className="max-w-md text-[15px] leading-relaxed text-olive/70">{copy}</p>
     </div>
   )

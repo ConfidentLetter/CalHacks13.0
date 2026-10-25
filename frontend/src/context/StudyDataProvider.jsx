@@ -6,6 +6,7 @@ import { useExtensionBridge } from '../hooks/useConnection'
 import { useInterval } from '../hooks/useInterval'
 import { buildRecognition } from '../components/recognition/twinModel'
 import { useTwin } from '../components/recognition/useTwin'
+import { deleteReadingCopies } from '../features/reading-memory/deleteReading'
 
 const STATUS_POLL_MS = 10_000
 const READING_POLL_MS = 15_000
@@ -186,20 +187,11 @@ export function StudyDataProvider({ children }) {
 
   const deleteReading = useCallback(
     async (record) => {
-      if (record.source === 'extension') {
-        try {
-          if (record.synced || remote.items.some((r) => r.id === record.id)) await api.deleteReading(record.id)
-          bridge.deleteReading(record.id)
-          setRemote((r) => ({ ...r, items: r.items.filter((x) => x.id !== record.id) }))
-          notify('Reading deleted', 'success')
-          return true
-        } catch (err) {
-          notify(`Delete failed: ${err.message}`, 'error')
-          return false
-        }
-      }
       try {
-        await api.deleteReading(record.id)
+        await deleteReadingCopies(record, {
+          remoteItems: remote.items, extensionItems: ext.readings,
+          deleteRemote: api.deleteReading, deleteLocal: bridge.deleteReading,
+        })
         setRemote((r) => ({ ...r, items: r.items.filter((x) => x.id !== record.id) }))
         notify('Reading deleted', 'success')
         return true
@@ -208,13 +200,13 @@ export function StudyDataProvider({ children }) {
         return false
       }
     },
-    [notify, remote.items],
+    [notify, remote.items, ext.readings],
   )
 
   const clearReadings = useCallback(async () => {
     try {
       await api.clearReadingHistory()
-      bridge.clearReadings()
+      if (ext.connected) await bridge.clearReadings()
       setRemote((r) => ({ ...r, items: [] }))
       notify('Reading history cleared', 'success')
       return true
@@ -222,7 +214,7 @@ export function StudyDataProvider({ children }) {
       notify(`Could not clear history: ${err.message}`, 'error')
       return false
     }
-  }, [notify])
+  }, [notify, ext.connected])
 
   // ---- lifecycle ------------------------------------------------------------
   useEffect(() => {

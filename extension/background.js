@@ -1,4 +1,4 @@
-importScripts('tile-diff.js', 'study-policy.js', 'study-capture.js')
+importScripts('tile-diff.js', 'study-policy.js', 'study-capture.js', 'pdf-extract.js', 'pdf-diff.js', 'pdf-observer.js')
 
 // StudBud background service worker (Manifest V3).
 // - Registers the reading detector only on approved + permission-granted sites
@@ -23,6 +23,11 @@ const DEFAULT_SETTINGS = {
   screenshotsEnabled: false,
   screenshotIntervalSec: 10,
   uploadScreenshots: false,
+  // PDF observer: off until the user opts in; separate from text reading tracking.
+  pdfMode: 'manual', // 'manual' | 'smart'
+  pdfIntervalSec: 10,
+  pdfAutoConsent: false,
+  pdfCrops: {}, // host → { mode: 'auto' | 'custom' | 'full', rect? }
 }
 
 // ---- storage helpers --------------------------------------------------------
@@ -120,6 +125,8 @@ async function handleProgress(msg, tab) {
   const settings = await getSettings()
   const status = await siteStatus(msg.url)
   if (!settings.trackingEnabled || status.state !== 'approved') return
+  const previous = (await chrome.storage.session.get(`live:${tab.id}`))[`live:${tab.id}`]
+  const priorPdf = previous?.url === msg.url ? previous : {}
 
   // Live state for the popup timer (cleared when the browser closes).
   await chrome.storage.session.set({
@@ -131,6 +138,8 @@ async function handleProgress(msg, tab) {
       state: msg.state,
       qualified: msg.qualified,
       isPdf: msg.isPdf,
+      text: String(msg.text || priorPdf.text || '').slice(0, 4000),
+      pdfPages: msg.pdfPages || priorPdf.pdfPages,
       at: Date.now(),
     },
   })
@@ -148,7 +157,8 @@ async function handleProgress(msg, tab) {
       url: msg.url,
       domain: hostOf(msg.url),
       favicon: tab.favIconUrl || null,
-      excerpt: msg.text || '',
+      excerpt: String(msg.text || '').slice(0, 4000),
+      pdfPages: msg.pdfPages,
       startedAt: msg.startedAt,
       timestamp: new Date().toISOString(),
       durationSec: msg.activeSec,
@@ -160,9 +170,12 @@ async function handleProgress(msg, tab) {
   } else {
     const r = records[idx]
     // Only rewrite storage (and resync) when duration meaningfully changes.
-    if (msg.activeSec - r.durationSec >= 10 || msg.state === 'hidden') {
-      records[idx] = { ...r, durationSec: msg.activeSec, title: msg.title || r.title, synced: false }
+    const newText = String(msg.text || '').slice(0, 4000)
+    if (msg.activeSec - r.durationSec >= 10 || msg.state === 'hidden' || (newText && newText !== r.excerpt)) {
+      records[idx] = { ...r, durationSec: msg.activeSec, title: msg.title || r.title,
+        excerpt: newText || r.excerpt, pdfPages: msg.pdfPages || r.pdfPages, synced: false }
       await setRecords(records)
+      if (newText) flush()
     }
   }
 }
@@ -441,11 +454,70 @@ async function bridgeInfo() {
 // ---- message router ---------------------------------------------------------
 
 const handlers = {
+  'reading:pdf': async (msg, sender) => {
+    if (!sender.tab || sender.tab.url !== msg.url) throw new Error('PDF request does not match the study tab')
+    const settings = await getSettings()
+    if (!settings.consentGiven || !settings.trackingEnabled || SHOT_SKIP_PATH.test(new URL(msg.url).pathname) || (await siteStatus(msg.url)).state !== 'approved') throw new Error('Approve this study page before reading its PDF')
+    return PDFExtractor.extractFromUrl(msg.url)
+  },
+  'popup:read-pdf': async ({ tabId, url }) => {
+    if (!(await getSettings()).consentGiven) throw new Error('Accept StudBud consent before reading PDFs')
+    const tab = await chrome.tabs.get(tabId)
+    if (tab.url !== url || SHOT_SKIP_PATH.test(new URL(url).pathname) || (await siteStatus(url)).state !== 'approved') throw new Error('Approve this study tab before reading its PDF')
+    const result = await PDFExtractor.extractFromUrl(url)
+    if (result.error) throw new Error(result.error)
+    if (!result.text) throw new Error('No readable text found. Use screen capture for scanned pages.')
+    // Navigation during extraction must not save a document for a different tab.
+    if ((await chrome.tabs.get(tabId)).url !== url) throw new Error('Study tab changed. Open the PDF and try again.')
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url))
+    const id = `ext-pdf-${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+    const now = new Date().toISOString()
+    const records = await getRecords()
+    const previous = records.find((r) => r.id === id)
+    await setRecords([{ ...previous, id, title: tab.title || 'PDF document', url, domain: hostOf(url),
+      excerpt: result.text, pdfPages: result.pages, isPdf: true, synced: false,
+      durationSec: previous?.durationSec || 0, startedAt: previous?.startedAt || now, timestamp: now },
+      ...records.filter((r) => r.id !== id)])
+    await chrome.storage.session.set({ [`live:${tabId}`]: {
+      url, title: tab.title, isPdf: true, pdfPages: result.pages, text: result.text,
+      activeSec: previous?.durationSec || 0, state: 'idle', qualified: true, at: Date.now(),
+    } })
+    flush()
+    return { pages: result.pages }
+  },
   'study:heartbeat': studyHeartbeat,
   'popup:study-capture': studyPopupHandler((msg) => studyBegin(msg, false)),
   'popup:study-start': studyPopupHandler((msg) => studyBegin(msg, true)),
   'popup:study-stop': studyPopupHandler(() => studyStop()),
   'popup:study-logs': studyPopupHandler(async () => ({ logs: await studyGetLogs() })),
+
+  'pdf:heartbeat': pdfHeartbeat,
+  'pdf:crop': (msg, sender) => pdfSaveCrop(msg, sender).catch(async (err) => {
+    await pdfUpdate({ status: `Error — ${err.message}`, tone: 'err' })
+    throw err
+  }),
+  'popup:pdf-capture': studyPopupHandler(async (msg) => pdfCapture(await pdfPopupTab(msg), { manual: true })),
+  'popup:pdf-start': studyPopupHandler((msg) => pdfStart(msg)),
+  'popup:pdf-stop': studyPopupHandler(() => pdfStop('Off — paused by you')),
+  'popup:pdf-select-area': studyPopupHandler(async (msg) => {
+    const tab = await pdfPopupTab(msg)
+    if ((await siteStatus(tab.url)).state !== 'approved') throw new Error('Allow this website first.')
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['pdf-crop.js'] })
+      .catch(() => { throw new Error('This viewer can’t show the area picker. Use “Whole visible tab”.') })
+    return true
+  }),
+  'popup:pdf-settings': studyPopupHandler(async ({ url, mode, cropMode, autoConsent }) => {
+    if (mode === 'manual' || mode === 'smart') {
+      await setSettings({ pdfMode: mode })
+      if (mode === 'manual') await pdfStop()
+    }
+    if (typeof autoConsent === 'boolean') {
+      await setSettings({ pdfAutoConsent: autoConsent })
+      if (!autoConsent) await pdfStop()
+    }
+    if (cropMode) await pdfSetCropMode({ url, mode: cropMode })
+    return true
+  }),
 
   'reading:progress': (msg, sender) => sender.tab && handleProgress(msg, sender.tab),
 
@@ -463,6 +535,7 @@ const handlers = {
       status,
       live: liveState && liveState.url === url ? liveState : null,
       study: await studyLoaded.then(() => ({ ...studyState })),
+      pdf: await pdfPopupState(url),
       savedCount: records.length,
       pendingCount: records.filter((r) => !r.synced).length,
       shots: {
@@ -537,6 +610,7 @@ const handlers = {
 
   'popup:delete-all': async () => {
     await studyStop()
+    await pdfStop()
     await deleteRecords((await getRecords()).map((r) => r.id))
     await setShots([])
     await chrome.storage.session.clear()
@@ -574,6 +648,7 @@ const handlers = {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.target === 'pdf-offscreen') return false
   const handler = handlers[msg?.type]
   if (!handler) return false
   Promise.resolve().then(() => handler(msg, sender))

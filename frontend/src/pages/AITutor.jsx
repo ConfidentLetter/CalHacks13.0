@@ -72,7 +72,7 @@ function Message({ m, onRetry, onOpenSnapshot }) {
   const isUser = m.role === 'user'
   const isError = m.role === 'error'
   return (
-    <div className={cx('animate-fade-up flex', isUser ? 'justify-end' : 'justify-start')}>
+    <div id={`message-${m.id}`} tabIndex={-1} className={cx('animate-fade-up flex scroll-mt-6 focus:outline-none focus:ring-2 focus:ring-sage-deep', isUser ? 'justify-end' : 'justify-start')}>
       <div className={cx('flex max-w-[88%] min-w-0 flex-col gap-1.5 sm:max-w-[72%]', isUser && 'items-end')}>
         <p className="text-[10px] font-bold tracking-[0.18em] text-olive/50 uppercase">
           {isUser ? 'you' : isError ? 'couldn’t answer' : 'pip'} · <time dateTime={m.at}>{formatClock(m.at)}</time>
@@ -125,7 +125,7 @@ export function AITutor() {
   const camera = useCamera()
   const [sendingFrame, setSendingFrame] = useState(null)
   const [messages, setMessages] = useState(loadHistory)
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => new URLSearchParams(window.location.hash.split('?')[1]).get('topic') || '')
   const [sending, setSending] = useState(false)
   const [includeNotebook, setIncludeNotebook] = useState(true)
   const [includeReading, setIncludeReading] = useState(true)
@@ -139,10 +139,21 @@ export function AITutor() {
   })
   const stopVoice = voice.stop
   const handledDraft = useRef(null)
+  const openedMessage = useRef(false)
 
   useEffect(() => saveHistory(messages), [messages])
 
   useEffect(() => {
+    const target = new URLSearchParams(window.location.hash.split('?')[1]).get('message')
+    if (target && !openedMessage.current) {
+      const element = document.getElementById(`message-${target}`)
+      openedMessage.current = true
+      if (element) {
+        element.scrollIntoView({ block: 'center' })
+        element.focus({ preventScroll: true })
+        return
+      }
+    }
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' })
   }, [messages, sending])
 
@@ -260,7 +271,7 @@ export function AITutor() {
                       key={s}
                       type="button"
                       onClick={() => send(s)}
-                      className="rounded-sm border border-olive/25 bg-white px-3 py-1.5 text-xs text-olive/80 transition hover:border-butter-deep hover:bg-butter/50 hover:text-olive"
+                      className="rounded-sm border border-sage-deep/70 bg-sage/50 px-3 py-1.5 text-xs text-olive shadow-[0_2px_0_#a4ba8d] transition hover:bg-sage/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage-ink"
                     >
                       {s}
                     </button>

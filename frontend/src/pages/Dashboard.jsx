@@ -8,6 +8,9 @@ import { PageTwin } from '../components/recognition/PageTwin'
 import { inkRegion } from '../components/recognition/twinModel'
 import { useNow } from '../hooks/useInterval'
 import { cx, domainOf, formatClock, formatDuration, isToday, timeAgo } from '../utils/format'
+import { savedConversationLink } from '../features/conversations/links'
+
+const journalLinkClass = 'group grid grid-cols-[2rem_1fr_auto] items-baseline gap-2 rounded-sm border border-olive/20 bg-white px-3 py-3 shadow-[0_2px_0_#e6dac1] transition hover:border-sage-deep hover:bg-sage/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage-ink'
 
 const QUICK_PROMPTS = ['check the page on my desk', 'explain integration by parts', 'quiz me on what i read today']
 
@@ -285,12 +288,12 @@ function Journal() {
           all quiet for now. captures, questions and reading sessions will be written here as you study.
         </p>
       ) : (
-        <ol className="mt-4">
+        <ol className="mt-4 space-y-3">
           {activity.slice(0, 8).map((e, i) => (
             <li
               key={e.id}
-              className="grid grid-cols-[2.5rem_1fr_auto] items-baseline gap-2 border-b border-dotted border-olive/30 py-2.5"
             >
+              <a href={savedConversationLink(e)} className={journalLinkClass} aria-label={`Open conversation: ${e.title}`}>
               <span className="font-display text-sm text-olive/50 tabular-nums">{String(i + 1).padStart(2, '0')}</span>
               <div className="min-w-0">
                 <p className="truncate text-sm text-olive">{e.title}</p>
@@ -301,6 +304,7 @@ function Journal() {
               <time className="text-[11px] text-olive/50 tabular-nums" dateTime={e.at}>
                 {timeAgo(e.at, now)}
               </time>
+              </a>
             </li>
           ))}
         </ol>
@@ -341,14 +345,13 @@ function ReadingList() {
           nothing saved yet. allow a website in the extension and read for a few seconds.
         </p>
       ) : (
-        <ul className="mt-4">
+        <ul className="mt-4 space-y-3">
           {readings.slice(0, 5).map((r, i) => (
-            <li key={r.id} className={cx('border-b border-dotted border-olive/30', newIds.has(r.id) && 'animate-highlight')}>
+            <li key={r.id} className={cx(newIds.has(r.id) && 'animate-highlight')}>
               <a
-                href={r.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="group grid grid-cols-[2.5rem_1fr_auto] items-baseline gap-2 py-2.5 transition hover:bg-butter/40"
+                href={savedConversationLink({ ...r, type: 'reading' })}
+                aria-label={`Open conversation: ${r.title}`}
+                className={journalLinkClass}
               >
                 <span className="font-display text-sm text-olive/50 tabular-nums">{String(i + 1).padStart(2, '0')}</span>
                 <span className="min-w-0">

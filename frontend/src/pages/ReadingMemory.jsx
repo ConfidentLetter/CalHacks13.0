@@ -245,7 +245,7 @@ export function ReadingMemory() {
     const ok = await deleteReading(pendingDelete)
     setDeleting(false)
     if (ok && selectedId === pendingDelete.id) setSelectedId(null)
-    setPendingDelete(null)
+    if (ok) setPendingDelete(null)
   }
 
   return (

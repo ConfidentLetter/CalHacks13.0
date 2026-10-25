@@ -654,3 +654,5 @@ p {
 .study .span2 { grid-column: 1 / -1; }
 .study #study-stop:disabled { display: none; }
 .study .field { margin-top: 8px; }
+.pdfobs .row { margin: 8px 0 0; }
+.pdfobs .study-status[data-tone="ok"] { font-weight: 600; }
