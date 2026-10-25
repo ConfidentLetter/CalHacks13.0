@@ -181,7 +181,7 @@ export function Settings() {
             <ul className="space-y-2 text-sm leading-relaxed text-olive/80">
               <li>Starts only when you press Start on “peek at my notebook”, and stops when you press Stop or close the tab.</li>
               <li>Nothing is recorded or saved. A still is grabbed only when you ask Pip a question or press Analyze.</li>
-              <li>Works with a laptop or USB webcam today; the Pi / ESP32 overhead stream is a separate option in the camera menu.</li>
+              <li>Choose your webcam from the camera menu.</li>
             </ul>
             <Button variant="secondary" className="self-start" onClick={() => navigate('notebook')}>
               Open the live camera

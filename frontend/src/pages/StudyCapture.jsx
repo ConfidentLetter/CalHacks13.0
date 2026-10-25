@@ -207,7 +207,7 @@ export function StudyCapture() {
                 : mode === 'screen' && latestImage ? <img src={latestImage} alt="Latest captured study tab" className="size-full object-contain" />
                   : <p className="max-w-sm p-6 text-center text-sm">{mode === 'camera'
                     ? 'Start the camera, then choose your iPhone or webcam from the list.'
-                    : 'Open the extension on your study tab. Choose Capture now or Start timed captures, then Open study captures.'}</p>}
+                    : <>Open the extension on your study tab.<br />Choose Capture now or Start.</>}</p>}
             </div>
             {mode === 'camera' ? <>
               <label className="block text-sm">Camera
@@ -229,7 +229,7 @@ export function StudyCapture() {
                 onChange={(on) => { if (on) view.current.resume(); gate.current = new FrameGate(); setAutomatic(on) }} />
               {camera.error && <p role="alert" className="text-sm text-clay">{camera.error}</p>}
               <p className="text-xs text-olive/65">For iPhone: enable Continuity Camera, connect and trust this Mac, then lock your phone. Allow Chrome camera access and refresh the list.</p>
-            </> : <p className="text-sm text-olive/70">Manual and timed captures are controlled from the extension on the original study tab. They pause when that tab isn’t visible. This page shows the captured still and the same conversation.</p>}
+            </> : <p className="text-sm text-olive/70">Use the extension to capture your tab. Timed captures pause when you switch away.</p>}
             <p role="status" className="border-l-2 border-sage-deep pl-3 text-sm">{busy ? 'Tudor is reading your work…' : phase}</p>
             {latest?.capturedAt && <p className="text-xs text-olive/55">Last observed: {new Date(latest.image?.capturedAt || latest.capturedAt).toLocaleTimeString()}</p>}
             {(error || pollError) && <p role="alert" className="text-sm text-clay">{error || pollError}</p>}

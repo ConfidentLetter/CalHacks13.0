@@ -317,6 +317,24 @@
     opacity: 0;
   }
 }
+.sidebar-tab-fill {
+  position: absolute;
+  pointer-events: none;
+  inset: 10px -4px 10px 0;
+  border-radius: 3px;
+  transform: scaleX(0.028);
+  transform-origin: right center;
+  transition: transform 200ms ease-out, inset 200ms ease-out;
+}
+.sidebar-tab:hover .sidebar-tab-fill,
+.sidebar-tab:focus-visible .sidebar-tab-fill,
+.sidebar-tab[aria-current='page'] .sidebar-tab-fill {
+  inset: 0;
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-tab-fill { transition: none; }
+}
 .pip-body {
   transform-origin: 50% 90%;
 }
